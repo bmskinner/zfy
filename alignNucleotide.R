@@ -8,6 +8,7 @@ library(msa) # for pretty plotting
 library(filesstrings)
 library(ggmsa) # alternate pretty plots
 library(ggtree)
+library(seqinr)
 
 # Clear previous analyses
 filesstrings::dir.remove("aln")
@@ -30,7 +31,8 @@ nt.raw <- do.call(c, lapply(list.files(path = "fasta/nt", pattern = "*.fa$",
 original.names <- names(nt.raw)
 common.names <- str_extract(original.names, "\\[.*\\]") %>%
   str_replace_all("\\[", "")  %>%
-  str_replace_all("\\]", "")
+  str_replace_all("\\]", "") %>%
+  str_replace_all(" ", "_")
 names(nt.raw) <- common.names
 
 # Write the combined fasta to file with .fas extension
@@ -56,8 +58,96 @@ system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
         stdout = paste0(nt.aln.file, ".macse.log"),  # logs
         stderr = paste0(nt.aln.file, ".macse.log"))  # error logs
 macse.aln <- ape::read.FASTA(nt.aln.file)
-# ape::image.DNAbin(macse.aln, "-", base.col = "white")
 
+# Convert to interleaved for display
+write.dna(macse.aln, file="aln/nt.interleaved.fa", format = "interleaved")
+
+# Exon by exon coordinates of the alignment will be needed for clear
+# testing of selection. Match these from the final alignment via mouse Zfy1
+find.exons <- function(){
+  macse.nt.aln <- seqinr::read.alignment(nt.aln.file, format="fasta")
+  mouse.zfy1 <- toupper(macse.nt.aln$seq[macse.nt.aln$nam=="Mouse_Zfy1"])
+  
+  mouse.exons <- data.frame("exon" = c("3", "4", "5",  "6", "7", "8",  "9"),
+                            "start" = c("ATGGATGAA", "GAGCTGATGCA", "TGGATGAACC", "GAGAAACTAT", "AAGTAATTGT", "ATAATAATTCT", "CAATATTTGTT"),
+                            "end" = c("TGGAATAG", "ATGATGTCTT", "GGATGAATTAG", "---------ACTG", "GACAGCAGCTTATG", "CAGTACCAGTCAG", "CCTGCCCTAA"))
+  
+  find.exon.bounds <- function(exon, start.seq, end.seq){
+    start <- str_locate(mouse.zfy1, start.seq)
+    end <- str_locate(mouse.zfy1, end.seq)
+    data.frame("exon" = exon, "start" = start[1], "end"= end[2])
+  }
+  
+  do.call(rbind, lapply(1:nrow(mouse.exons), function(i) find.exon.bounds(exon = mouse.exons$exon[i], start.seq = mouse.exons$start[i], end.seq = mouse.exons$end[i])))
+}
+
+mouse.exons <- find.exons()
+
+# or biosquid in Ubuntu sreformat function
+# Convert FASTA format to clustal style format
+# alignment - seqinr alignment format
+# names - optional character vector of names (if null, alignment names are used)
+# names.length - override the default width of the names column (if na, default is used)
+# chunksize - number of letters per row
+printMultipleAlignment <- function(alignment, names=NULL, names.length=NA, chunksize=60){
+  # this function requires the Biostrings package
+  # find the number of sequences in the alignment
+  numseqs <- alignment$nb
+  
+  if(is.null(names)){
+    names <- alignment$nam
+  }
+  
+  if(is.na(names.length)){
+    names.length <- max(nchar(names))
+  }
+  
+  # find the length of the alignment
+  alignmentlen <- nchar(alignment$seq[[1]])
+  
+  # Calculate the start position of each line
+  line.starts <- seq(1, alignmentlen, by=chunksize)
+  
+  # How many blocks are needed
+  n.blocks <- length(line.starts)
+  
+  # get the alignment for each  sequences
+  aln <- unlist(alignment$seq)
+  lettersprinted <- rep(0, numseqs)
+  
+  create.block <- function(start){
+    block.lines <- rep("", numseqs+1)
+    block.lines[numseqs+1] <- "\n"
+    for (j in 1:numseqs){
+      alnj <- aln[j]
+      chunkseq <- toupper(substring(alnj, start, start+chunksize-1))
+      
+      # Calculate how many residues of the sequence we have printed so far in the alignment
+      # Total minus gaps
+      lettersprinted[j] <<- lettersprinted[j] + chunksize - Biostrings::countPattern("-",chunkseq)
+      block.lines[j] <- paste0(sprintf( paste0("%", names.length,"s"), names[j]), "\t", chunkseq, " ", lettersprinted[j])
+    }
+
+    paste0(block.lines, "\n")
+  }
+  
+  result <- unlist(lapply(line.starts, create.block))
+  cat(paste0(result, "\n"))
+  result
+}
+
+# Check the AA alignment
+macse.aa.aln <- seqinr::read.alignment(aa.aln.file, format="fasta")
+aa.clustal <- paste(printMultipleAlignment(macse.aa.aln, names = common.names), collapse = "")
+write_file(aa.clustal, file="aln/aa.clustal.aln")
+
+
+macse.aa.plot <- ggmsa(macse.aa.aln, start = 1, end=860, seq_name = T, 
+      border = NA, font=NULL, color="Chemistry_AA") + 
+  facet_msa(field = 100)+
+  theme(axis.text.y = element_text(size = 2))
+ggsave(paste0("figure/msa.aa.complete.png"),  
+       macse.aa.plot, dpi = 300, units = "mm", width = 170, height = 370)
 
 #### Tree #####
 
@@ -88,6 +178,7 @@ plot.zfx.zfy <- ggtree(macse.tree) +
   geom_tree() +
   theme_tree() +
   geom_tiplab(aes(col = ZFY)) +
+  geom_nodelab()+
   geom_treescale()+
   coord_cartesian(clip="off")+
   xlim(0, 0.6) +
@@ -139,16 +230,10 @@ msa.aln = readDNAMultipleAlignment(nt.aln.file, format="fasta")
 #   dplyr::filter(name == "Mouse Zfy1") 
 # paste(tidy.msa$character, collapse = "")
 
-# Exon by exon coordinates of the alignment will be needed for clear
-# testing of selection. Match these from the final alignment.
-exons <- data.frame("exon" = c("3", "4", "5",  "6", "7", "8",  "9"), 
-                    "start" = c( 1,  62, 689,  839, 1016, 1142, 1373),
-                    "end"   = c(61, 688, 838, 1015, 1141, 1372, 2580))
-
-for(i in seq(1, nrow(exons))){
-  start <- exons$start[i]
-  end <- exons$end[i]
-  exon <- exons$exon[i]
+for(i in 1:nrow(mouse.exons)){
+  start <- mouse.exons$start[i]
+  end <- mouse.exons$end[i]
+  exon <- mouse.exons$exon[i]
   msa.plot <- ggmsa(msa.aln, start, end, seq_name = T, font=NULL, 
                     border=NA, color="Chemistry_NT") +
     theme(axis.text = element_text(size=2))+
@@ -165,6 +250,17 @@ msa.plot <- ggmsa(msa.aln, start = 1, end=2600, seq_name = F,
   facet_msa(field = 400)
 ggsave(paste0("figure/msa.complete.png"),  
        msa.plot, dpi = 300, units = "mm", width = 170, height = 170)
+
+#### Test selection exon by exon ####
+
+# ape::dnds(macse.aln) # errors
+seqin.aln <- seqinr::read.alignment(nt.aln.file, format = "fasta")
+kaks.data <- seqinr::kaks(seqin.aln)
+kaks.ratio <- kaks.data$ka / kaks.data$ks
+plot(kaks.ratio)
+# Strong purifying selection in all pairs
+
+
 
 #### Create partition model for IQ-TREE #####
 
