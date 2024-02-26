@@ -74,7 +74,7 @@ find.exons <- function(){
   macse.nt.aln <- seqinr::read.alignment(nt.aln.file, format="fasta")
   mouse.zfy1 <- toupper(macse.nt.aln$seq[macse.nt.aln$nam=="Mouse_Zfy1"])
   
-  mouse.exons <- data.frame("exon" = c("3", "4", "5",  "6", "7", "8",  "9"),
+  mouse.exons <- data.frame("exon" = c("1", "2", "3",  "4", "5", "6",  "7"),
                             "start" = c("ATGGATGAA", "GAGCTGATGCA", "TGGATGAACC", "GAGAAACTAT", "AAGTAATTGT", "ATAATAATTCT", "CAATATTTGTT"),
                             "end" = c("TGGAATAG", "ATGATGTCTT", "GGATGAATTAG", "---------ACTG", "GACAGCAGCTTATG", "CAGTACCAGTCAG", "CCTGCCCTAA"))
   
@@ -282,7 +282,7 @@ for(i in 1:nrow(mouse.exons)){
 
 # We also want to look at all except exon 9
 
-exon.aln <- as.matrix(macse.aln)[,mouse.exons$start[1]:mouse.exons$end[8]]
+exon.aln <- as.matrix(macse.aln)[,mouse.exons$start[1]:mouse.exons$end[6]]
 exon.aln.file <- paste0("aln/exons/exon_3-8.aln")
 ape::write.FASTA(exon.aln, file = exon.aln.file)
 
