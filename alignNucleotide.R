@@ -217,8 +217,9 @@ plot.tree <- function(tree.data, colour=F){
 }
 
 macse.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
-# Root the tree on platypus
-macse.tree <- ape::root(macse.tree, "Platypus_ZFX")
+
+# Root the tree on platypus and opossum
+macse.tree <- ape::root(macse.tree, c("Platypus_ZFX", "Opossum_ZFX"))
 
 # Find the nodes that are ZFY vs ZFX and add to tree
 zfy.nodes <- gsub(" ", "_", common.names[str_detect(common.names, "Z[F|f][Y|y|a]")])
@@ -265,8 +266,8 @@ for(i in 1:nrow(mouse.exons)){
   if(!file.exists(paste0(exon.aln.file, ".treefile"))) next
   
   exon.tree <- ape::read.tree(paste0(exon.aln.file, ".treefile"))
-  # Root the tree on platypus
-  exon.tree <- ape::root(exon.tree, "Platypus_ZFX")
+  # Root the tree on platypus and opossum
+  exon.tree <- ape::root(exon.tree, c("Platypus_ZFX", "Opossum_ZFX"))
   
   # Find the nodes that are ZFY vs ZFX and add to tree
   zfy.nodes <- gsub(" ", "_", common.names[str_detect(common.names, "Z[F|f][Y|y|a]")])
@@ -278,6 +279,33 @@ for(i in 1:nrow(mouse.exons)){
   save.double.width(exon.fig.file, plot.exon.tree)
   
 }
+
+# We also want to look at all except exon 9
+
+exon.aln <- as.matrix(macse.aln)[,mouse.exons$start[1]:mouse.exons$end[8]]
+exon.aln.file <- paste0("aln/exons/exon_3-8.aln")
+ape::write.FASTA(exon.aln, file = exon.aln.file)
+
+
+system2("iqtree", paste("-s ", exon.aln.file,
+                        "-bb 1000", # number of bootstrap replicates
+                        "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT)
+                        "-nt AUTO"), # number of threads
+        stdout = paste0(exon.aln.file, ".iqtree.log"),
+        stderr = paste0(exon.aln.file, ".iqtree.log"))
+
+exon.tree <- ape::read.tree(paste0(exon.aln.file, ".treefile"))
+# Root the tree on platypus and opossum
+exon.tree <- ape::root(exon.tree, c("Platypus_ZFX", "Opossum_ZFX"))
+
+# Find the nodes that are ZFY vs ZFX and add to tree
+zfy.nodes <- gsub(" ", "_", common.names[str_detect(common.names, "Z[F|f][Y|y|a]")])
+zfy.nodes <- gsub("\\?", "_", zfy.nodes)
+exon.tree <- groupOTU(exon.tree, zfy.nodes, group_name = "ZFY")
+
+plot.exon.tree <- plot.tree(exon.tree, colour=T)
+exon.fig.file <- paste0("figure/exon_3-8.zfx.zfy.tree.png")
+save.double.width(exon.fig.file, plot.exon.tree)
 
 #### Run GENECONV to test for gene conversion ####
 
