@@ -302,16 +302,113 @@ msa.plot <- ggmsa(msa.aln, start = 1, end=2600, seq_name = F,
 ggsave(paste0("figure/msa.complete.png"),  
        msa.plot, dpi = 300, units = "mm", width = 170, height = 170)
 
-#### Test selection exon by exon ####
+#### Test selection globally ####
 
 # ape::dnds(macse.aln) # errors
 seqin.aln <- seqinr::read.alignment(nt.aln.file, format = "fasta")
 kaks.data <- seqinr::kaks(seqin.aln)
 kaks.ratio <- kaks.data$ka / kaks.data$ks
-plot(kaks.ratio)
+# plot(kaks.ratio)
 # Strong purifying selection in all pairs
 
+#### Create PAML control file for CodeML ####
 
+# Adapted from Beginner's Guide on the Use of PAML to Detect Positive Selection
+# https://academic.oup.com/mbe/article/40/4/msad041/7140562 for details
 
-#### Create partition model for IQ-TREE #####
+# Two files need to be uploaded to the cluster for running codeml:
+# - alignment
+# - tree file
+# The treefile created earlier needs node names and branch lengths removing: 
+# cat aln/zfxy.nt.aln.treefile | sed -e 's/Node[0-9]\+\/[0-9\.]\+\/[0-9\.]\+:[0-9\.]\+//g' > aln/zfxy.nt.aln.paml.treefile
+
+# This control file tests site models With heterogeneous ω Across Sites
+control.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\n",
+                       "treefile  = ", nt.aln.file, ".paml.treefile * tree in Newick format without nodes\n", # 
+                       "outfile   = zfy.out.txt\n",
+                       "\n",
+                       "noisy     = 3 * on screen logging\n",
+                       "verbose   = 1 * detailed output in file\n",
+                       "\n",
+                       "seqtype   = 1 * codon data\n",
+                       "ndata     = 1 * one gene alignment\n",
+                       "icode     = 0 * universal genetic code\n",
+                       "cleandata = 0 * keep sites with ambiguity data\n",
+                       "\n",
+                       "model     = 0 * ω consistent across branches\n",
+                       "NSsites   = 0 1 2 7 8 * ω variation across sites\n",
+                       "CodonFreq = 7 * use mutation selection model\n",
+                       "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                       "clock     = 0 * assume no clock\n",
+                       "fix_omega = 0 * enables option to estimate omega\n",
+                       "omega     = 0.5 * initial omega value\n")
+write_file(control.file, "aln/zfy.paml.ctl")
+
+#### Run codeml to check for site specific selection ####
+
+if(!installr::is.windows()){
+  
+  # Prep tree file
+  system2("cat", "aln/zfxy.nt.aln.treefile | sed -e 's/Node[0-9]\+\/[0-9\.]\+\/[0-9\.]\+:[0-9\.]\+//g' > aln/zfxy.nt.aln.paml.treefile")
+  
+  # Run codeml
+  system2("codeml", "aln/zfxy.paml.ctl",
+          stdout = paste0(nt.aln.file, ".codeml.log"), 
+          stderr = paste0(nt.aln.file, ".codeml.log"))
+  
+  # Extract lnl
+  system2("cat", "zfy.out.txt | grep --before-context=5 'lnL' | grep -e 'lnL' -e 'Model'| paste -d ' '  - - > zfy.out.lnl.txt")
+}
+
+# Process the output file to find log likelihood values to calculate LRT
+# (likelihood ratio test): twice the difference in log-likelihood ℓ between the
+# null and alternative hypotheses, 2Δℓ = 2(ℓ1 − ℓ0), where ℓ0 is the
+# log-likelihood score for the null model, whereas ℓ1 is the log-likelihood
+# under the alternative model.
+
+# ℓ is in the output file at lines starting lnL
+# Grep the lnL and previous 5 lines (which has model name).
+# Get just the lnL and model lines from these 5
+# Paste alternate lines together with a space
+# cat zfy.out.txt | grep --before-context=5 'lnL' | grep -e 'lnL' -e 'Model'| paste -d " "  - -
+# Note that there are other lines with 'model' in the file so we still need the first grep
+
+# e.g.
+# Model 0: one-ratio lnL(ntime: 95  np:160): -20797.229748      +0.000000
+# Model 1: NearlyNeutral (2 categories) lnL(ntime: 95  np:161): -20712.485759      +0.000000
+# Model 2: PositiveSelection (3 categories) lnL(ntime: 95  np:163): -20712.488036      +0.000000
+# Model 7: beta (10 categories) lnL(ntime: 95  np:161): -20614.279484      +0.000000
+# Model 8:
+
+# Calculate the liklihood ratio test for two models
+# lnl - the log likelihoods
+# np - the number of free parameters
+# This calculates the LRT and tests it against the chi-distribution where the
+# degrees of freedom are the difference in the number of free parameters between
+# the models. 
+calc.LRT <- function(lnl0, lnl1, np0, np1){
+  lrt <- 2 * (lnl1-lnl0)
+  df <- abs(np1-np0)
+  crit.value =  qchisq(p=0.05, df=df, lower.tail = FALSE)
+  list("crit.value" = crit.value,
+       "p.value" = pchisq(lrt, df, lower.tail = FALSE),
+       "lrt" = lrt)
+}
+
+# M0 vs. M1a (one-ratio vs. nearly neutral)
+
+# This is a test for variability of selective pressure among amino acid sites
+# rather than a test of positive selection. M1a fits the data much better than
+# M0,indicating that the selective pressure reflected by ω
+# varies hugely among sites.
+m0m1a <- calc.LRT(-20797.229748, -20712.485759, 160, 161)
+
+# Compared with M1a, M2a adds a class of sites under positive selection with ω2
+# > 1 (in proportion p2). This does not improve the fit of the model
+# significantly
+m1am2a <- calc.LRT(-20712.485759, -20712.488036, 161, 163) # (nearly neutral vs. positive selection)
+
+# Additional test for positive selection by comparing M7 (beta, null model)
+# against M8 (beta&ω, alternative model).
+
 
