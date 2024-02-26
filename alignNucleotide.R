@@ -9,6 +9,8 @@ library(filesstrings)
 library(ggmsa) # alternate pretty plots
 library(ggtree)
 library(seqinr)
+library(phangorn)
+library(installr)
 
 # Clear previous analyses
 filesstrings::dir.remove("aln")
@@ -16,6 +18,7 @@ filesstrings::dir.remove("figure")
 
 # Create missing dirs if needed
 if(!dir.exists("aln")) dir.create("aln")
+if(!dir.exists("aln/exons")) dir.create("aln/exons")
 if(!dir.exists("bin")) dir.create("bin")
 if(!dir.exists("figure")) dir.create("figure")
 
@@ -62,6 +65,9 @@ macse.aln <- ape::read.FASTA(nt.aln.file)
 # Convert to interleaved for display
 write.dna(macse.aln, file="aln/nt.interleaved.fa", format = "interleaved")
 
+nt.phylip.phy.file <- "aln/nt.phylip.phy"
+write.phyDat(macse.aln, file=nt.phylip.phy.file, format = "phylip")
+
 # Exon by exon coordinates of the alignment will be needed for clear
 # testing of selection. Match these from the final alignment via mouse Zfy1
 find.exons <- function(){
@@ -83,7 +89,14 @@ find.exons <- function(){
 
 mouse.exons <- find.exons()
 
-# or biosquid in Ubuntu sreformat function
+# Find the acidic domain and ZFs in the alignment from mouse Zfy1
+find.domains <- function(){
+  
+}
+
+mouse.domains <- find.domains()
+
+
 # Convert FASTA format to clustal style format
 # alignment - seqinr alignment format
 # names - optional character vector of names (if null, alignment names are used)
@@ -141,6 +154,24 @@ macse.aa.aln <- seqinr::read.alignment(aa.aln.file, format="fasta")
 aa.clustal <- paste(printMultipleAlignment(macse.aa.aln, names = common.names), collapse = "")
 write_file(aa.clustal, file="aln/aa.clustal.aln")
 
+# Calculate conservation at each site
+msa.nt.aln <- Biostrings::readDNAMultipleAlignment(nt.aln.file, format="fasta")
+tidy.msa <- ggmsa::tidy_msa(msa.nt.aln) %>%
+  dplyr::filter(character != "-") %>%
+  dplyr::group_by(position, character) %>%
+  dplyr::summarise(n = n(), fraction = n/nrow(msa.nt.aln)) %>%
+  dplyr::group_by(position) %>%
+  dplyr::arrange(desc(fraction)) %>%
+  dplyr::slice_head(n=1) %>%
+  dplyr::arrange(position)
+        
+# Plot exon by exon conservation           
+ggplot(tidy.msa)+
+  geom_rect(data=mouse.exons, aes( xmin = start-0.5, xmax = end+0.5, ymin=0, ymax=1, fill=exon), alpha=0.5)+
+  geom_line( aes(x=position, y=fraction))+
+  labs(x = "Position in alignement", y = "Fraction of species with consensus nucleotide")+
+  theme_bw()
+
 
 macse.aa.plot <- ggmsa(macse.aa.aln, start = 1, end=860, seq_name = T, 
       border = NA, font=NULL, color="Chemistry_AA") + 
@@ -149,7 +180,7 @@ macse.aa.plot <- ggmsa(macse.aa.aln, start = 1, end=860, seq_name = T,
 ggsave(paste0("figure/msa.aa.complete.png"),  
        macse.aa.plot, dpi = 300, units = "mm", width = 170, height = 370)
 
-#### Tree #####
+#### Make tree from whole CDS #####
 
 # Make ML tree and reconstruct ancestral sequences
 # Expect iqtree on the PATH.
@@ -163,7 +194,23 @@ system2("iqtree", paste("-s ", nt.aln.file,
         stdout = paste0(nt.aln.file, ".iqtree.log"), 
         stderr = paste0(nt.aln.file, ".iqtree.log"))
 
-#### Plot tree #####
+#### Plot whole CDS tree #####
+
+save.double.width <- function(filename, plot) ggsave(filename, plot, dpi = 300, 
+                                                     units = "mm", width = 170, 
+                                                     height = 170)
+
+plot.tree <- function(tree.data){
+  ggtree(tree.data) + 
+    geom_tree() +
+    theme_tree() +
+    geom_tiplab(aes(col = ZFY), size=3) +
+    # geom_nodelab()+
+    geom_treescale()+
+    coord_cartesian(clip="off")+
+    xlim(0, 0.6) +
+    theme(legend.position = "none")
+}
 
 macse.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
 # Root the tree on platypus
@@ -174,61 +221,65 @@ zfy.nodes <- gsub(" ", "_", common.names[str_detect(common.names, "Z[F|f][Y|y|a]
 zfy.nodes <- gsub("\\?", "_", zfy.nodes)
 macse.tree <- groupOTU(macse.tree, zfy.nodes, group_name = "ZFY")
 
-plot.zfx.zfy <- ggtree(macse.tree) + 
-  geom_tree() +
-  theme_tree() +
-  geom_tiplab(aes(col = ZFY)) +
-  geom_nodelab()+
-  geom_treescale()+
-  coord_cartesian(clip="off")+
-  xlim(0, 0.6) +
-  theme(legend.position = "none")
-
-ggsave(paste0("figure/zfx.zfy.tree.png"),  
-       plot.zfx.zfy, dpi = 300, units = "mm", width = 170, height = 170)
+plot.zfx.zfy <- plot.tree(macse.tree)
+save.double.width("figure/zfx.zfy.tree.png", plot.zfx.zfy)
 
 
 # Drop the ZFY and Zfa sequences and just look at the ZFX nodes in the tree
 tree.zfx <- ape::drop.tip(macse.tree, zfy.nodes)
 ape::write.tree(tree.zfx, file = paste0(nt.aln.file, ".zfx.treefile"))
-plot.zfx <- ggplot(tree.zfx, aes(x, y)) + 
-  geom_tree() + 
-  theme_tree() +
-  geom_tiplab() +
-  geom_treescale()+
-  coord_cartesian(clip="off")+
-  xlim(0, 0.6)
-ggsave(paste0("figure/zfx.tree.png"),  
-       plot.zfx, dpi = 300, units = "mm", width = 170, height = 170)
+plot.zfx <- plot.tree(tree.zfx)
+save.double.width("figure/zfx.tree.png", plot.zfx)
 
 # Keep Zfy and Zfa, drop Zfx nodes. Keep outgroups
 tree.zfy <- ape::keep.tip(macse.tree, c(zfy.nodes, "Platypus_ZFX", "Opossum_ZFX"))
 ape::write.tree(tree.zfy, file = paste0(nt.aln.file, ".zfy.treefile"))
 
-plot.zfy <- ggplot(tree.zfy, aes(x, y)) + 
-  geom_tree() + 
-  theme_tree() +
-  geom_tiplab() +
-  geom_treescale()+
-  coord_cartesian(clip="off")+
-  xlim(0, 0.6)
-ggsave(paste0("figure/zfy.tree.png"),  
-       plot.zfy, dpi = 300, units = "mm", width = 170, height = 170)
+plot.zfy <- plot.tree(tree.zfy)
+save.double.width("figure/zfy.tree.png", plot.zfy)
 
+#### Make tree from each exon separately ####
 
-#### Ancestral nodes #####
+# Aim here is to look for signs of gene conversion as per other papers
+
+for(i in 1:nrow(mouse.exons)){
+
+  exon.aln <- as.matrix(macse.aln)[,mouse.exons$start[i]:mouse.exons$end[i]]
+  exon.aln.file <- paste0("aln/exon/exon_", mouse.exons$exon[i], ".aln")
+  ape::write.FASTA(exon.aln, file = exon.aln.file)
+
+  
+  system2("iqtree", paste("-s ", exon.aln.file,
+                          "-bb 1000", # number of bootstrap replicates
+                          "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT)
+                          "-nt AUTO"), # number of threads
+          stdout = paste0(exon.aln.file, ".iqtree.log"),
+          stderr = paste0(exon.aln.file, ".iqtree.log"))
+  
+  # Some exons will fail - too many gaps
+  if(!file.exists(paste0(exon.aln.file, ".treefile"))) next
+  
+  exon.tree <- ape::read.tree(paste0(exon.aln.file, ".treefile"))
+  # Root the tree on platypus
+  exon.tree <- ape::root(exon.tree, "Platypus_ZFX")
+  
+  # Find the nodes that are ZFY vs ZFX and add to tree
+  zfy.nodes <- gsub(" ", "_", common.names[str_detect(common.names, "Z[F|f][Y|y|a]")])
+  zfy.nodes <- gsub("\\?", "_", zfy.nodes)
+  exon.tree <- groupOTU(exon.tree, zfy.nodes, group_name = "ZFY")
+  
+  plot.exon.tree <- plot.tree(exon.tree)
+  exon.fig.file <- paste0("figure/exon_", mouse.exons$exon[i], ".zfx.zfy.tree.png")
+  save.double.width(exon.fig.file, plot.exon.tree)
+  
+}
+
+#### Ancestral sequence reconstruction #####
 
 # Ancestral reconstruction
-ancestral.seqs <- read.table(paste0(nt.aln.file, ".state") ,header=TRUE)
+# ancestral.seqs <- read.table(paste0(nt.aln.file, ".state") ,header=TRUE)
 
 #### Exon by exon MSA #####
-
-msa.aln = readDNAMultipleAlignment(nt.aln.file, format="fasta")
-
-# Check for manual exon boundary calling
-# tidy.msa <- tidy_msa(msa.aln) %>%
-#   dplyr::filter(name == "Mouse Zfy1") 
-# paste(tidy.msa$character, collapse = "")
 
 for(i in 1:nrow(mouse.exons)){
   start <- mouse.exons$start[i]
