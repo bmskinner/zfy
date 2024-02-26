@@ -173,12 +173,12 @@ ggplot(tidy.msa)+
   theme_bw()
 
 
-macse.aa.plot <- ggmsa(macse.aa.aln, start = 1, end=860, seq_name = T, 
-      border = NA, font=NULL, color="Chemistry_AA") + 
-  facet_msa(field = 100)+
-  theme(axis.text.y = element_text(size = 2))
-ggsave(paste0("figure/msa.aa.complete.png"),  
-       macse.aa.plot, dpi = 300, units = "mm", width = 170, height = 370)
+# macse.aa.plot <- ggmsa(macse.aa.aln, start = 1, end=860, seq_name = T, 
+#       border = NA, font=NULL, color="Chemistry_AA") + 
+#   facet_msa(field = 100)+
+#   theme(axis.text.y = element_text(size = 2))
+# ggsave(paste0("figure/msa.aa.complete.png"),  
+#        macse.aa.plot, dpi = 300, units = "mm", width = 170, height = 370)
 
 #### Make tree from whole CDS #####
 
@@ -200,16 +200,20 @@ save.double.width <- function(filename, plot) ggsave(filename, plot, dpi = 300,
                                                      units = "mm", width = 170, 
                                                      height = 170)
 
-plot.tree <- function(tree.data){
-  ggtree(tree.data) + 
+plot.tree <- function(tree.data, colour=F){
+  p <- ggtree(tree.data) + 
     geom_tree() +
     theme_tree() +
-    geom_tiplab(aes(col = ZFY), size=3) +
+    geom_tiplab(size=3)+
     # geom_nodelab()+
     geom_treescale()+
     coord_cartesian(clip="off")+
     xlim(0, 0.6) +
     theme(legend.position = "none")
+  if(colour){
+    p <- p+ geom_tiplab(aes(col = ZFY), size=3)
+  }
+  p
 }
 
 macse.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
@@ -221,7 +225,7 @@ zfy.nodes <- gsub(" ", "_", common.names[str_detect(common.names, "Z[F|f][Y|y|a]
 zfy.nodes <- gsub("\\?", "_", zfy.nodes)
 macse.tree <- groupOTU(macse.tree, zfy.nodes, group_name = "ZFY")
 
-plot.zfx.zfy <- plot.tree(macse.tree)
+plot.zfx.zfy <- plot.tree(macse.tree, colour = T)
 save.double.width("figure/zfx.zfy.tree.png", plot.zfx.zfy)
 
 
@@ -240,12 +244,13 @@ save.double.width("figure/zfy.tree.png", plot.zfy)
 
 #### Make tree from each exon separately ####
 
-# Aim here is to look for signs of gene conversion as per other papers
+# Aim here is to look for signs of gene conversion in the final exon as per other 
+# papers.
 
 for(i in 1:nrow(mouse.exons)){
 
   exon.aln <- as.matrix(macse.aln)[,mouse.exons$start[i]:mouse.exons$end[i]]
-  exon.aln.file <- paste0("aln/exon/exon_", mouse.exons$exon[i], ".aln")
+  exon.aln.file <- paste0("aln/exons/exon_", mouse.exons$exon[i], ".aln")
   ape::write.FASTA(exon.aln, file = exon.aln.file)
 
   
@@ -268,9 +273,101 @@ for(i in 1:nrow(mouse.exons)){
   zfy.nodes <- gsub("\\?", "_", zfy.nodes)
   exon.tree <- groupOTU(exon.tree, zfy.nodes, group_name = "ZFY")
   
-  plot.exon.tree <- plot.tree(exon.tree)
+  plot.exon.tree <- plot.tree(exon.tree, colour=T)
   exon.fig.file <- paste0("figure/exon_", mouse.exons$exon[i], ".zfx.zfy.tree.png")
   save.double.width(exon.fig.file, plot.exon.tree)
+  
+}
+
+#### Run GENECONV to test for gene conversion ####
+
+# We want to look at gene conversion within species lineages only
+# Write a geneconv configuration file specifying which sequences are in the same
+# group
+
+# e.g 
+#GCONV_CONFIG
+# -Startseed=123   -MaxSimGlobalPval=0.05
+# -group GRPI   S1  S2
+# -group GRPII  H1 C1 I2
+# -group GRPII  O1  O2
+# -group GRPIII G1 G2 R1 R2 
+
+split.names <- as.data.frame(common.names) %>%
+  # Since we're about to split on 'Z', remove secondary instances of the string
+  # keeping whatever - or _ was in the original name
+  dplyr::mutate(common.names = str_replace(common.names, "putative-Zfy", "putative-Y"),
+                common.names = str_replace(common.names, "putative_Zfy", "putative_Y")) %>%
+  separate_wider_delim(common.names, 
+                       delim= "Z", names = c("Species", "Gene")) %>%
+  dplyr::mutate(Species = str_replace(Species, "_$", ""),
+                Gene = paste0("Z", Gene)) %>%
+  # Repair gene names following the split earlier
+  dplyr::mutate( Gene = str_replace(Gene, fixed("Zfx-like_putative_Y"), "Zfx-like_putative_Zfy"),
+                 Gene = str_replace(Gene, fixed("ZFX-like_putative_Y"), "ZFX-like_putative_ZFY"),
+                 Gene = str_replace(Gene, fixed("Zfx-like_putative-Y"), "Zfx-like_putative-Zfy"),
+                 Gene = str_replace(Gene, fixed("ZFX-like_putative-Y"), "ZFX-like_putative-ZFY"),
+                 Seq = paste0(Species, "_", Gene)) %>%
+  dplyr::arrange(Species, Gene) %>%
+  dplyr::group_by(Species) %>%
+  dplyr::reframe(GroupString =  paste("-group", Species, paste(Seq, collapse = " "))) %>%
+  dplyr::distinct()
+
+group.string <- paste(split.names$GroupString, collapse = "\n")
+
+# Make the geneconv control file
+gene.conv.control <- paste("#GCONV_CONFIG\n",
+                           "-Startseed=123   -MaxSimGlobalPval=0.05\n",
+                           group.string)
+
+write_file(gene.conv.control, "aln/zfy.geneconv.cfg")
+
+#  Only on PATH in Windows, not on cluster yet
+if(installr::is.windows()){
+  system2("geneconv", paste(nt.aln.file,
+                            "aln/zfy.geneconv.cfg",
+                            "aln/geneconv.out /lp"),
+          stdout = paste0(nt.aln.file, ".geneconv.log"), 
+          stderr = paste0(nt.aln.file, ".geneconv.log"))
+  
+  
+  # Read the geneconv output file
+  geneconv.data <- read_table("aln/geneconv.frags", comment = "#", 
+                              col_names = c("Type", "Pair", "Sim_Pvalue", "KA_pvalue", "begin", "end", 
+                                            "len", "num_poly", "num_dif", "tot_difs", "mism_pen")) %>%
+    na.omit %>%
+    dplyr::mutate(Species = str_replace_all(Pair, "_Z[F|f][Y|y|X|x].*", ""),
+                  Type = case_when(Type == "GO" ~ "Global outer",
+                                   Type == "GI" ~ "Global inner",
+                                   Type == "PO" ~ "Pairwise outer",
+                                   Type == "PI" ~ "Pairwise inner",)) %>%
+    dplyr::filter(Type == "Pairwise inner")
+  
+  # types:
+  # Global - looks across the whole dataset
+  # Pairwise - looks at the paired list given
+  # Inner -  evidence of a possible gene conversion event between ancestors of two sequences in the alignment. 
+  # Outer - evidence of past gene conversion events that may have originated from outside of the alignment,
+  # or else from within the alignment but such that evidence of the source has been destroyed by later mutation or gene conversion
+  # GI: Global inner (Inner fragments are runs of matching sites)
+  # GO: Global outer (Outer-sequence fragments are runs of sites that are unique in that group)
+  # PI: Pairwise inner
+  # PO: Pairwise outer-sequence
+  
+  # We only really care about pairwise inner
+  
+  geneconv.plot <- ggplot(geneconv.data)+
+    geom_rect(data=mouse.exons, aes( xmin = start-0.5, xmax = end+0.5, ymin=0, ymax=0.08, fill=exon), alpha=0.5)+
+    geom_text(data=mouse.exons, aes(x=(start+end)/2,y = 0.075, label = exon), size = 3)+
+    geom_segment(aes(x=begin, y = KA_pvalue, col=Species, xend = end, yend = KA_pvalue), linewidth = 2)+
+    coord_cartesian(xlim = c(1, 2600))+
+    scale_fill_manual(values = c("grey", "white", "grey", "white", "grey", "white", "grey"))+
+    geom_text(aes(x=(begin+end)/2,y = KA_pvalue+0.002, label = Pair), size = 2)+
+    labs(x = "Position", y = "Bonferroni corrected p-value")+
+    guides(fill = "none")+
+    theme_bw()
+  
+  save.double.width("figure/zfxy_geneconv.png", geneconv.plot)
   
 }
 
