@@ -11,6 +11,7 @@ library(ggtree)
 library(seqinr)
 library(phangorn)
 library(installr)
+library(treeio)
 
 # Clear previous analyses
 filesstrings::dir.remove("aln")
@@ -21,6 +22,8 @@ if(!dir.exists("aln")) dir.create("aln")
 if(!dir.exists("aln/exons")) dir.create("aln/exons")
 if(!dir.exists("bin")) dir.create("bin")
 if(!dir.exists("figure")) dir.create("figure")
+if(!dir.exists("paml/site-specific")) dir.create("paml/site-specific")
+if(!dir.exists("paml/site-branch")) dir.create("paml/site-branch")
 
 # Putative Zfy sequences in rodents detected with NCBI gene search:
 # rodent[orgn:__txid9989] AND zinc finger X-chromosomal protein-like 
@@ -205,7 +208,7 @@ plot.tree <- function(tree.data, colour=F){
     geom_tree() +
     theme_tree() +
     geom_tiplab(size=3)+
-    # geom_nodelab()+
+    geom_nodelab()+
     geom_treescale()+
     coord_cartesian(clip="off")+
     xlim(0, 0.6) +
@@ -218,8 +221,9 @@ plot.tree <- function(tree.data, colour=F){
 
 macse.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
 
-# Root the tree on platypus and opossum
-macse.tree <- ape::root(macse.tree, c("Platypus_ZFX", "Opossum_ZFX"))
+# Root the tree on platypus and opossum and resave
+macse.tree <- ape::root(macse.tree, outgroup = c("Platypus_ZFX", "Opossum_ZFX"), resolve.root = TRUE)
+ape::write.tree(macse.tree, file = paste0(nt.aln.file, ".rooted.treefile"))
 
 # Find the nodes that are ZFY vs ZFX and add to tree
 zfy.nodes <- gsub(" ", "_", common.names[str_detect(common.names, "Z[F|f][Y|y|a]")])
@@ -239,7 +243,6 @@ save.double.width("figure/zfx.tree.png", plot.zfx)
 # Keep Zfy and Zfa, drop Zfx nodes. Keep outgroups
 tree.zfy <- ape::keep.tip(macse.tree, c(zfy.nodes, "Platypus_ZFX", "Opossum_ZFX"))
 ape::write.tree(tree.zfy, file = paste0(nt.aln.file, ".zfy.treefile"))
-
 plot.zfy <- plot.tree(tree.zfy)
 save.double.width("figure/zfy.tree.png", plot.zfy)
 
@@ -436,21 +439,35 @@ kaks.ratio <- kaks.data$ka / kaks.data$ks
 # plot(kaks.ratio)
 # Strong purifying selection in all pairs
 
-#### Create PAML control file for CodeML ####
+#### Run codeml to check for site-specific selection ####
 
 # Adapted from Beginner's Guide on the Use of PAML to Detect Positive Selection
 # https://academic.oup.com/mbe/article/40/4/msad041/7140562 for details
 
 # Two files need to be uploaded to the cluster for running codeml:
 # - alignment
-# - tree file
+# - tree file (unrooted)
 # The treefile created earlier needs node names and branch lengths removing: 
-# cat aln/zfxy.nt.aln.treefile | sed -e 's/Node[0-9]\+\/[0-9\.]\+\/[0-9\.]\+:[0-9\.]\+//g' > aln/zfxy.nt.aln.paml.treefile
+# cat aln/zfxy.nt.aln.treefile | sed -e 's/Node[0-9]\+\/[0-9\.]\+\/[0-9\.]\+:[0-9\.]\+//g'  > paml/site-specific/zfxy.nt.aln.paml.treefile
+
+# cat aln/zfxy.nt.aln.unrooted.treefile | sed -e 's/Node[0-9]\+\/[0-9\.]\+\/[0-9\.]\+:[0-9\.]\+//g' | sed -e 's/:[0-9\.]\+//g'  > paml/site-specific/zfxy.nt.aln.paml.treefile
+
+# sed -e 's/:[0-9\.]\+//g'
+
+labelled.tree <- macse.tree
+labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
+labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
+ape::write.tree(labelled.tree, file = "paml/site-specific/zfxy.nt.aln.paml.treefile")
+
+# Then remove the branch lengths, separate the labels from taxon names and resave
+newick.test <- read_file("paml/site-specific/zfxy.nt.aln.paml.treefile")
+newick.test <- gsub(":1", "", newick.test)
+write_file(newick.test, "paml/site-specific/zfxy.nt.aln.paml.treefile")
 
 # This control file tests site models With heterogeneous ω Across Sites
-control.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\n",
-                       "treefile  = ", nt.aln.file, ".paml.treefile * tree in Newick format without nodes\n", # 
-                       "outfile   = zfy.out.txt\n",
+paml.site.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\n",
+                       "treefile  = paml/site-specific/zfxy.nt.aln.paml.treefile * tree in Newick format without nodes\n", # 
+                       "outfile   = paml/site-specific/site.specific.paml.out.txt\n",
                        "\n",
                        "noisy     = 3 * on screen logging\n",
                        "verbose   = 1 * detailed output in file\n",
@@ -467,19 +484,13 @@ control.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\n",
                        "clock     = 0 * assume no clock\n",
                        "fix_omega = 0 * enables option to estimate omega\n",
                        "omega     = 0.5 * initial omega value\n")
-write_file(control.file, "aln/zfy.paml.ctl")
-
-#### Run codeml to check for site specific selection ####
+write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
 
 if(!installr::is.windows()){
-  
-  # Prep tree file
-  system2("cat", "aln/zfxy.nt.aln.treefile | sed -e 's/Node[0-9]\+\/[0-9\.]\+\/[0-9\.]\+:[0-9\.]\+//g' > aln/zfxy.nt.aln.paml.treefile")
-  
   # Run codeml
-  system2("codeml", "aln/zfxy.paml.ctl",
-          stdout = paste0(nt.aln.file, ".codeml.log"), 
-          stderr = paste0(nt.aln.file, ".codeml.log"))
+  system2("codeml", "paml/site-specific/zfy.site-specific.paml.ctl",
+          stdout = "paml/site-specific/zfy.site-specific.paml.log", 
+          stderr = "paml/site-specific/zfy.site-specific.paml.log")
   
   # Extract lnl
   system2("cat", "zfy.out.txt | grep --before-context=5 'lnL' | grep -e 'lnL' -e 'Model'| paste -d ' '  - - > zfy.out.lnl.txt")
@@ -498,12 +509,12 @@ if(!installr::is.windows()){
 # cat zfy.out.txt | grep --before-context=5 'lnL' | grep -e 'lnL' -e 'Model'| paste -d " "  - -
 # Note that there are other lines with 'model' in the file so we still need the first grep
 
-# e.g.
+# e.g. values from testing
 # Model 0: one-ratio lnL(ntime: 95  np:160): -20797.229748      +0.000000
 # Model 1: NearlyNeutral (2 categories) lnL(ntime: 95  np:161): -20712.485759      +0.000000
 # Model 2: PositiveSelection (3 categories) lnL(ntime: 95  np:163): -20712.488036      +0.000000
 # Model 7: beta (10 categories) lnL(ntime: 95  np:161): -20614.279484      +0.000000
-# Model 8:
+# Model 8: Model 8: beta&w>1 (11 categories) lnL(ntime: 95  np:163): -20614.287541      +0.000000
 
 # Calculate the liklihood ratio test for two models
 # lnl - the log likelihoods
@@ -535,5 +546,48 @@ m1am2a <- calc.LRT(-20712.485759, -20712.488036, 161, 163) # (nearly neutral vs.
 
 # Additional test for positive selection by comparing M7 (beta, null model)
 # against M8 (beta&ω, alternative model).
+m7m8 <- calc.LRT(-20614.279484, -20614.287541, 161, 163) # (positive selection vs null model)
+# No evidence for sites under positive selection 
 
+#### Run codeml to look for selection specifically in rodents after beaver ####
 
+# To look at the rodent clade, we need a rooted tree
+
+# Find the MRCA of the rodents with rapid ZFY evolution
+rodent.node <- ape::getMRCA(macse.tree, c("Mouse_Zfy2", "Desert_hamster_Zfx-like_putative_Zfy"))
+
+# Remove existing node labels, label the nodes and tips of the tree with #1
+# for foreground branches
+labelled.tree <- macse.tree
+labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
+labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
+labelled.tree <- treeio::label_branch_paml(labelled.tree, rodent.node, "#1")
+ape::write.tree(labelled.tree, file = "paml/site-branch/zfxy.nt.aln.paml.treefile")
+
+# Then remove the branch lengths, separate the labels from taxon names and resave
+newick.test <- read_file("paml/site-branch/zfxy.nt.aln.paml.treefile")
+newick.test <- gsub(":1", "", newick.test) # branch lengths we set to 1
+newick.test <- gsub("_#1", " #1", newick.test) # fg labels
+write_file(newick.test, "paml/site-branch/zfxy.nt.aln.paml.fg.treefile")
+
+# This control file tests site models With heterogeneous ω Across Sites
+paml.site.branch.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\n",
+                                "treefile  = paml/site-branch/zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
+                                "outfile   = paml/site-branch/site.branch.paml.out.txt\n",
+                                "\n",
+                                "noisy     = 3 * on screen logging\n",
+                                "verbose   = 1 * detailed output in file\n",
+                                "\n",
+                                "seqtype   = 1 * codon data\n",
+                                "ndata     = 1 * one gene alignment\n",
+                                "icode     = 0 * universal genetic code\n",
+                                "cleandata = 0 * keep sites with ambiguity data\n",
+                                "\n",
+                                "model     = 2 * 2 ω values across branches\n",
+                                "NSsites   = 2 * Model M2a\n",
+                                "CodonFreq = 7 * use mutation selection model\n",
+                                "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                                "clock     = 0 * assume no clock\n",
+                                "fix_omega = 0 * enables option to estimate omega\n",
+                                "omega     = 0.5 * initial omega value\n")
+write_file(paml.site.branch.file, "paml/site-branch/zfy.site-branch.paml.ctl")
