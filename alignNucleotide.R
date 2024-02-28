@@ -591,3 +591,44 @@ paml.site.branch.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\
                                 "fix_omega = 0 * enables option to estimate omega\n",
                                 "omega     = 0.5 * initial omega value\n")
 write_file(paml.site.branch.file, "paml/site-branch/zfy.site-branch.paml.ctl")
+
+#### What are the targets of the ZFs in each species?
+
+# predict the ZFs in each sequence via pwm_predict (http://zf.princeton.edu/download2.php)
+
+
+#### Get divergence times to highlight the rapid evolution in the rodents ####
+
+# Get the NCBI taxon ids for each species
+taxon.data <- lapply(metadata$species, function(x) httr::GET( paste0("http://timetree.temple.edu/api/taxon/",curl::curl_escape(x)))  ) 
+taxon.ids <- sapply(lapply(taxon.data, httr::content), function(x) x$taxon_id)
+metadata$taxon_id <- taxon.ids
+
+# Find the pairwise distances between each species
+pairwise.species <- expand.grid(unique(metadata$taxon_id), unique(metadata$taxon_id)) %>%
+  dplyr::filter(Var1!=Var2, Var1<Var2)
+
+get.time.tree <- function(tax.a, tax.b){
+  tryCatch({
+    tt <- httr::GET(paste0("http://timetree.temple.edu/api/pairwise/",tax.a, "/", tax.b))
+    ct <- content(tt)
+    Sys.sleep(0.5)
+    
+    
+    data <- as.data.frame( str_split(ct, "\r\n"), col.names = c("V1")) %>% 
+      dplyr::slice_tail(n=1) %>%
+      tidyr::separate_wider_delim( cols = V1, delim = ",", names = c("taxon_a_id","taxon_b_id","scientific_name_a","scientific_name_b","all_total","precomputed_age","precomputed_ci_low","precomputed_ci_high","adjusted_age"))
+    return(data)
+  }, error = function(e) { 
+    print(e)
+    return(data.frame("taxon_a_id" = c(),"taxon_b_id" = c(),"scientific_name_a" = c(),"scientific_name_b" = c(),"all_total" = c(),"precomputed_age" = c(),"precomputed_ci_low" = c(),"precomputed_ci_high" = c(),"adjusted_age" = c()))
+  }  ) 
+}
+
+# Save to avoid repeated API calls
+if(!file.exists( "time.tree.data.tsv")){
+  pairwise.times <- do.call(rbind, mapply(get.time.tree, pairwise.species$Var1, pairwise.species$Var2))
+  write_tsv(pairwise.times, file = "time.tree.data.tsv", col_names = T, quote = "none")
+} else{
+  pairwise.times <- read_tsv("time.tree.data.tsv")
+}
