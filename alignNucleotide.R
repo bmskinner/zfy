@@ -12,6 +12,8 @@ library(seqinr)
 library(phangorn)
 library(installr)
 library(treeio)
+library(geiger)
+library(httr)
 
 # Clear previous analyses
 filesstrings::dir.remove("aln")
@@ -28,18 +30,34 @@ if(!dir.exists("paml/site-branch")) dir.create("paml/site-branch")
 # Putative Zfy sequences in rodents detected with NCBI gene search:
 # rodent[orgn:__txid9989] AND zinc finger X-chromosomal protein-like 
 
-# Read all unaligned sequence files with .fa extension
-nt.raw <- do.call(c, lapply(list.files(path = "fasta/nt", pattern = "*.fa$", 
-                                       include.dirs = T, full.names = T), 
-                            ape::read.FASTA))
+# Read FASTA file and extract metadata
+read.fasta <- function(f){
+  fa.data <- ape::read.FASTA(f)
+  original.name <- names(fa.data)
+  common.names <-  str_extract(original.name, "\\[.*\\]") %>%
+    str_replace_all("\\[", "")  %>%
+    str_replace_all("\\]", "") %>%
+    str_replace_all(" ", "_")
+  names(fa.data) <- common.names
+  
+  species.name <-gsub("_", " ",  gsub(".fa$", "", gsub("fasta/nt/", "",  f)))
+  
+  list("fa" = fa.data,
+       metadata = data.frame(
+        "accession" = str_extract(original.name, "[^:]+"),
+       "original.name" = original.name,
+       "common.name" = common.names,
+       "species" = rep(species.name, length(common.names))))
+}
 
-# Save the original FASTA header, extract the common name
-original.names <- names(nt.raw)
-common.names <- str_extract(original.names, "\\[.*\\]") %>%
-  str_replace_all("\\[", "")  %>%
-  str_replace_all("\\]", "") %>%
-  str_replace_all(" ", "_")
-names(nt.raw) <- common.names
+# Read all unaligned sequence files with .fa extension
+fa.files <- list.files(path = "fasta/nt", pattern = "*.fa$", 
+                       include.dirs = T, full.names = T)
+
+fa.read <- lapply(fa.files, read.fasta)
+
+nt.raw <- do.call(c, lapply(fa.read, function(x) x$fa))
+metadata <- do.call(rbind, lapply(fa.read, function(x) x$metadata))
 
 # Write the combined fasta to file with .fas extension
 nt.combined.file <- "fasta/zfxy.nt.fas"
