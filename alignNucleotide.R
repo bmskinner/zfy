@@ -12,8 +12,11 @@ library(seqinr)
 library(phangorn)
 library(installr)
 library(treeio)
-library(geiger)
 library(httr)
+library(seqLogo)
+library(seqvisr) # remotes::install_github("vragh/seqvisr")
+
+#### Read files #####
 
 # Clear previous analyses
 filesstrings::dir.remove("aln")
@@ -21,6 +24,7 @@ filesstrings::dir.remove("figure")
 
 # Create missing dirs if needed
 if(!dir.exists("aln")) dir.create("aln")
+if(!dir.exists("aln/outgroup")) dir.create("aln/outgroup")
 if(!dir.exists("aln/exons")) dir.create("aln/exons")
 if(!dir.exists("bin")) dir.create("bin")
 if(!dir.exists("figure")) dir.create("figure")
@@ -40,7 +44,7 @@ read.fasta <- function(f){
     str_replace_all(" ", "_")
   names(fa.data) <- common.names
   
-  species.name <-gsub("_", " ",  gsub(".fa$", "", gsub("fasta/nt/", "",  f)))
+  species.name <-gsub("_", " ",  gsub(".fa$", "", gsub("fasta/(nt|aa)/", "",  f)))
   
   list("fa" = fa.data,
        metadata = data.frame(
@@ -59,11 +63,17 @@ fa.read <- lapply(fa.files, read.fasta)
 nt.raw <- do.call(c, lapply(fa.read, function(x) x$fa))
 metadata <- do.call(rbind, lapply(fa.read, function(x) x$metadata))
 
+# Grouping for trees
+metadata %<>%
+  dplyr::mutate(group = case_when(grepl("ZFY", common.name, ignore.case=T) ~ "ZFY",
+                                  common.name %in% c("Platypus_ZFX", "Opossum_ZFX") ~ "Outgroup",
+                                  T ~ "ZFX"))
+
 # Write the combined fasta to file with .fas extension
 nt.combined.file <- "fasta/zfxy.nt.fas"
 ape::write.FASTA(nt.raw, file = nt.combined.file)
 
-#### Align #####
+#### Create NT and AA initial alignment #####
 
 # Run a codon aware alignment with MACSE
 # Expect java on the PATH. Macse download from https://www.agap-ge2pop.org/macsee-pipelines/
@@ -84,10 +94,10 @@ system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
 macse.aln <- ape::read.FASTA(nt.aln.file)
 
 # Convert to interleaved for display
-write.dna(macse.aln, file="aln/nt.interleaved.fa", format = "interleaved")
+# write.dna(macse.aln, file="aln/nt.interleaved.fa", format = "interleaved")
 
-nt.phylip.phy.file <- "aln/nt.phylip.phy"
-write.phyDat(macse.aln, file=nt.phylip.phy.file, format = "phylip")
+# nt.phylip.phy.file <- "aln/nt.phylip.phy"
+# write.phyDat(macse.aln, file=nt.phylip.phy.file, format = "phylip")
 
 # Exon by exon coordinates of the alignment will be needed for clear
 # testing of selection. Match these from the final alignment via mouse Zfy1
@@ -172,8 +182,8 @@ printMultipleAlignment <- function(alignment, names=NULL, names.length=NA, chunk
 
 # Check the AA alignment
 macse.aa.aln <- seqinr::read.alignment(aa.aln.file, format="fasta")
-aa.clustal <- paste(printMultipleAlignment(macse.aa.aln, names = common.names), collapse = "")
-write_file(aa.clustal, file="aln/aa.clustal.aln")
+# aa.clustal <- paste(printMultipleAlignment(macse.aa.aln, names = common.names), collapse = "")
+# write_file(aa.clustal, file="aln/aa.clustal.aln")
 
 # Calculate conservation at each site
 msa.nt.aln <- Biostrings::readDNAMultipleAlignment(nt.aln.file, format="fasta")
@@ -187,10 +197,11 @@ tidy.msa <- ggmsa::tidy_msa(msa.nt.aln) %>%
   dplyr::arrange(position)
         
 # Plot exon by exon conservation           
-ggplot(tidy.msa)+
-  geom_rect(data=mouse.exons, aes( xmin = start-0.5, xmax = end+0.5, ymin=0, ymax=1, fill=exon), alpha=0.5)+
+conservation.plot <- ggplot(tidy.msa)+
+  geom_rect(data=mouse.exons, aes( xmin = start-0.5, xmax = end+0.5, ymin=0, ymax=1, fill=exon), alpha=1)+
   geom_line( aes(x=position, y=fraction))+
-  labs(x = "Position in alignement", y = "Fraction of species with consensus nucleotide")+
+  scale_fill_manual(values = rep(c("grey", "white"), 4))+
+  labs(x = "Position in alignment", y = "Fraction of species with consensus nucleotide")+
   theme_bw()
 
 
@@ -221,45 +232,45 @@ save.double.width <- function(filename, plot) ggsave(filename, plot, dpi = 300,
                                                      units = "mm", width = 170, 
                                                      height = 170)
 
-plot.tree <- function(tree.data, colour=F){
+plot.tree <- function(tree.data){
   p <- ggtree(tree.data) + 
     geom_tree() +
-    theme_tree() +
-    geom_tiplab(size=3)+
-    geom_nodelab()+
-    geom_treescale()+
+    geom_tiplab(aes(col = group), size=2)+
+    geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")+
+    geom_treescale(fontsize =2, y = -1)+
     coord_cartesian(clip="off")+
-    xlim(0, 0.6) +
+    theme_tree() +
     theme(legend.position = "none")
-  if(colour){
-    p <- p+ geom_tiplab(aes(col = ZFY), size=3)
-  }
   p
 }
 
 macse.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
 
 # Root the tree on platypus and opossum and resave
-macse.tree <- ape::root(macse.tree, outgroup = c("Platypus_ZFX", "Opossum_ZFX"), resolve.root = TRUE)
+macse.tree <- ape::root(macse.tree, outgroup = c("Platypus_ZFX"), resolve.root = TRUE)
 ape::write.tree(macse.tree, file = paste0(nt.aln.file, ".rooted.treefile"))
 
-# Find the nodes that are ZFY vs ZFX and add to tree
-zfy.nodes <- gsub(" ", "_", common.names[str_detect(common.names, "Z[F|f][Y|y|a]")])
-zfy.nodes <- gsub("\\?", "_", zfy.nodes)
-macse.tree <- groupOTU(macse.tree, zfy.nodes, group_name = "ZFY")
+# Remove node names, leaving just bootstrap values
+macse.tree$node.label <- gsub("(Node\\d+\\/|Root)", "", macse.tree$node.label)
 
-plot.zfx.zfy <- plot.tree(macse.tree, colour = T)
+# Find the nodes that are ZFY vs ZFX and add to tree
+group_info <- split(metadata$common.name, metadata$group)
+macse.tree <- groupOTU(macse.tree, group_info, group_name = "group")
+
+plot.zfx.zfy <- plot.tree(macse.tree) + coord_cartesian(clip="off", xlim = c(0, 0.5))
 save.double.width("figure/zfx.zfy.tree.png", plot.zfx.zfy)
 
 
-# Drop the ZFY and Zfa sequences and just look at the ZFX nodes in the tree
-tree.zfx <- ape::drop.tip(macse.tree, zfy.nodes)
+# Drop the ZFY sequences and just look at the ZFX nodes in the tree
+tree.zfx <- ape::drop.tip(macse.tree, group_info$ZFY)
+tree.zfx <- groupOTU(tree.zfx, group_info, group_name = "group")
 ape::write.tree(tree.zfx, file = paste0(nt.aln.file, ".zfx.treefile"))
 plot.zfx <- plot.tree(tree.zfx)
 save.double.width("figure/zfx.tree.png", plot.zfx)
 
 # Keep Zfy and Zfa, drop Zfx nodes. Keep outgroups
-tree.zfy <- ape::keep.tip(macse.tree, c(zfy.nodes, "Platypus_ZFX", "Opossum_ZFX"))
+tree.zfy <- ape::keep.tip(macse.tree, c(group_info$ZFY, group_info$Outgroup))
+tree.zfy <- groupOTU(tree.zfy, group_info, group_name = "group")
 ape::write.tree(tree.zfy, file = paste0(nt.aln.file, ".zfy.treefile"))
 plot.zfy <- plot.tree(tree.zfy)
 save.double.width("figure/zfy.tree.png", plot.zfy)
@@ -288,14 +299,13 @@ for(i in 1:nrow(mouse.exons)){
   
   exon.tree <- ape::read.tree(paste0(exon.aln.file, ".treefile"))
   # Root the tree on platypus and opossum
-  exon.tree <- ape::root(exon.tree, c("Platypus_ZFX", "Opossum_ZFX"))
+  exon.tree <- ape::root(exon.tree, c("Platypus_ZFX"), resolve.root = TRUE)
   
   # Find the nodes that are ZFY vs ZFX and add to tree
-  zfy.nodes <- gsub(" ", "_", common.names[str_detect(common.names, "Z[F|f][Y|y|a]")])
-  zfy.nodes <- gsub("\\?", "_", zfy.nodes)
-  exon.tree <- groupOTU(exon.tree, zfy.nodes, group_name = "ZFY")
+  group_info <- split(metadata$common.name, metadata$group)
+  exon.tree <- groupOTU(exon.tree, group_info, group_name = "group")
   
-  plot.exon.tree <- plot.tree(exon.tree, colour=T)
+  plot.exon.tree <- plot.tree(exon.tree)
   exon.fig.file <- paste0("figure/exon_", mouse.exons$exon[i], ".zfx.zfy.tree.png")
   save.double.width(exon.fig.file, plot.exon.tree)
   
@@ -304,9 +314,8 @@ for(i in 1:nrow(mouse.exons)){
 # We also want to look at all except exon 9
 
 exon.aln <- as.matrix(macse.aln)[,mouse.exons$start[1]:mouse.exons$end[6]]
-exon.aln.file <- paste0("aln/exons/exon_3-8.aln")
+exon.aln.file <- paste0("aln/exons/exon_1-7.aln")
 ape::write.FASTA(exon.aln, file = exon.aln.file)
-
 
 system2("iqtree", paste("-s ", exon.aln.file,
                         "-bb 1000", # number of bootstrap replicates
@@ -317,15 +326,15 @@ system2("iqtree", paste("-s ", exon.aln.file,
 
 exon.tree <- ape::read.tree(paste0(exon.aln.file, ".treefile"))
 # Root the tree on platypus and opossum
-exon.tree <- ape::root(exon.tree, c("Platypus_ZFX", "Opossum_ZFX"))
+exon.tree <- ape::root(exon.tree, c("Platypus_ZFX"), resolve.root = TRUE)
 
 # Find the nodes that are ZFY vs ZFX and add to tree
-zfy.nodes <- gsub(" ", "_", common.names[str_detect(common.names, "Z[F|f][Y|y|a]")])
-zfy.nodes <- gsub("\\?", "_", zfy.nodes)
-exon.tree <- groupOTU(exon.tree, zfy.nodes, group_name = "ZFY")
+# Find the nodes that are ZFY vs ZFX and add to tree
+group_info <- split(metadata$common.name, metadata$group)
+exon.tree <- groupOTU(exon.tree, group_info, group_name = "group")
 
-plot.exon.tree <- plot.tree(exon.tree, colour=T)
-exon.fig.file <- paste0("figure/exon_3-8.zfx.zfy.tree.png")
+plot.exon.tree <- plot.tree(exon.tree)
+exon.fig.file <- paste0("figure/exon_1-7.zfx.zfy.tree.png")
 save.double.width(exon.fig.file, plot.exon.tree)
 
 #### Run GENECONV to test for gene conversion ####
@@ -342,12 +351,12 @@ save.double.width(exon.fig.file, plot.exon.tree)
 # -group GRPII  O1  O2
 # -group GRPIII G1 G2 R1 R2 
 
-split.names <- as.data.frame(common.names) %>%
+split.names <- metadata %>%
   # Since we're about to split on 'Z', remove secondary instances of the string
   # keeping whatever - or _ was in the original name
-  dplyr::mutate(common.names = str_replace(common.names, "putative-Zfy", "putative-Y"),
-                common.names = str_replace(common.names, "putative_Zfy", "putative_Y")) %>%
-  separate_wider_delim(common.names, 
+  dplyr::mutate(common.name = str_replace(common.name, "putative-Zfy", "putative-Y"),
+                common.name = str_replace(common.name, "putative_Zfy", "putative_Y")) %>%
+  separate_wider_delim(common.name, 
                        delim= "Z", names = c("Species", "Gene")) %>%
   dplyr::mutate(Species = str_replace(Species, "_$", ""),
                 Gene = paste0("Z", Gene)) %>%
@@ -427,14 +436,20 @@ if(installr::is.windows()){
 
 #### Exon by exon MSA #####
 
+nt.aln.tidy <- tidy_msa(msa.nt.aln)
 for(i in 1:nrow(mouse.exons)){
   start <- mouse.exons$start[i]
   end <- mouse.exons$end[i]
   exon <- mouse.exons$exon[i]
-  msa.plot <- ggmsa(msa.aln, start, end, seq_name = T, font=NULL, 
-                    border=NA, color="Chemistry_NT") +
-    theme(axis.text = element_text(size=2))+
-    facet_msa(field = 100)
+  
+  msa.plot <- ggplot()+
+    geom_msa(data = nt.aln.tidy, seq_name = T, font=NULL, 
+             border=NA, color="Chemistry_NT", consensus_views = T, ref = "Platypus_ZFX", )+
+    coord_cartesian(xlim = c(start, end))+
+    theme_minimal()+
+    theme(axis.text = element_text(size=6),
+          axis.title.y = element_blank(),
+          panel.grid = element_blank())
   
   ggsave(paste0("figure/msa_exon_", exon, ".png"),  
          msa.plot, dpi = 300, units = "mm", width = 170)
@@ -442,10 +457,16 @@ for(i in 1:nrow(mouse.exons)){
 
 #### Plot full MSA #####
 
-msa.plot <- ggmsa(msa.aln, start = 1, end=2600, seq_name = F, 
-                  border = NA, font=NULL, color="Chemistry_NT") + 
-  facet_msa(field = 400)
-ggsave(paste0("figure/msa.complete.png"),  
+msa.plot <- ggplot()+
+  geom_msa(data = nt.aln.tidy, seq_name = T, font=NULL, 
+           border=NA, color="Chemistry_NT", consensus_views = T, ref = "Platypus_ZFX", )+
+  facet_msa(field = 400)+
+  theme_minimal()+
+  theme(axis.text = element_text(size=2),
+        axis.title.y = element_blank(),
+        panel.grid = element_blank())
+
+ggsave(paste0("figure/msa.complete.png"),
        msa.plot, dpi = 300, units = "mm", width = 170, height = 170)
 
 #### Test selection globally ####
@@ -572,7 +593,7 @@ m7m8 <- calc.LRT(-20614.279484, -20614.287541, 161, 163) # (positive selection v
 # To look at the rodent clade, we need a rooted tree
 
 # Find the MRCA of the rodents with rapid ZFY evolution
-rodent.node <- ape::getMRCA(macse.tree, c("Mouse_Zfy2", "Desert_hamster_Zfx-like_putative_Zfy"))
+rodent.node <- ape::getMRCA(macse.tree, c("Mouse_Zfy2", "Desert_hamster_Zfx-like_putative-Zfy"))
 
 # Remove existing node labels, label the nodes and tips of the tree with #1
 # for foreground branches
@@ -610,10 +631,175 @@ paml.site.branch.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\
                                 "omega     = 0.5 * initial omega value\n")
 write_file(paml.site.branch.file, "paml/site-branch/zfy.site-branch.paml.ctl")
 
-#### What are the targets of the ZFs in each species?
 
-# predict the ZFs in each sequence via pwm_predict (http://zf.princeton.edu/download2.php)
+#### Extend the AA alignments with non-mammalian outgroups ####
 
+# Read all unaligned sequence files with .fa extension
+outgroup.aa.files <- list.files(path = "fasta/aa", pattern = "*.fa$", 
+                       include.dirs = T, full.names = T)
+
+outgroup.fa.read <- lapply(outgroup.aa.files, read.fasta)
+
+outgroup.nt.raw <- do.call(c, lapply(outgroup.fa.read, function(x) x$fa))
+outgroup.metadata <- do.call(rbind, lapply(outgroup.fa.read, function(x) x$metadata))
+
+# Find the nodes that are ZFY vs ZFX to add to tree
+outgroup.metadata %<>%
+  dplyr::mutate(group = case_when(grepl("ZFY", common.name, ignore.case=T) ~ "ZFY",
+                                  common.name %in% c(outgroup.metadata$common.name, "Platypus_ZFX", "Opossum_ZFX") ~ "Outgroup",
+                                  T ~ "ZFX"))
+
+combined.metadata <- rbind(metadata, outgroup.metadata)
+
+# Write the combined fasta to file with .fas extension
+outgroup.nt.file <- "fasta/outgroup.nt.fas"
+ape::write.FASTA(outgroup.nt.raw, file = outgroup.nt.file)
+
+# Use macse to align the outgroup NT sequences
+system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
+                      "-seq ", outgroup.nt.file,
+                      "-out_NT", "aln/outgroup/outgroup.nt.aln",
+                      "-out_AA", "aln/outgroup/outgroup.aa.aln"), 
+        stdout = paste0("aln/outgroup/outgroup.macse.log"),  # logs
+        stderr = paste0("aln/outgroup/outgroup.macse.log"))  # error logs
+
+# Use macse to align the outgroup NT sequences with the existing NT alignment
+system2("java", paste("-jar bin/macse_v2.07.jar -prog alignTwoProfiles ",
+                      "-p1", nt.aln.file,
+                      "-p2", "aln/outgroup/outgroup.nt.aln",
+                      "-out_NT", "aln/outgroup/combined.nt.aln",
+                      "-out_AA", "aln/outgroup/combined.aa.aln"),
+        stdout = paste0("aln/combined.macse.log"),  # logs
+        stderr = paste0("aln/combined.macse.log"))  # error logs
+
+
+#### View the extended outgroup AA MSA ####
+
+msa.outgroup.aln <- Biostrings::readAAMultipleAlignment("aln/outgroup/combined.aa.aln", format="fasta")
+msa.outgroup.aln.tidy <- tidy_msa(msa.outgroup.aln)
+
+ggplot()+
+  geom_msa(data = msa.outgroup.aln.tidy, seq_name = T, font=NULL, border=NA,
+           consensus_views = T, ref = "Platypus_ZFX", alpha = 0.5
+  )+
+  labs(x = "Amino acid")+
+  theme_minimal()+
+  theme(axis.text = element_text(size=6),
+        axis.title.y = element_blank(),
+        panel.grid = element_blank())
+
+#### Make a tree with the outgroups MSA using AA only ####
+
+system2("iqtree", paste("-s ", "aln/outgroup/combined.aa.aln", 
+                        "-bb 1000", # number of bootstrap replicates
+                        "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+                        "-nt AUTO"), # number of threads
+        stdout = paste0("aln/outgroup/combined.aa.iqtree.log"), 
+        stderr = paste0("aln/outgroup/combined.aa.iqtree.log"))
+
+
+outgroup.tree <- ape::read.tree(paste0("aln/outgroup/combined.aa.aln.treefile"))
+
+# Root the tree on Mouse_Zfp711 and resave
+outgroup.tree <- ape::root(outgroup.tree, outgroup = c("Mouse_Zfp711"), resolve.root = TRUE)
+ape::write.tree(outgroup.tree, file = paste0("aln/outgroup/combined.aa.aln.rooted.treefile"))
+
+group_info <- split(combined.metadata$common.name, combined.metadata$group)
+outgroup.tree <- groupOTU(outgroup.tree, group_info, group_name = "group")
+
+outgroup.plot <- plot.tree(outgroup.tree)+
+  coord_cartesian(clip="off", xlim = c(0, 0.9), ylim= c(-2, 62))
+
+# outgroup.plot <- ggtree(outgroup.tree) + 
+#   geom_tree() +
+#   theme_tree() +
+#   geom_tiplab(size=3, aes(col = group))+
+#   geom_treescale(y=-1)+
+#   coord_cartesian(clip="off", xlim = c(0, 0.9), ylim= c(-1, 60))+
+#   theme(legend.position = "none")
+
+save.double.width("figure/outgroup.tree.png", outgroup.plot)
+
+
+
+#### What are the binding motifs of the ZFs in each species? ####
+
+# predict the ZF targets in each sequence via pwm_predict (http://zf.princeton.edu/download2.php)
+
+# pwm_predict zfy.aa.aln
+
+# Remove header and split the output PWMs to separate files
+# cat zfxy.aa.pwm | grep -v ';' | split -l 5 - zf_
+
+# Read each file, get headers and PWMs
+pwm.files <- list.files("pwm", pattern = "zf_", full.names = T)
+
+read.pwm <- function(f){
+  pwm <- read.table(f, skip=1)
+  header <- read.table(f, nrows=1)
+  p <- seqLogo::makePWM(pwm)
+  consensus <- seqLogo::consensus(p)
+  data.frame("species"= header$V1,
+       "zf" = header$V2,
+       "consensus" = consensus)
+}
+
+pwm.predictions <- do.call(rbind, lapply(pwm.files, read.pwm)) %>%
+  tidyr::pivot_wider(id_cols = species, names_from = zf, values_from = consensus)
+
+#### Annotate the locations of the ZFs in the AA MSA ####
+
+# We can use the regex .C.{2,4}C.{12}H.{3,5}H to find ZFs as per https://pubmed.ncbi.nlm.nih.gov/21572177/
+
+msa.aa.aln <- Biostrings::readAAMultipleAlignment(aa.aln.file, format="fasta")
+
+zf.regex <- ".C(.{2,4}?)C.{12}H(.{3,5}?)H"
+
+find.zf <- function(aa, sequence.name){
+  hits <- as.data.frame(str_locate_all(as.character(aa), zf.regex))
+  hits$species <- sequence.name
+  hits
+}
+
+zf.locations <- do.call(rbind, mapply(find.zf, aa=msa.aa.aln@unmasked, sequence.name = names(msa.aa.aln@unmasked), SIMPLIFY = FALSE))
+
+msa.aa.aln.tidy <- tidy_msa(msa.aa.aln)
+# Reverse the order of rows to match the y order of the MSA
+msa.aa.aln.tidy.order <- msa.aa.aln.tidy %>% dplyr::filter(position==1) %>% dplyr::mutate(i = n()+1-row_number())
+zf.locations <- merge(zf.locations, msa.aa.aln.tidy.order[,c(1, 4)], by.x="species", by.y="name")
+
+# Calculate the midpoint of each ZF for labelling, smooth out species with
+# different start points
+zf.labels <- zf.locations %>% 
+  dplyr::mutate(mid = round( (start+end)/2, digits = 0),
+                mid = ifelse(mid%%2==0, mid, mid+1)
+                ) %>%
+  dplyr::group_by(mid) %>%
+  summarise() %>%
+  dplyr::mutate(label = row_number())
+
+make.aa.msa <- function(start, end){
+  ggplot()+
+    geom_msa(data = msa.aa.aln.tidy, seq_name = T, font=NULL, border=NA,
+             consensus_views = T, ref = "Platypus_ZFX", alpha = 0.5
+    )+
+    geom_rect(data = zf.locations, aes(xmin=start, xmax=end, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+    geom_text(data = zf.labels, aes(x = mid, y = 57, label = label))+
+    coord_cartesian(xlim = c(start, end),
+                    ylim = c(0, 57))+
+    labs(x = "Amino acid")+
+    theme_minimal()+
+    theme(axis.text = element_text(size=6),
+          axis.title.y = element_blank(),
+          panel.grid = element_blank())
+}
+
+# too wide to display in one figure, split in ~middle
+aa.msa.plot.1 <- make.aa.msa(min(zf.locations$start)-10, 650)
+aa.msa.plot.2 <- make.aa.msa(640, max(zf.locations$end)+10)
+
+save.double.width("figure/aa.msa.1.png", aa.msa.plot.1)
+save.double.width("figure/aa.msa.2.png", aa.msa.plot.2)
 
 #### Get divergence times to highlight the rapid evolution in the rodents ####
 
@@ -650,3 +836,11 @@ if(!file.exists( "time.tree.data.tsv")){
 } else{
   pairwise.times <- read_tsv("time.tree.data.tsv")
 }
+
+#### ####
+
+
+# testing of side-by-side plots
+p <- ggtree(macse.tree) + geom_tiplab(size=3, aes(col = group))
+n <- msaplot(p, aa.aln.file, offset=0.4, width=2)+theme(legend.position = "none")
+
