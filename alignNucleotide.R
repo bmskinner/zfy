@@ -1,7 +1,7 @@
 # Create nucleotide alignments for ZFX ad ZFY combined. 
 # Make subtrees for just ZFX or ZFY from the combined tree
 
-#### Setup #####
+#### Imports #####
 library(tidyverse)
 library(ape) # for some plotting
 library(msa) # for pretty plotting
@@ -15,6 +15,114 @@ library(treeio)
 library(httr)
 library(seqLogo)
 library(seqvisr) # remotes::install_github("vragh/seqvisr")
+library(metagMisc) # remotes::install_github("vmikk/metagMisc")
+
+
+#### Common functions ####
+
+save.double.width <- function(filename, plot, height=170) ggsave(filename, plot, dpi = 300, 
+                                                                 units = "mm", width = 170, 
+                                                                 height = height)
+
+# Translate ungapped coordinates back to gapped
+# site.no.gap - the integer site in an ungapped sequence to convert
+# gapped.seq - the sequence with gaps from an alignment
+convert.to.gapped.coordinate <- function(site.no.gap, gapped.seq){
+  
+  gapped.seq.char <- as.character(gapped.seq)
+  # find gaps and stop codons
+  gaps <- str_locate_all(gapped.seq.char, "-|\\*")[[1]][,1]
+  n <- site.no.gap
+  for(i in gaps){
+    if(i<n) n <- n + 1
+  }
+  n
+}
+
+# Exon by exon coordinates of the alignment will be needed for clear
+# testing of selection. Match these in the final alignment via mouse Zfy1
+# biostrings.alignment - an MSA from Biostrings::readDNAMultipleAlignment
+find.exons <- function(biostrings.alignment){
+  
+  mouse.zfy1 <- as.character(biostrings.alignment@unmasked$Mouse_Zfy1)
+  mouse.zfy1.ungapped <- str_remove_all(mouse.zfy1, "-|\\*")
+  
+  mouse.exons <- data.frame("exon" = c("1", "2", "3",  "4", "5", "6",  "7"),
+                            "start" = c("ATGGATGAA", "GAGCTGATGCA", "TGGATGAACC", "GAGAAACTAT", "AAGTAATTGT", "ATAATAATTCT", "CAATATTTGTT"),
+                            "end" = c("TGGAATAG", "ATGATGTCTT", "GGATGAATTAG", "GAAGAAGATACTG", "GACAGCAGCTTATG", "CAGTACCAGTCAG", "CCTGCCCTAA"))
+  
+  starts <- sapply(mouse.exons$start, str_locate, string=mouse.zfy1.ungapped)[1,]
+  ends <- sapply(mouse.exons$end, str_locate, string=mouse.zfy1.ungapped)[2,]
+  
+  data.frame("exon" = mouse.exons$exon,
+             "start" = sapply(starts, convert.to.gapped.coordinate, mouse.zfy1),
+             "end" = sapply(ends, convert.to.gapped.coordinate, mouse.zfy1))
+}
+
+plot.tree <- function(tree.data){
+  p <- ggtree(tree.data) + 
+    geom_tree() +
+    geom_tiplab(aes(col = group), size=2)+
+    geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")+
+    geom_treescale(fontsize =2, y = -1)+
+    coord_cartesian(clip="off")+
+    theme_tree() +
+    theme(legend.position = "none")
+  p
+}
+
+# Convert FASTA format to clustal style format
+# alignment - seqinr alignment format
+# names - optional character vector of names (if null, alignment names are used)
+# names.length - override the default width of the names column (if na, default is used)
+# chunksize - number of letters per row
+printMultipleAlignment <- function(alignment, names=NULL, names.length=NA, chunksize=60){
+  # this function requires the Biostrings package
+  # find the number of sequences in the alignment
+  numseqs <- alignment$nb
+  
+  if(is.null(names)){
+    names <- alignment$nam
+  }
+  
+  if(is.na(names.length)){
+    names.length <- max(nchar(names))
+  }
+  
+  # find the length of the alignment
+  alignmentlen <- nchar(alignment$seq[[1]])
+  
+  # Calculate the start position of each line
+  line.starts <- seq(1, alignmentlen, by=chunksize)
+  
+  # How many blocks are needed
+  n.blocks <- length(line.starts)
+  
+  # get the alignment for each  sequences
+  aln <- unlist(alignment$seq)
+  lettersprinted <- rep(0, numseqs)
+  
+  create.block <- function(start){
+    block.lines <- rep("", numseqs+1)
+    block.lines[numseqs+1] <- "\n"
+    for (j in 1:numseqs){
+      alnj <- aln[j]
+      chunkseq <- toupper(substring(alnj, start, start+chunksize-1))
+      
+      # Calculate how many residues of the sequence we have printed so far in the alignment
+      # Total minus gaps
+      lettersprinted[j] <<- lettersprinted[j] + chunksize - Biostrings::countPattern("-",chunkseq)
+      block.lines[j] <- paste0(sprintf( paste0("%", names.length,"s"), names[j]), "\t", chunkseq, " ", lettersprinted[j])
+    }
+    
+    paste0(block.lines, "\n")
+  }
+  
+  result <- unlist(lapply(line.starts, create.block))
+  cat(paste0(result, "\n"))
+  result
+}
+
 
 #### Read files #####
 
@@ -91,103 +199,18 @@ system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
                       "-out_AA", aa.aln.file), # output aa alignment
         stdout = paste0(nt.aln.file, ".macse.log"),  # logs
         stderr = paste0(nt.aln.file, ".macse.log"))  # error logs
-macse.aln <- ape::read.FASTA(nt.aln.file)
-
-# Convert to interleaved for display
-# write.dna(macse.aln, file="aln/nt.interleaved.fa", format = "interleaved")
-
-# nt.phylip.phy.file <- "aln/nt.phylip.phy"
-# write.phyDat(macse.aln, file=nt.phylip.phy.file, format = "phylip")
-
-# Exon by exon coordinates of the alignment will be needed for clear
-# testing of selection. Match these from the final alignment via mouse Zfy1
-find.exons <- function(){
-  macse.nt.aln <- seqinr::read.alignment(nt.aln.file, format="fasta")
-  mouse.zfy1 <- toupper(macse.nt.aln$seq[macse.nt.aln$nam=="Mouse_Zfy1"])
-  
-  mouse.exons <- data.frame("exon" = c("1", "2", "3",  "4", "5", "6",  "7"),
-                            "start" = c("ATGGATGAA", "GAGCTGATGCA", "TGGATGAACC", "GAGAAACTAT", "AAGTAATTGT", "ATAATAATTCT", "CAATATTTGTT"),
-                            "end" = c("TGGAATAG", "ATGATGTCTT", "GGATGAATTAG", "---------ACTG", "GACAGCAGCTTATG", "CAGTACCAGTCAG", "CCTGCCCTAA"))
-  
-  find.exon.bounds <- function(exon, start.seq, end.seq){
-    start <- str_locate(mouse.zfy1, start.seq)
-    end <- str_locate(mouse.zfy1, end.seq)
-    data.frame("exon" = exon, "start" = start[1], "end"= end[2])
-  }
-  
-  do.call(rbind, lapply(1:nrow(mouse.exons), function(i) find.exon.bounds(exon = mouse.exons$exon[i], start.seq = mouse.exons$start[i], end.seq = mouse.exons$end[i])))
-}
-
-mouse.exons <- find.exons()
-
-# Find the acidic domain and ZFs in the alignment from mouse Zfy1
-find.domains <- function(){
-  
-}
-
-mouse.domains <- find.domains()
-
-
-# Convert FASTA format to clustal style format
-# alignment - seqinr alignment format
-# names - optional character vector of names (if null, alignment names are used)
-# names.length - override the default width of the names column (if na, default is used)
-# chunksize - number of letters per row
-printMultipleAlignment <- function(alignment, names=NULL, names.length=NA, chunksize=60){
-  # this function requires the Biostrings package
-  # find the number of sequences in the alignment
-  numseqs <- alignment$nb
-  
-  if(is.null(names)){
-    names <- alignment$nam
-  }
-  
-  if(is.na(names.length)){
-    names.length <- max(nchar(names))
-  }
-  
-  # find the length of the alignment
-  alignmentlen <- nchar(alignment$seq[[1]])
-  
-  # Calculate the start position of each line
-  line.starts <- seq(1, alignmentlen, by=chunksize)
-  
-  # How many blocks are needed
-  n.blocks <- length(line.starts)
-  
-  # get the alignment for each  sequences
-  aln <- unlist(alignment$seq)
-  lettersprinted <- rep(0, numseqs)
-  
-  create.block <- function(start){
-    block.lines <- rep("", numseqs+1)
-    block.lines[numseqs+1] <- "\n"
-    for (j in 1:numseqs){
-      alnj <- aln[j]
-      chunkseq <- toupper(substring(alnj, start, start+chunksize-1))
-      
-      # Calculate how many residues of the sequence we have printed so far in the alignment
-      # Total minus gaps
-      lettersprinted[j] <<- lettersprinted[j] + chunksize - Biostrings::countPattern("-",chunkseq)
-      block.lines[j] <- paste0(sprintf( paste0("%", names.length,"s"), names[j]), "\t", chunkseq, " ", lettersprinted[j])
-    }
-
-    paste0(block.lines, "\n")
-  }
-  
-  result <- unlist(lapply(line.starts, create.block))
-  cat(paste0(result, "\n"))
-  result
-}
+ape.nt.aln <- ape::read.FASTA(nt.aln.file)
 
 # Check the AA alignment
-macse.aa.aln <- seqinr::read.alignment(aa.aln.file, format="fasta")
-# aa.clustal <- paste(printMultipleAlignment(macse.aa.aln, names = common.names), collapse = "")
+ape.aa.aln <- seqinr::read.alignment(aa.aln.file, format="fasta")
+# aa.clustal <- paste(printMultipleAlignment(ape.aa.aln, names = common.names), collapse = "")
 # write_file(aa.clustal, file="aln/aa.clustal.aln")
 
 # Calculate conservation at each site
 msa.nt.aln <- Biostrings::readDNAMultipleAlignment(nt.aln.file, format="fasta")
-tidy.msa <- ggmsa::tidy_msa(msa.nt.aln) %>%
+mouse.exons <- find.exons(msa.nt.aln)
+
+msa.nt.aln.tidy <- ggmsa::tidy_msa(msa.nt.aln) %>%
   dplyr::filter(character != "-") %>%
   dplyr::group_by(position, character) %>%
   dplyr::summarise(n = n(), fraction = n/nrow(msa.nt.aln)) %>%
@@ -197,20 +220,88 @@ tidy.msa <- ggmsa::tidy_msa(msa.nt.aln) %>%
   dplyr::arrange(position)
         
 # Plot exon by exon conservation           
-conservation.plot <- ggplot(tidy.msa)+
+conservation.plot <- ggplot(msa.nt.aln.tidy)+
   geom_rect(data=mouse.exons, aes( xmin = start-0.5, xmax = end+0.5, ymin=0, ymax=1, fill=exon), alpha=1)+
   geom_line( aes(x=position, y=fraction))+
   scale_fill_manual(values = rep(c("grey", "white"), 4))+
   labs(x = "Position in alignment", y = "Fraction of species with consensus nucleotide")+
   theme_bw()
 
+#### Extend the AA alignments with non-mammalian outgroups ####
 
-# macse.aa.plot <- ggmsa(macse.aa.aln, start = 1, end=860, seq_name = T, 
-#       border = NA, font=NULL, color="Chemistry_AA") + 
-#   facet_msa(field = 100)+
-#   theme(axis.text.y = element_text(size = 2))
-# ggsave(paste0("figure/msa.aa.complete.png"),  
-#        macse.aa.plot, dpi = 300, units = "mm", width = 170, height = 370)
+# Read all unaligned sequence files with .fa extension
+outgroup.nt.files <- list.files(path = "fasta/aa", pattern = "*.fa$", 
+                                include.dirs = T, full.names = T)
+
+outgroup.fa.read <- lapply(outgroup.nt.files, read.fasta)
+
+outgroup.nt.raw <- do.call(c, lapply(outgroup.fa.read, function(x) x$fa))
+outgroup.metadata <- do.call(rbind, lapply(outgroup.fa.read, function(x) x$metadata))
+
+# Find the nodes that are ZFY vs ZFX to add to tree
+outgroup.metadata %<>%
+  dplyr::mutate(group = case_when(grepl("ZFY", common.name, ignore.case=T) ~ "ZFY",
+                                  common.name %in% c(outgroup.metadata$common.name, "Platypus_ZFX", "Opossum_ZFX") ~ "Outgroup",
+                                  T ~ "ZFX"))
+
+combined.metadata <- rbind(metadata, outgroup.metadata)
+
+# Write the combined fasta to file with .fas extension
+outgroup.nt.raw <- c(outgroup.nt.raw, nt.raw) # all sequences
+outgroup.nt.file <- "fasta/outgroup.nt.fas"
+ape::write.FASTA(outgroup.nt.raw, file = outgroup.nt.file)
+
+outgroup.aa.file <- "fasta/outgroup.aa.fas"
+outgroup.aa.raw <- ape::trans(outgroup.nt.raw)
+ape::write.FASTA(outgroup.aa.raw, file = outgroup.aa.file)
+
+# Use muscle to align the aa files. Save out for iqtree
+
+outgroup.aa.aln <- ape::muscle5(outgroup.aa.raw, mc.cores = 6)
+
+ape::write.dna(outgroup.aa.aln, format = "fasta", file = "aln/outgroup/combined.aa.aln", nbcol = -1, colsep = "")
+
+# # Use macse to align the outgroup NT sequences
+# system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
+#                       "-seq ", outgroup.nt.file,
+#                       "-out_NT", "aln/outgroup/outgroup.nt.aln",
+#                       "-out_AA", "aln/outgroup/outgroup.aa.aln"), 
+#         stdout = paste0("aln/outgroup/outgroup.macse.log"),  # logs
+#         stderr = paste0("aln/outgroup/outgroup.macse.log"))  # error logs
+# 
+# # Use macse to align the outgroup NT sequences with the existing NT alignment
+# system2("java", paste("-jar bin/macse_v2.07.jar -prog alignTwoProfiles ",
+#                       "-p1", nt.aln.file,
+#                       "-p2", "aln/outgroup/outgroup.nt.aln",
+#                       "-out_NT", "aln/outgroup/combined.nt.aln",
+#                       "-out_AA", "aln/outgroup/combined.aa.aln"),
+#         stdout = paste0("aln/combined.macse.log"),  # logs
+#         stderr = paste0("aln/combined.macse.log"))  # error logs
+
+
+#### Make a tree with the outgroups MSA using AA only ####
+
+system2("iqtree", paste("-s ", "aln/outgroup/combined.aa.aln", 
+                        "-bb 1000", # number of bootstrap replicates
+                        "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+                        "-nt AUTO"), # number of threads
+        stdout = paste0("aln/outgroup/combined.aa.iqtree.log"), 
+        stderr = paste0("aln/outgroup/combined.aa.iqtree.log"))
+
+
+outgroup.tree <- ape::read.tree(paste0("aln/outgroup/combined.aa.aln.treefile"))
+
+# Root the tree on Mouse_Zfp711 and resave
+outgroup.tree <- ape::root(outgroup.tree, outgroup = c("Mouse_Zfp711"), resolve.root = TRUE)
+ape::write.tree(outgroup.tree, file = paste0("aln/outgroup/combined.aa.aln.rooted.treefile"))
+
+group_info <- split(combined.metadata$common.name, combined.metadata$group)
+outgroup.tree <- groupOTU(outgroup.tree, group_info, group_name = "group")
+
+outgroup.plot <- plot.tree(outgroup.tree)+
+  coord_cartesian(clip="off", xlim = c(0, 0.9), ylim= c(-2, 62))
+
+save.double.width("figure/outgroup.tree.png", outgroup.plot)
 
 #### Make tree from whole CDS #####
 
@@ -228,48 +319,35 @@ system2("iqtree", paste("-s ", nt.aln.file,
 
 #### Plot whole CDS tree #####
 
-save.double.width <- function(filename, plot) ggsave(filename, plot, dpi = 300, 
-                                                     units = "mm", width = 170, 
-                                                     height = 170)
-
-plot.tree <- function(tree.data){
-  p <- ggtree(tree.data) + 
-    geom_tree() +
-    geom_tiplab(aes(col = group), size=2)+
-    geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")+
-    geom_treescale(fontsize =2, y = -1)+
-    coord_cartesian(clip="off")+
-    theme_tree() +
-    theme(legend.position = "none")
-  p
-}
-
-macse.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
+nt.aln.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
 
 # Root the tree on platypus and opossum and resave
-macse.tree <- ape::root(macse.tree, outgroup = c("Platypus_ZFX"), resolve.root = TRUE)
-ape::write.tree(macse.tree, file = paste0(nt.aln.file, ".rooted.treefile"))
+nt.aln.tree <- ape::root(nt.aln.tree, outgroup = c("Platypus_ZFX"), resolve.root = TRUE)
+ape::write.tree(nt.aln.tree, file = paste0(nt.aln.file, ".rooted.treefile"))
 
 # Remove node names, leaving just bootstrap values
-macse.tree$node.label <- gsub("(Node\\d+\\/|Root)", "", macse.tree$node.label)
+nt.aln.tree$node.label <- gsub("(Node\\d+\\/|Root)", "", nt.aln.tree$node.label)
 
 # Find the nodes that are ZFY vs ZFX and add to tree
 group_info <- split(metadata$common.name, metadata$group)
-macse.tree <- groupOTU(macse.tree, group_info, group_name = "group")
+nt.aln.tree <- groupOTU(nt.aln.tree, group_info, group_name = "group")
 
-plot.zfx.zfy <- plot.tree(macse.tree) + coord_cartesian(clip="off", xlim = c(0, 0.5))
+plot.zfx.zfy <- plot.tree(nt.aln.tree) + coord_cartesian(clip="off", xlim = c(0, 0.5))
 save.double.width("figure/zfx.zfy.tree.png", plot.zfx.zfy)
+
+# Get the order of taxa names for reordering other plots later
+taxa.name.order <- get_taxa_name(plot.zfx.zfy) 
 
 
 # Drop the ZFY sequences and just look at the ZFX nodes in the tree
-tree.zfx <- ape::drop.tip(macse.tree, group_info$ZFY)
+tree.zfx <- ape::drop.tip(nt.aln.tree, group_info$ZFY)
 tree.zfx <- groupOTU(tree.zfx, group_info, group_name = "group")
 ape::write.tree(tree.zfx, file = paste0(nt.aln.file, ".zfx.treefile"))
 plot.zfx <- plot.tree(tree.zfx)
 save.double.width("figure/zfx.tree.png", plot.zfx)
 
 # Keep Zfy and Zfa, drop Zfx nodes. Keep outgroups
-tree.zfy <- ape::keep.tip(macse.tree, c(group_info$ZFY, group_info$Outgroup))
+tree.zfy <- ape::keep.tip(nt.aln.tree, c(group_info$ZFY, group_info$Outgroup))
 tree.zfy <- groupOTU(tree.zfy, group_info, group_name = "group")
 ape::write.tree(tree.zfy, file = paste0(nt.aln.file, ".zfy.treefile"))
 plot.zfy <- plot.tree(tree.zfy)
@@ -282,10 +360,11 @@ save.double.width("figure/zfy.tree.png", plot.zfy)
 
 for(i in 1:nrow(mouse.exons)){
 
-  exon.aln <- as.matrix(macse.aln)[,mouse.exons$start[i]:mouse.exons$end[i]]
+  exon.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start[i]:mouse.exons$end[i]]
+  exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
   exon.aln.file <- paste0("aln/exons/exon_", mouse.exons$exon[i], ".aln")
+  
   ape::write.FASTA(exon.aln, file = exon.aln.file)
-
   
   system2("iqtree", paste("-s ", exon.aln.file,
                           "-bb 1000", # number of bootstrap replicates
@@ -313,7 +392,7 @@ for(i in 1:nrow(mouse.exons)){
 
 # We also want to look at all except exon 9
 
-exon.aln <- as.matrix(macse.aln)[,mouse.exons$start[1]:mouse.exons$end[6]]
+exon.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start[1]:mouse.exons$end[6]]
 exon.aln.file <- paste0("aln/exons/exon_1-7.aln")
 ape::write.FASTA(exon.aln, file = exon.aln.file)
 
@@ -429,14 +508,11 @@ if(installr::is.windows()){
   
 }
 
-#### Ancestral sequence reconstruction #####
-
-# Ancestral reconstruction
-# ancestral.seqs <- read.table(paste0(nt.aln.file, ".state") ,header=TRUE)
-
 #### Exon by exon MSA #####
 
-nt.aln.tidy <- tidy_msa(msa.nt.aln)
+nt.aln.tidy <- tidy_msa(msa.nt.aln) %>%
+  dplyr::mutate(name = factor(name, 
+                                 levels = rev(taxa.name.order))) # sort reverse to match tree
 for(i in 1:nrow(mouse.exons)){
   start <- mouse.exons$start[i]
   end <- mouse.exons$end[i]
@@ -449,6 +525,7 @@ for(i in 1:nrow(mouse.exons)){
     theme_minimal()+
     theme(axis.text = element_text(size=6),
           axis.title.y = element_blank(),
+          axis.title.x = element_blank(),
           panel.grid = element_blank())
   
   ggsave(paste0("figure/msa_exon_", exon, ".png"),  
@@ -471,12 +548,338 @@ ggsave(paste0("figure/msa.complete.png"),
 
 #### Test selection globally ####
 
-# ape::dnds(macse.aln) # errors
+# ape::dnds(ape.nt.aln) # errors
 seqin.aln <- seqinr::read.alignment(nt.aln.file, format = "fasta")
 kaks.data <- seqinr::kaks(seqin.aln)
+
 kaks.ratio <- kaks.data$ka / kaks.data$ks
-# plot(kaks.ratio)
-# Strong purifying selection in all pairs
+kaks.pairwise <- dist2list(kaks.ratio, tri = F)
+kaks.pairwise$col <- factor(kaks.pairwise$col, 
+                            levels = taxa.name.order)
+kaks.pairwise$row <- factor(kaks.pairwise$row, 
+                            levels = taxa.name.order)
+
+kaks.pairwise %<>% 
+  dplyr::rowwise() %>%
+  dplyr::mutate(rownum = which(row==taxa.name.order),
+                colnum = which(col==taxa.name.order)) %>%
+  dplyr::filter(rownum > colnum)
+
+kaks.pairwise.plot <- ggplot(kaks.pairwise, aes(x = col, y = row))+
+  geom_tile(aes(fill=value))+
+  scale_fill_viridis_c(limits = c(0, 1), direction = -1)+
+  labs(fill="dNdS")+
+  theme_bw()+
+  theme(axis.text.x = element_text(size = 6, angle = 45, hjust = 1),
+        axis.text.y = element_text(size = 6),
+        axis.title = element_blank(),
+        legend.position = c(0.9, 0.15),
+        legend.background = element_blank(),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size = 8))
+save.double.width("figure/dnds.png", kaks.pairwise.plot)
+
+# Strong purifying selection in all pairs, but weaker in rodents
+
+
+#### View the extended outgroup AA MSA ####
+
+msa.outgroup.aln <- Biostrings::readAAMultipleAlignment("aln/outgroup/combined.aa.aln", format="fasta")
+msa.outgroup.aln.tidy <- tidy_msa(msa.outgroup.aln)
+
+ggplot()+
+  geom_msa(data = msa.outgroup.aln.tidy, seq_name = T, font=NULL, border=NA,
+           consensus_views = T, ref = "Platypus_ZFX", alpha = 0.5
+  )+
+  labs(x = "Amino acid")+
+  theme_minimal()+
+  theme(axis.text = element_text(size=6),
+        axis.title.y = element_blank(),
+        panel.grid = element_blank())
+
+#### Identify the locations of the ZFs in the AA MSA ####
+
+# We can use the regex .C.{2,4}C.{12}H.{3,5}H to find ZFs as per https://pubmed.ncbi.nlm.nih.gov/21572177/
+
+msa.aa.aln <- Biostrings::readAAMultipleAlignment(aa.aln.file, format="fasta")
+
+zf.regex <- ".C(.{2,4}?)C.{12}H(.{3,5}?)H"
+
+find.zf <- function(aa, sequence.name){
+  hits <- as.data.frame(str_locate_all(as.character(aa), zf.regex))
+  hits$species <- sequence.name
+  hits
+}
+
+zf.locations <- do.call(rbind, mapply(find.zf, aa=msa.aa.aln@unmasked, sequence.name = names(msa.aa.aln@unmasked), SIMPLIFY = FALSE)) %>%
+  dplyr::mutate(species = factor(species, 
+                                 levels = rev(taxa.name.order))) %>% # sort reverse to match tree
+  dplyr::rowwise() %>%
+  dplyr::mutate(i = as.integer(species ) ) # Set the row indexes for plotting
+
+
+# Find the corresponding locations in the NT msa
+# TODO check the NTs translate
+# the the same AAs
+zf.locations %<>% dplyr::ungroup() %>%
+  dplyr::mutate(start_nt = start*3,
+                end_nt = end *3)
+
+#### Identify the locations of the 9aaTAD in the AA MSA ####
+
+# The 9aa TAD can be detected is [MDENQSTYG]{KRHCGP}[ILVFWM]{KRHCGP}{CGP}{CGP}[ILVFWM]{CGP}{CGP}
+# But there are refinements to this, and the aas can vary; 
+# Approved positions
+# 1	2	3	4	5	6	7	8	9
+# RC1	min 1 x [ILVFWMAY]	: 2, 4, 5
+# RC2	min 1 x [ILVFWMAY]	: 6, 8
+# RC3	min 1 x [DENQST]	 	: 4, 5, 6
+# RC4	min 2 - max 4 x [DENQSTKRH]	 : 1 - 9
+# RC5	min 5 - max 7 x [ILVFWMAYGPST] : 1 - 9
+# RC6	max 3 x [ILVFWMAYGP] in a row	 : 1 - 9
+# RC7	max 2 x [DENQST] in a row	 : 1 - 9
+# RC8	max 1 x [KRH]	 : 1 - 9
+# RC9	max 1 x [QNKRH]	 	 : 1 - 6
+# RC10	max 1 x [QNKRH]	 	:8, 9
+# RC11	any [C]	 	 	 : 2 - 8
+# RC12   	any [PG]	 : 2 - 7	 	 
+
+find.9aaTAD <- function(aa, sequence.name, score.threshold=30, rc.threshold){
+  # sequence.name = "Beaver_Zfx"
+  # aa <- msa.aa.aln@unmasked[6]
+  # make all 9aa subseqences for testing
+  aa.char <- as.character(aa)
+  
+  # find gaps and stop codons
+  aa.char.nogap <- str_replace_all(aa.char, "-|\\*", "")
+
+  max.aa <- nchar(aa.char.nogap)
+  
+  starts <- 1:(max.aa-9)
+  ends <- starts+8
+  
+  mat <- matrix(c(starts, ends), byrow=F, ncol = 2)
+  colnames(mat)<-c("start", "end")
+  
+  # Break into substrings and remove substrings with gaps or stops
+  hits <- str_sub_all(aa.char.nogap, mat)[[1]]
+  # hits <- hits[!str_detect(hits, "-|\\*")]
+  
+  # Test and score against basic pattern [must have]{must not have}
+  calc.scores <- function(s){
+    # [MDENQSTYG]{KRHCGP}[ILVFWM]{KRHCGP}{CGP}{CGP}[ILVFWM]{CGP}{CGP}
+    (sum(s2c(s)[1] %in% s2c("MDENQSTYG"))*10) +
+      sum(s2c(s)[2] %in% s2c("KRHCGP")) +
+      (sum(s2c(s)[3] %in% s2c("ILVFWM"))*10) +
+      sum( s2c(s)[4] %in% s2c("KRHCGP")) +
+      sum(s2c(s)[5] %in% s2c("CGP")) +
+      sum(s2c(s)[6] %in% s2c("CGP") )+
+      (sum( s2c(s)[7] %in% s2c("ILVFWM"))*10) +
+      sum(s2c(s)[8] %in% s2c("CGP")) +
+      sum(s2c(s)[9] %in% s2c("CGP"))
+  }
+  
+  # Test each substring against criteria
+  rc1 <- function(s) sum(s2c(s)[c(2, 4, 5)] %in% s2c("ILVFWMAY"))>=1
+  rc2 <- function(s) sum(s2c(s)[c(6, 8)] %in% s2c("ILVFWMAY"))>=1
+  rc3 <- function(s) sum(s2c(s)[c(4, 5, 6)] %in% s2c("DENQST"))>=1
+  rc4 <- function(s) {count <- sum(s2c(s)[1:9] %in% s2c("DENQSTKRH")); count>=2 & count<=4}
+  rc5 <- function(s) {count <- sum(s2c(s)[1:9] %in% s2c("ILVFWMAYGPST")); count>=5 & count<=7}
+  rc6 <- function(s) { 
+    m <- s2c(s)[1:9] %in% s2c("ILVFWMAYGP");
+    !any( sapply(3:8, function(i) { all(m[i-2], m[i-1], m[i], m[i+1]) })) &
+    !any( sapply(2:7, function(i) { all(m[i-1], m[i], m[i+1], m[i+2]) }))
+  }
+  rc7 <- function(s) { 
+    m <- s2c(s)[1:9] %in% s2c("DENQST");
+    !any(sapply(2:8, function(i) all(m[i-1], m[i], m[i+1])))
+  }
+  rc8  <- function(s) sum(s2c(s)[1:9] %in% s2c("KRH"))<=1
+  rc9  <- function(s) sum(s2c(s)[1:6] %in% s2c("QNKRH"))<=1
+  rc10 <- function(s) sum(s2c(s)[8:9] %in% s2c("QNKRH"))<=1
+  rc11 <- function(s) sum(s2c(s)[2:8] %in% s2c("C"))>=0
+  rc12 <- function(s) sum(s2c(s)[2:7] %in% s2c("PG"))>=0
+  
+  test.rcs <- function(s){
+    (rc1(s) + rc2(s) + rc3(s) + rc4(s) + rc5(s) + rc6(s) + rc7(s) + 
+      rc8(s) + rc9(s) + rc10(s) + rc11(s) + rc12(s))/12*100
+  }
+  
+  scores <- sapply(hits, calc.scores)
+  results <- sapply(hits, test.rcs) # score essentials
+  indexes <- which(hits %in% names(results)[results>=rc.threshold & scores==score.threshold]) # and pass all rcs
+
+  # Expected locations in original sequence
+  # locs.original <- str_locate(aa.char, hits[indexes]) %>%
+  #   as.data.frame %>%
+  #   dplyr::mutate("hit" = hits[indexes],
+  #                 "rc_score" = results[indexes])
+  
+  # find the 9aaTADs in the gap-removed input sequence
+   locs <- str_locate(aa.char.nogap, hits[indexes]) %>%
+     as.data.frame %>%
+     dplyr::mutate("hit" = hits[indexes],
+                   "rc_score" = results[indexes]) %>%
+   
+   # merge(x=locs, y=locs.original, by = c("hit", "rc_score"), all.x=T) %>%
+     dplyr::rowwise() %>%
+     # Now account for gaps by offsetting indexes back
+     dplyr::mutate(start = convert.to.gapped.coordinate(start, aa),
+                   end   = convert.to.gapped.coordinate(end, aa),
+                   seq = sequence.name) %>%
+     dplyr::arrange(start)
+   # locs
+}
+ # find.9aaTAD(aa=msa.aa.aln@unmasked[6], sequence.name = names(msa.aa.aln@unmasked[6]), score.threshold = 30, rc.threshold = 65)
+
+ 
+ Nine.aaTAD.locations <- do.call(rbind, mapply(find.9aaTAD, aa=msa.aa.aln@unmasked, 
+                                               sequence.name = names(msa.aa.aln@unmasked),
+                                               rc.threshold=100, SIMPLIFY = FALSE)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(seq = factor(seq, levels = rev(taxa.name.order))) %>% # sort reverse to match tree
+  dplyr::rowwise() %>%
+  dplyr::mutate(i = as.integer(seq)) # Set the row indexes for plotting
+
+#### Identify the locations of the NLS in the AA MSA ####
+ 
+# Nuclear localisation sequence
+ # using NLStradamus
+ # Nguyen Ba AN, Pogoutse A, Provart N, Moses AM. NLStradamus: a simple Hidden Markov Model for nuclear localization signal prediction. BMC Bioinformatics. 2009 Jun 29;10(1):202. 
+ 
+# Use aa translated sequence, no gaps
+ 
+aa.raw <- ape::trans(nt.raw)
+write.FASTA(aa.raw, file = "fasta/zfxy.aa.fas")
+
+if(!installr::is.windows()){
+  # perl nls/nlstradamus.pl -i fasta/zfxy.nt.fas > nls/zfy.nls.out
+  system2("perl", paste(" nls/nlstradamus.pl -i fasta/zfxy.aa.fas > nls/zfy.nls.out"))
+  
+  # Remove the non-table output
+  system2("cat", "nls/zfy.nls.out | grep -v 'Finished' | grep -v '=' | grep -v 'Analyzed' | grep -v 'sites' | grep -v 'Input' | grep -v 'Threshold' > nls/zfy.nls.filt.out")
+}
+nls.data <- read_table("nls/zfy.nls.filt.out", 
+                       col_names = c("sequence", "type", "posterior_prob", "start_raw", "end_raw", "aa")) %>%
+  dplyr::filter(posterior_prob > 0.7)
+
+# Adjust the raw sequences to their positions in aa msa
+
+nls.data$start <- sapply(1:nrow(nls.data), function(i) convert.to.gapped.coordinate(nls.data$start_raw[i], gapped.seq = msa.aa.aln@unmasked[[nls.data$sequence[i]]]))
+nls.data$end <- sapply(1:nrow(nls.data), function(i) convert.to.gapped.coordinate(nls.data$end_raw[i], gapped.seq = msa.aa.aln@unmasked[[nls.data$sequence[i]]]))
+
+nls.data %<>%
+dplyr::mutate(sequence = factor(sequence, levels = rev(taxa.name.order))) %>% # sort reverse to match tree
+  dplyr::rowwise() %>%
+  dplyr::mutate(i = as.integer(sequence)) # Set the row indexes for plotting
+
+# Export the table of NLS sequences
+write_tsv(nls.data %>% dplyr::select(sequence, aa, posterior_prob, start_raw, end_raw), file = "figure/nls.output.tsv")
+ 
+#### Draw the locations of the ZFs,  9aaTADs, and NLS in the AA MSA ####
+
+msa.aa.aln.tidy <- tidy_msa(msa.aa.aln)
+msa.aa.aln.tidy$name <- factor(msa.aa.aln.tidy$name, 
+       levels = rev(taxa.name.order)) # sort reverse to match tree
+
+# Calculate the midpoint of each ZF for labelling, smooth out species with
+# different start points
+zf.labels <- zf.locations %>% 
+  dplyr::mutate(mid = round( (start+end)/2, digits = 0),
+                mid = ifelse(mid%%2==0, mid, mid+1)
+  ) %>%
+  dplyr::group_by(mid) %>%
+  summarise() %>%
+  dplyr::mutate(label = row_number())
+
+make.aa.msa <- function(start, end){
+  ggplot()+
+    geom_msa(data = msa.aa.aln.tidy, seq_name = T, font=NULL, border=NA,
+             consensus_views = T, ref = "Platypus_ZFX", alpha = 0.5,
+             custom_color = data.frame("names" = c("-"), "color" = c("grey"))
+    )+
+    geom_rect(data = zf.locations, aes(xmin=start, xmax=end, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+    geom_rect(data = Nine.aaTAD.locations, aes(xmin=start, xmax=end, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
+    geom_rect(data = nls.data, aes(xmin=start, xmax=end, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
+    geom_text(data = zf.labels, aes(x = mid, y = 57, label = label))+
+    coord_cartesian(xlim = c(start, end),
+                    ylim = c(0, 57))+
+    labs(x = "Amino acid")+
+    theme_minimal()+
+    theme(axis.text = element_text(size=6),
+          axis.title.y = element_blank(),
+          panel.grid = element_blank())
+}
+
+# too wide to display in one figure, split in ~middle
+aa.msa.plot.0 <- make.aa.msa(0, 450)
+aa.msa.plot.1 <- make.aa.msa(min(zf.locations$start)-10, 650)
+aa.msa.plot.2 <- make.aa.msa(640, max(zf.locations$end)+10)
+
+save.double.width("figure/aa.msa.0.png", aa.msa.plot.0)
+save.double.width("figure/aa.msa.1.png", aa.msa.plot.1)
+save.double.width("figure/aa.msa.2.png", aa.msa.plot.2)
+
+#### What are the binding motifs of the ZFs in each species? ####
+
+# predict the ZF targets in each sequence via pwm_predict (http://zf.princeton.edu/download2.php)
+
+# pwm_predict zfy.aa.aln
+
+# Remove header and split the output PWMs to separate files
+# cat zfxy.aa.pwm | grep -v ';' | split -l 5 - zf_
+
+# Read each file, get headers and PWMs
+pwm.files <- list.files("pwm", pattern = "zf_", full.names = T)
+
+read.pwm <- function(f){
+  pwm <- read.table(f, skip=1)
+  header <- read.table(f, nrows=1)
+  p <- seqLogo::makePWM(pwm)
+  consensus <- seqLogo::consensus(p)
+  data.frame("species"= header$V1,
+       "zf" = header$V2,
+       "consensus" = consensus)
+}
+
+pwm.predictions <- do.call(rbind, lapply(pwm.files, read.pwm)) %>%
+  tidyr::pivot_wider(id_cols = species, names_from = zf, values_from = consensus)
+
+#### Get divergence times to highlight the rapid evolution in the rodents ####
+
+# Get the NCBI taxon ids for each species
+taxon.data <- lapply(metadata$species, function(x) httr::GET( paste0("http://timetree.temple.edu/api/taxon/",curl::curl_escape(x)))  ) 
+taxon.ids <- sapply(lapply(taxon.data, httr::content), function(x) x$taxon_id)
+metadata$taxon_id <- taxon.ids
+
+# Find the pairwise distances between each species
+pairwise.species <- expand.grid(unique(metadata$taxon_id), unique(metadata$taxon_id)) %>%
+  dplyr::filter(Var1!=Var2, Var1<Var2)
+
+get.time.tree <- function(tax.a, tax.b){
+  tryCatch({
+    tt <- httr::GET(paste0("http://timetree.temple.edu/api/pairwise/",tax.a, "/", tax.b))
+    ct <- content(tt)
+    Sys.sleep(0.5)
+    
+    
+    data <- as.data.frame( str_split(ct, "\r\n"), col.names = c("V1")) %>% 
+      dplyr::slice_tail(n=1) %>%
+      tidyr::separate_wider_delim( cols = V1, delim = ",", names = c("taxon_a_id","taxon_b_id","scientific_name_a","scientific_name_b","all_total","precomputed_age","precomputed_ci_low","precomputed_ci_high","adjusted_age"))
+    return(data)
+  }, error = function(e) { 
+    print(e)
+    return(data.frame("taxon_a_id" = c(),"taxon_b_id" = c(),"scientific_name_a" = c(),"scientific_name_b" = c(),"all_total" = c(),"precomputed_age" = c(),"precomputed_ci_low" = c(),"precomputed_ci_high" = c(),"adjusted_age" = c()))
+  }  ) 
+}
+
+# Save to avoid repeated API calls
+if(!file.exists( "time.tree.data.tsv")){
+  pairwise.times <- do.call(rbind, mapply(get.time.tree, pairwise.species$Var1, pairwise.species$Var2))
+  write_tsv(pairwise.times, file = "time.tree.data.tsv", col_names = T, quote = "none")
+} else{
+  pairwise.times <- read_tsv("time.tree.data.tsv")
+}
 
 #### Run codeml to check for site-specific selection ####
 
@@ -493,7 +896,7 @@ kaks.ratio <- kaks.data$ka / kaks.data$ks
 
 # sed -e 's/:[0-9\.]\+//g'
 
-labelled.tree <- macse.tree
+labelled.tree <- nt.aln.tree
 labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
 labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
 ape::write.tree(labelled.tree, file = "paml/site-specific/zfxy.nt.aln.paml.treefile")
@@ -505,24 +908,24 @@ write_file(newick.test, "paml/site-specific/zfxy.nt.aln.paml.treefile")
 
 # This control file tests site models With heterogeneous ω Across Sites
 paml.site.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\n",
-                       "treefile  = paml/site-specific/zfxy.nt.aln.paml.treefile * tree in Newick format without nodes\n", # 
-                       "outfile   = paml/site-specific/site.specific.paml.out.txt\n",
-                       "\n",
-                       "noisy     = 3 * on screen logging\n",
-                       "verbose   = 1 * detailed output in file\n",
-                       "\n",
-                       "seqtype   = 1 * codon data\n",
-                       "ndata     = 1 * one gene alignment\n",
-                       "icode     = 0 * universal genetic code\n",
-                       "cleandata = 0 * keep sites with ambiguity data\n",
-                       "\n",
-                       "model     = 0 * ω consistent across branches\n",
-                       "NSsites   = 0 1 2 7 8 * ω variation across sites\n",
-                       "CodonFreq = 7 * use mutation selection model\n",
-                       "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
-                       "clock     = 0 * assume no clock\n",
-                       "fix_omega = 0 * enables option to estimate omega\n",
-                       "omega     = 0.5 * initial omega value\n")
+                         "treefile  = paml/site-specific/zfxy.nt.aln.paml.treefile * tree in Newick format without nodes\n", # 
+                         "outfile   = paml/site-specific/site.specific.paml.out.txt\n",
+                         "\n",
+                         "noisy     = 3 * on screen logging\n",
+                         "verbose   = 1 * detailed output in file\n",
+                         "\n",
+                         "seqtype   = 1 * codon data\n",
+                         "ndata     = 1 * one gene alignment\n",
+                         "icode     = 0 * universal genetic code\n",
+                         "cleandata = 0 * keep sites with ambiguity data\n",
+                         "\n",
+                         "model     = 0 * ω consistent across branches\n",
+                         "NSsites   = 0 1 2 7 8 * ω variation across sites\n",
+                         "CodonFreq = 7 * use mutation selection model\n",
+                         "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                         "clock     = 0 * assume no clock\n",
+                         "fix_omega = 0 * enables option to estimate omega\n",
+                         "omega     = 0.5 * initial omega value\n")
 write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
 
 if(!installr::is.windows()){
@@ -593,11 +996,11 @@ m7m8 <- calc.LRT(-20614.279484, -20614.287541, 161, 163) # (positive selection v
 # To look at the rodent clade, we need a rooted tree
 
 # Find the MRCA of the rodents with rapid ZFY evolution
-rodent.node <- ape::getMRCA(macse.tree, c("Mouse_Zfy2", "Desert_hamster_Zfx-like_putative-Zfy"))
+rodent.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Desert_hamster_Zfx-like_putative-Zfy"))
 
 # Remove existing node labels, label the nodes and tips of the tree with #1
 # for foreground branches
-labelled.tree <- macse.tree
+labelled.tree <- nt.aln.tree
 labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
 labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
 labelled.tree <- treeio::label_branch_paml(labelled.tree, rodent.node, "#1")
@@ -632,215 +1035,108 @@ paml.site.branch.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\
 write_file(paml.site.branch.file, "paml/site-branch/zfy.site-branch.paml.ctl")
 
 
-#### Extend the AA alignments with non-mammalian outgroups ####
+if(!installr::is.windows()){
+  # Run codeml
+  system2("codeml", "paml/site-branch/zfy.site-branch.paml.ctl",
+          stdout = "paml/site-branch/zfy.site.branch.paml.log", 
+          stderr = "paml/site-branch/zfy.site.branch.paml.log")
+  
+  # Bayes Empirical Bayes (BEB) analysis (Yang, Wong & Nielsen 2005. Mol. Biol. Evol. 22:1107-1118)
+  # Extract sites under positive selection
+  # cat paml/site-branch/site.branch.paml.out.txt | grep "^ \{2,5\} [0-9]\{1,3\} [A-Z\-]" > zfy.site-branch.positive.sites.txt
+  
+  #system2("cat", 'paml/site-branch/site.branch.paml.out.txt | grep "^ \{2,5\} [0-9]\{1,3\} [A-Z\-]" > paml/site-branch/zfy.site-branch.positive.sites.txt' )
+}
 
-# Read all unaligned sequence files with .fa extension
-outgroup.aa.files <- list.files(path = "fasta/aa", pattern = "*.fa$", 
-                       include.dirs = T, full.names = T)
+# Process the positive sites file 
 
-outgroup.fa.read <- lapply(outgroup.aa.files, read.fasta)
+positive.sites <- read_table("paml/site-branch/zfy.site-branch.positive.sites.txt", col_names = c("site", "aa", "p"))
+positive.sites$p <- as.numeric(gsub("\\*+", "", positive.sites$p))
 
-outgroup.nt.raw <- do.call(c, lapply(outgroup.fa.read, function(x) x$fa))
-outgroup.metadata <- do.call(rbind, lapply(outgroup.fa.read, function(x) x$metadata))
+positive.sites.plot <- ggplot()+
+  geom_rect(data = zf.locations, aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="grey", alpha=0.5)+
+  geom_rect(data = Nine.aaTAD.locations, aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="blue", alpha=0.5)+
+  geom_rect(data = nls.data, aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="green", alpha=0.5)+
+  geom_point(data=positive.sites, aes(x = site, y = p) , size=0.25)+
+  geom_text(data = zf.labels, aes(x = mid, y = 1.05, label = label))+
+  labs(x = "Site", y = "Probability of positive selection p(ω>1)")+
+  theme_bw()
+save.double.width("figure/positive.sites.png", positive.sites.plot, height = 85)
 
-# Find the nodes that are ZFY vs ZFX to add to tree
-outgroup.metadata %<>%
-  dplyr::mutate(group = case_when(grepl("ZFY", common.name, ignore.case=T) ~ "ZFY",
-                                  common.name %in% c(outgroup.metadata$common.name, "Platypus_ZFX", "Opossum_ZFX") ~ "Outgroup",
-                                  T ~ "ZFX"))
+#### Ancestral sequence reconstruction #####
 
-combined.metadata <- rbind(metadata, outgroup.metadata)
+# Read the ancestral reconstruction
+ancestral.nt.seqs <- read.table(paste0(nt.aln.file, ".state") ,header=TRUE)
 
-# Write the combined fasta to file with .fas extension
-outgroup.nt.file <- "fasta/outgroup.nt.fas"
-ape::write.FASTA(outgroup.nt.raw, file = outgroup.nt.file)
+# We care about the eutherian common ancestor and the rodent ancestor
+# Find these nodes
 
-# Use macse to align the outgroup NT sequences
-system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
-                      "-seq ", outgroup.nt.file,
-                      "-out_NT", "aln/outgroup/outgroup.nt.aln",
-                      "-out_AA", "aln/outgroup/outgroup.aa.aln"), 
-        stdout = paste0("aln/outgroup/outgroup.macse.log"),  # logs
-        stderr = paste0("aln/outgroup/outgroup.macse.log"))  # error logs
+# Read the tree back to keep full node names
+nt.aln.tree.nodes <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
+nt.aln.tree.nodes <- ape::root(nt.aln.tree.nodes, "Platypus_ZFX")
 
-# Use macse to align the outgroup NT sequences with the existing NT alignment
-system2("java", paste("-jar bin/macse_v2.07.jar -prog alignTwoProfiles ",
-                      "-p1", nt.aln.file,
-                      "-p2", "aln/outgroup/outgroup.nt.aln",
-                      "-out_NT", "aln/outgroup/combined.nt.aln",
-                      "-out_AA", "aln/outgroup/combined.aa.aln"),
-        stdout = paste0("aln/combined.macse.log"),  # logs
-        stderr = paste0("aln/combined.macse.log"))  # error logs
+ggtree(nt.aln.tree.nodes) + 
+  geom_tree() +
+  geom_tiplab(size=2)+
+  geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")+
+  geom_treescale(fontsize =2, y = -1)+
+  coord_cartesian(clip="off")+
+  theme_tree() +
+  theme(legend.position = "none")
+
+# Node number returned includes number of tip labels; subtract to get node
+rodent.node <- ape::getMRCA(nt.aln.tree.nodes, c("Mouse_Zfy1", "Mongolian_gerbil_Zfx-like_putative-Zfy")) - length(nt.aln.tree.nodes$tip.label)
+eutheria.node <- getMRCA(nt.aln.tree.nodes, c("Mouse_Zfy1", "African_bush_elephant_ZFY")) - length(nt.aln.tree.nodes$tip.label)
+
+# Get ancestral rodent sequence
+rodent.anc.nt <- ancestral.nt.seqs %>%
+  dplyr::filter(Node == paste0("Node", rodent.node)) %>%
+  dplyr::select(State)
+rodent.anc.nt <- ape::as.DNAbin(rodent.anc.nt$State)
+
+# Bind together as a matrix
+rodent.plus.anc.nt.aln <- rbind(as.matrix(ape.nt.aln), rodent.anc.nt)
+
+# Convert back to list and add names
+rodent.ancestor.label <- "Ancestral_post-beaver_rodent"
+rodent.plus.anc.nt.aln <- as.list.DNAbin(rodent.plus.anc.nt.aln)
+names(rodent.plus.anc.nt.aln) <- c(names(ape.nt.aln), rodent.ancestor.label)
+
+# Plot the MSA
+
+# Find the tips under the ancestral node and get the labels
+rodent.tip.labels <- tidytree::offspring( as_tibble(nt.aln.tree.nodes), .node = rodent.node+length(nt.aln.tree.nodes$tip.label), tiponly = T)
 
 
-#### View the extended outgroup AA MSA ####
+rodent.plus.anc.nt.aln.tidy <- tidy_msa(rodent.plus.anc.nt.aln) %>%
+  dplyr::filter(name %in% c(rodent.ancestor.label, rodent.tip.labels$label))
+rodent.plus.anc.nt.aln.tidy$name <- factor(rodent.plus.anc.nt.aln.tidy$name, 
+                               levels = rev( c(taxa.name.order, rodent.ancestor.label))) # sort reverse to match tree
 
-msa.outgroup.aln <- Biostrings::readAAMultipleAlignment("aln/outgroup/combined.aa.aln", format="fasta")
-msa.outgroup.aln.tidy <- tidy_msa(msa.outgroup.aln)
+# Filter the zf locations and correct y locations
+rodent.plus.anc.zf <- zf.locations %>%
+  dplyr::filter(species %in% rodent.plus.anc.nt.aln.tidy$name) %>%
+  dplyr::rowwise() %>%
+  # Correct for different number of taxa in the y axis
+  dplyr::mutate(i = which( levels(rodent.plus.anc.nt.aln.tidy$name) == species ) - (1+length(unique(taxa.name.order))- length(unique(rodent.plus.anc.nt.aln.tidy$name))))
 
-ggplot()+
-  geom_msa(data = msa.outgroup.aln.tidy, seq_name = T, font=NULL, border=NA,
-           consensus_views = T, ref = "Platypus_ZFX", alpha = 0.5
-  )+
-  labs(x = "Amino acid")+
+rodent.plus.anc.nt.msa.plot <- ggplot()+
+  geom_msa(data = rodent.plus.anc.nt.aln.tidy, seq_name = T, font=NULL, 
+           border=NA, color="Chemistry_NT", consensus_views = T, ref = rodent.ancestor.label, )+
+  geom_rect(data = rodent.plus.anc.zf, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+  geom_point(data=positive.sites, aes(x = site*3, y = p+7) , size=0.25)+
   theme_minimal()+
-  theme(axis.text = element_text(size=6),
+  theme(axis.text = element_text(size=5),
         axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
         panel.grid = element_blank())
 
-#### Make a tree with the outgroups MSA using AA only ####
-
-system2("iqtree", paste("-s ", "aln/outgroup/combined.aa.aln", 
-                        "-bb 1000", # number of bootstrap replicates
-                        "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
-                        "-nt AUTO"), # number of threads
-        stdout = paste0("aln/outgroup/combined.aa.iqtree.log"), 
-        stderr = paste0("aln/outgroup/combined.aa.iqtree.log"))
-
-
-outgroup.tree <- ape::read.tree(paste0("aln/outgroup/combined.aa.aln.treefile"))
-
-# Root the tree on Mouse_Zfp711 and resave
-outgroup.tree <- ape::root(outgroup.tree, outgroup = c("Mouse_Zfp711"), resolve.root = TRUE)
-ape::write.tree(outgroup.tree, file = paste0("aln/outgroup/combined.aa.aln.rooted.treefile"))
-
-group_info <- split(combined.metadata$common.name, combined.metadata$group)
-outgroup.tree <- groupOTU(outgroup.tree, group_info, group_name = "group")
-
-outgroup.plot <- plot.tree(outgroup.tree)+
-  coord_cartesian(clip="off", xlim = c(0, 0.9), ylim= c(-2, 62))
-
-# outgroup.plot <- ggtree(outgroup.tree) + 
-#   geom_tree() +
-#   theme_tree() +
-#   geom_tiplab(size=3, aes(col = group))+
-#   geom_treescale(y=-1)+
-#   coord_cartesian(clip="off", xlim = c(0, 0.9), ylim= c(-1, 60))+
-#   theme(legend.position = "none")
-
-save.double.width("figure/outgroup.tree.png", outgroup.plot)
-
-
-
-#### What are the binding motifs of the ZFs in each species? ####
-
-# predict the ZF targets in each sequence via pwm_predict (http://zf.princeton.edu/download2.php)
-
-# pwm_predict zfy.aa.aln
-
-# Remove header and split the output PWMs to separate files
-# cat zfxy.aa.pwm | grep -v ';' | split -l 5 - zf_
-
-# Read each file, get headers and PWMs
-pwm.files <- list.files("pwm", pattern = "zf_", full.names = T)
-
-read.pwm <- function(f){
-  pwm <- read.table(f, skip=1)
-  header <- read.table(f, nrows=1)
-  p <- seqLogo::makePWM(pwm)
-  consensus <- seqLogo::consensus(p)
-  data.frame("species"= header$V1,
-       "zf" = header$V2,
-       "consensus" = consensus)
-}
-
-pwm.predictions <- do.call(rbind, lapply(pwm.files, read.pwm)) %>%
-  tidyr::pivot_wider(id_cols = species, names_from = zf, values_from = consensus)
-
-#### Annotate the locations of the ZFs in the AA MSA ####
-
-# We can use the regex .C.{2,4}C.{12}H.{3,5}H to find ZFs as per https://pubmed.ncbi.nlm.nih.gov/21572177/
-
-msa.aa.aln <- Biostrings::readAAMultipleAlignment(aa.aln.file, format="fasta")
-
-zf.regex <- ".C(.{2,4}?)C.{12}H(.{3,5}?)H"
-
-find.zf <- function(aa, sequence.name){
-  hits <- as.data.frame(str_locate_all(as.character(aa), zf.regex))
-  hits$species <- sequence.name
-  hits
-}
-
-zf.locations <- do.call(rbind, mapply(find.zf, aa=msa.aa.aln@unmasked, sequence.name = names(msa.aa.aln@unmasked), SIMPLIFY = FALSE))
-
-msa.aa.aln.tidy <- tidy_msa(msa.aa.aln)
-# Reverse the order of rows to match the y order of the MSA
-msa.aa.aln.tidy.order <- msa.aa.aln.tidy %>% dplyr::filter(position==1) %>% dplyr::mutate(i = n()+1-row_number())
-zf.locations <- merge(zf.locations, msa.aa.aln.tidy.order[,c(1, 4)], by.x="species", by.y="name")
-
-# Calculate the midpoint of each ZF for labelling, smooth out species with
-# different start points
-zf.labels <- zf.locations %>% 
-  dplyr::mutate(mid = round( (start+end)/2, digits = 0),
-                mid = ifelse(mid%%2==0, mid, mid+1)
-                ) %>%
-  dplyr::group_by(mid) %>%
-  summarise() %>%
-  dplyr::mutate(label = row_number())
-
-make.aa.msa <- function(start, end){
-  ggplot()+
-    geom_msa(data = msa.aa.aln.tidy, seq_name = T, font=NULL, border=NA,
-             consensus_views = T, ref = "Platypus_ZFX", alpha = 0.5
-    )+
-    geom_rect(data = zf.locations, aes(xmin=start, xmax=end, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-    geom_text(data = zf.labels, aes(x = mid, y = 57, label = label))+
-    coord_cartesian(xlim = c(start, end),
-                    ylim = c(0, 57))+
-    labs(x = "Amino acid")+
-    theme_minimal()+
-    theme(axis.text = element_text(size=6),
-          axis.title.y = element_blank(),
-          panel.grid = element_blank())
-}
-
-# too wide to display in one figure, split in ~middle
-aa.msa.plot.1 <- make.aa.msa(min(zf.locations$start)-10, 650)
-aa.msa.plot.2 <- make.aa.msa(640, max(zf.locations$end)+10)
-
-save.double.width("figure/aa.msa.1.png", aa.msa.plot.1)
-save.double.width("figure/aa.msa.2.png", aa.msa.plot.2)
-
-#### Get divergence times to highlight the rapid evolution in the rodents ####
-
-# Get the NCBI taxon ids for each species
-taxon.data <- lapply(metadata$species, function(x) httr::GET( paste0("http://timetree.temple.edu/api/taxon/",curl::curl_escape(x)))  ) 
-taxon.ids <- sapply(lapply(taxon.data, httr::content), function(x) x$taxon_id)
-metadata$taxon_id <- taxon.ids
-
-# Find the pairwise distances between each species
-pairwise.species <- expand.grid(unique(metadata$taxon_id), unique(metadata$taxon_id)) %>%
-  dplyr::filter(Var1!=Var2, Var1<Var2)
-
-get.time.tree <- function(tax.a, tax.b){
-  tryCatch({
-    tt <- httr::GET(paste0("http://timetree.temple.edu/api/pairwise/",tax.a, "/", tax.b))
-    ct <- content(tt)
-    Sys.sleep(0.5)
-    
-    
-    data <- as.data.frame( str_split(ct, "\r\n"), col.names = c("V1")) %>% 
-      dplyr::slice_tail(n=1) %>%
-      tidyr::separate_wider_delim( cols = V1, delim = ",", names = c("taxon_a_id","taxon_b_id","scientific_name_a","scientific_name_b","all_total","precomputed_age","precomputed_ci_low","precomputed_ci_high","adjusted_age"))
-    return(data)
-  }, error = function(e) { 
-    print(e)
-    return(data.frame("taxon_a_id" = c(),"taxon_b_id" = c(),"scientific_name_a" = c(),"scientific_name_b" = c(),"all_total" = c(),"precomputed_age" = c(),"precomputed_ci_low" = c(),"precomputed_ci_high" = c(),"adjusted_age" = c()))
-  }  ) 
-}
-
-# Save to avoid repeated API calls
-if(!file.exists( "time.tree.data.tsv")){
-  pairwise.times <- do.call(rbind, mapply(get.time.tree, pairwise.species$Var1, pairwise.species$Var2))
-  write_tsv(pairwise.times, file = "time.tree.data.tsv", col_names = T, quote = "none")
-} else{
-  pairwise.times <- read_tsv("time.tree.data.tsv")
-}
+save.double.width("figure/rodent.ancestral.nt.msa.png", rodent.plus.anc.nt.msa.plot, height = 30)
 
 #### ####
 
 
 # testing of side-by-side plots
-p <- ggtree(macse.tree) + geom_tiplab(size=3, aes(col = group))
+p <- ggtree(nt.aln.tree) + geom_tiplab(size=3, aes(col = group))
 n <- msaplot(p, aa.aln.file, offset=0.4, width=2)+theme(legend.position = "none")
 
