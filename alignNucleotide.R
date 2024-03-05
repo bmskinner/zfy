@@ -71,7 +71,7 @@ plot.tree <- function(tree.data, ...){
   # Numbers in parentheses are SH-aLRT support (%) / ultrafast bootstrap support (%)
   node.label.values <- data.frame("label" = tree.data$node.label) %>%
     tidyr::separate_wider_delim(label, delim = "/", names = c("name","SHaLRT", "UFBoot"),
-                                too_few = "align_start") %>%
+                                too_few = "align_end") %>%
     dplyr::mutate(UFBoot = as.numeric(UFBoot),
                   SHaLRT = as.numeric(SHaLRT),
                   isSupportedUFBoot = UFBoot>=95 & !is.na(UFBoot),
@@ -297,7 +297,7 @@ ape::write.tree(outgroup.tree, file = paste0("aln/outgroup/combined.aa.aln.roote
 group_info <- split(combined.metadata$common.name, combined.metadata$group)
 outgroup.tree <- groupOTU(outgroup.tree, group_info, group_name = "group")
 
-outgroup.plot <- plot.tree(outgroup.tree)+
+outgroup.plot <- plot.tree(outgroup.tree, col = "group")+
   coord_cartesian(clip="off", xlim = c(0, 0.9), ylim= c(-2, 62))
 
 save.double.width("figure/combined.aa.tree.png", outgroup.plot)
@@ -327,9 +327,6 @@ nt.aln.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
 # Root the tree on platypus and opossum and resave
 nt.aln.tree <- ape::root(nt.aln.tree, outgroup = c("Platypus_ZFX"), resolve.root = TRUE)
 ape::write.tree(nt.aln.tree, file = paste0(nt.aln.file, ".rooted.treefile"))
-
-# Remove node names, leaving just bootstrap values
-# nt.aln.tree$node.label <- gsub("(Node\\d+\\/|Root)", "", nt.aln.tree$node.label)
 
 # Find the nodes that are ZFY vs ZFX and add to tree
 group_info <- split(metadata$common.name, metadata$group)
@@ -366,8 +363,7 @@ save.double.width("figure/zfy.tree.png", plot.zfy)
 # Aim here is to look for signs of gene conversion in the final exon as per other 
 # papers.
 
-for(i in 1:nrow(mouse.exons)){
-
+create.exon.plot <- function(i){
   exon.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start[i]:mouse.exons$end[i]]
   exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
   exon.aln.file <- paste0("aln/exons/exon_", mouse.exons$exon[i], ".aln")
@@ -382,7 +378,7 @@ for(i in 1:nrow(mouse.exons)){
           stderr = paste0(exon.aln.file, ".iqtree.log"))
   
   # Some exons will fail - too many gaps
-  if(!file.exists(paste0(exon.aln.file, ".treefile"))) next
+  if(!file.exists(paste0(exon.aln.file, ".treefile"))) return()
   
   exon.tree <- ape::read.tree(paste0(exon.aln.file, ".treefile"))
   # Root the tree on platypus and opossum
@@ -392,38 +388,48 @@ for(i in 1:nrow(mouse.exons)){
   group_info <- split(metadata$common.name, metadata$group)
   exon.tree <- groupOTU(exon.tree, group_info, group_name = "group")
   
-  plot.exon.tree <- plot.tree(exon.tree)
+  plot.exon.tree <- plot.tree(exon.tree, col="group")  + coord_cartesian(clip="off", xlim = c(0, 0.8))
   exon.fig.file <- paste0("figure/exon_", mouse.exons$exon[i], ".zfx.zfy.tree.png")
   save.double.width(exon.fig.file, plot.exon.tree)
   
+  # Return for playing
+  plot.exon.tree
 }
 
-# We also want to look at all except exon 9
+exon.1.7.plots <- lapply(1:nrow(mouse.exons),create.exon.plot)
 
-exon.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start[1]:mouse.exons$end[6]]
-exon.aln.file <- paste0("aln/exons/exon_1-6.aln")
-ape::write.FASTA(exon.aln, file = exon.aln.file)
+# We also want to look at all except exon 7
 
-system2("iqtree", paste("-s ", exon.aln.file,
+exon.1.6.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start[1]:mouse.exons$end[6]]
+exon.1.6.aln.file <- paste0("aln/exons/exon_1-6.aln")
+ape::write.FASTA(exon.1.6.aln, file = exon.1.6.aln.file)
+
+system2("iqtree", paste("-s ", exon.1.6.aln.file,
                         "-bb 1000", # number of bootstrap replicates
                         "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT)
                         "-nt AUTO"), # number of threads
-        stdout = paste0(exon.aln.file, ".iqtree.log"),
-        stderr = paste0(exon.aln.file, ".iqtree.log"))
+        stdout = paste0(exon.1.6.aln.file, ".iqtree.log"),
+        stderr = paste0(exon.1.6.aln.file, ".iqtree.log"))
 
-exon.tree <- ape::read.tree(paste0(exon.aln.file, ".treefile"))
+exon.1.6.tree <- ape::read.tree(paste0(exon.1.6.aln.file, ".treefile"))
 # Root the tree on platypus and opossum
-exon.tree <- ape::root(exon.tree, c("Platypus_ZFX"), resolve.root = TRUE)
+exon.1.6.tree <- ape::root(exon.1.6.tree, c("Platypus_ZFX"), resolve.root = TRUE)
 
 # Find the nodes that are ZFY vs ZFX and add to tree
 # Find the nodes that are ZFY vs ZFX and add to tree
 group_info <- split(metadata$common.name, metadata$group)
-exon.tree <- groupOTU(exon.tree, group_info, group_name = "group")
+exon.1.6.tree <- groupOTU(exon.1.6.tree, group_info, group_name = "group")
 
-plot.exon.tree <- plot.tree(exon.tree)
-exon.fig.file <- paste0("figure/exon_1-6.zfx.zfy.tree.png")
-save.double.width(exon.fig.file, plot.exon.tree)
+plot.exon.1.6.tree <- plot.tree(exon.1.6.tree, col="group")  + coord_cartesian(clip="off", xlim = c(0, 0.8))
+exon.1.6.fig.file <- paste0("figure/exon_1-6.zfx.zfy.tree.png")
+save.double.width(exon.1.6.fig.file, plot.exon.1.6.tree)
 
+# Create a joint figure of exons 1-6 and exon 7
+
+exon.joint.tree <- plot.exon.1.6.tree + exon.1.7.plots[[7]] + 
+  patchwork::plot_annotation(tag_levels = list(c("Exons 1-6", "Exon 7"))) &
+  theme(plot.tag = element_text(size = 6))
+save.double.width("figure/exon.joint.tree.png", exon.joint.tree, height=120)
 #### Plot exon by exon NT MSA #####
 
 nt.aln.tidy <- tidy_msa(msa.nt.aln) %>%
