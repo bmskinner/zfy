@@ -20,6 +20,7 @@ library(assertthat)
 library(aplot)
 
 source("find9aaTADs.R")
+source("findZF.R")
 
 #### Common functions ####
 
@@ -183,8 +184,8 @@ metadata %<>%
                                   T ~ "ZFX"))
 
 # Write the combined fasta to file with .fas extension
-nt.combined.file <- "fasta/zfxy.nt.fas"
-ape::write.FASTA(nt.raw, file = nt.combined.file)
+mammal.nt.file <- "fasta/mammal.nt.fas"
+ape::write.FASTA(nt.raw, file = mammal.nt.file)
 
 #### Read outgroup FA files #####
 
@@ -236,11 +237,11 @@ if(!file.exists("bin/macse_v2.07.jar")) stop("MACSE not present in bin directory
 nt.aln.file <- "aln/zfxy.nt.aln"
 aa.aln.file <- "aln/zfxy.aa.aln"
 system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
-                      "-seq", nt.combined.file, # input
+                      "-seq", mammal.nt.file, # input
                       "-out_NT", nt.aln.file,  # output nt alignment
                       "-out_AA", aa.aln.file), # output aa alignment
         stdout = paste0(nt.aln.file, ".macse.log"),  # logs
-        stderr = paste0(nt.aln.file, ".macse.log"))  # error logs
+        stderr = paste0(nt.aln.file, ".macse.err"))  # error logs
 ape.nt.aln <- ape::read.FASTA(nt.aln.file)
 
 # Check the AA alignment
@@ -496,28 +497,20 @@ msa.combined.aa.plot <- ggplot()+
 
 #### Identify the locations of the ZFs in the AA MSA ####
 
-# We can use the regex .C.{2,4}C.{12}H.{3,5}H to find ZFs as per https://pubmed.ncbi.nlm.nih.gov/21572177/
-
-msa.aa.aln <- Biostrings::readAAMultipleAlignment(aa.aln.file, format="fasta")
-
-zf.regex <- ".C(.{2,4}?)C.{12}H(.{3,5}?)H"
-
-find.zf <- function(aa, sequence.name){
-  hits <- as.data.frame(str_locate_all(as.character(aa), zf.regex))
-  hits$sequence <- sequence.name
-  hits
-}
+combined.aa.aln <- Biostrings::readAAMultipleAlignment(combined.aa.aln.file, format="fasta")
 
 locations.zf <- do.call(rbind, mapply(find.zf, aa=combined.aa.aln@unmasked, sequence.name = names(combined.aa.aln@unmasked), SIMPLIFY = FALSE)) %>%
   dplyr::mutate(sequence = factor(sequence, 
-                                 levels = rev(outgroup.taxa.name.order))) %>% # sort reverse to match tree
+                                  levels = rev(outgroup.taxa.name.order))) %>% # sort reverse to match tree
   dplyr::rowwise() %>%
   dplyr::mutate(i = as.integer(sequence ) ) # Set the row indexes for plotting
 
 
 # Find the corresponding locations in the NT msa
 # check the NTs and AA alignments are the same length
-if(!assertthat::are_equal(ncol(msa.aa.aln) *3, ncol(msa.nt.aln))){
+# TODO  - handle differences between mammal and combined alignments. 
+# Do we need to have separate start and end columns for each type of msa?
+if(!assertthat::are_equal(ncol(combined.aa.aln)*3, ncol(msa.nt.aln))){
   stop("Check the alignments, AA and NT lengths do not match")
 }
 

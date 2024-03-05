@@ -1,0 +1,48 @@
+# Find Zinc Fingers in a sequence
+# We can use the regex .C.{2,4}C.{12}H.{3,5}H to find ZFs 
+# based on https://pubmed.ncbi.nlm.nih.gov/21572177/
+
+# aa - the amino acid sequence. May have gaps if part of a multiple sequence alignment
+# sequence.name - the name of the sequence
+# Returns - a tibble with ZFs, their coordinates in the sequence, and the
+# sequence name. If the input contains gaps ("-"),
+# the coordinates will be with respect to the gapped alignment.
+find.zf <- function(aa, sequence.name){
+  if(!require(dplyr)) stop("dplyr is required")
+
+  zf.regex <- ".C(.{2,4}?)C.{12}H(.{3,5}?)H"
+  
+  # Convert ungapped coordinates back to gapped
+  # site.no.gap - the integer site in an ungapped sequence to convert
+  # gapped.seq - the sequence with gaps from an alignment
+  convert.to.gapped.coordinate <- function(site.no.gap, gapped.seq){
+    
+    gapped.seq.char <- as.character(gapped.seq)
+    # find gaps and stop codons
+    gaps <- str_locate_all(gapped.seq.char, "-|\\*")[[1]][,1]
+    n <- site.no.gap
+    for(i in gaps){
+      if(i<n) n <- n + 1
+    }
+    n
+  }
+  
+  # Ensure this is character data in case input was from an MSA object
+  aa.char <- as.character(aa)
+  
+  # remove gaps and stop codons
+  aa.char.nogap <- str_replace_all(aa.char, "-|\\*", "")
+  
+  # Get the location of the hits in the ungapped sequence and correct for
+  # alignment gaps
+  str_locate_all(aa.char.nogap, zf.regex) %>%
+    as.data.frame %>%
+    dplyr::rowwise() %>%
+    # Now account for gaps by offsetting indexes back
+    dplyr::mutate(start = convert.to.gapped.coordinate(start, aa),
+                  end   = convert.to.gapped.coordinate(end, aa),
+                  sequence = sequence.name) %>%
+    dplyr::ungroup() %>%
+    dplyr::arrange(start) %>%
+    dplyr::select(sequence, start, end)
+}

@@ -117,6 +117,7 @@ find.9aaTAD <- function(aa, sequence.name, rc.threshold){
     dplyr::mutate(start = convert.to.gapped.coordinate(start, aa),
                   end   = convert.to.gapped.coordinate(end, aa),
                   sequence = sequence.name) %>%
+    dplyr::ungroup() %>%
     dplyr::arrange(start) %>%
     dplyr::select(sequence, hit, rc_score, start, end)
 }
