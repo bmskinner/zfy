@@ -1055,9 +1055,9 @@ rodent.plus.anc.NLS <- locations.NLS %>%
 rodent.plus.anc.nt.msa.plot <- ggplot()+
   geom_msa(data = rodent.plus.anc.nt.aln.tidy, seq_name = T, font=NULL, 
            border=NA, color="Chemistry_NT", consensus_views = T, ref = rodent.ancestor.label, )+
-  geom_rect(data = rodent.plus.anc.zf, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-  geom_rect(data = rodent.plus.anc.9aaTAD, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
-  geom_rect(data = rodent.plus.anc.NLS, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
+  geom_rect(data = rodent.plus.anc.zf,     aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+  geom_rect(data = rodent.plus.anc.9aaTAD, aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
+  geom_rect(data = rodent.plus.anc.NLS,    aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
   geom_point(data=positive.sites[positive.sites$p>0.9,], aes(x = site*3, y = p+6.5) , size=0.25)+
   theme_minimal()+
   theme(axis.text = element_text(size=5),
@@ -1170,7 +1170,7 @@ plot.conservation.hydrophobicity.aa <- function(start, end){
   hydro.colour.palette <- paletteer::paletteer_c("ggthemes::Classic Red-Blue", 1001) 
   
   hydrophobicity.colours <- data.frame("names" = c(aa.chemistries$names, "-"),
-                                       "color" = c(colour.palette[aa.chemistries$hydrophobicity], "#ffffff"))
+                                       "color" = c(hydro.colour.palette[aa.chemistries$hydrophobicity], "#ffffff"))
   
   charge.color.palette <- data.frame(charge = c(0:3),
     colors = c("yellow", "lightgreen", "darkred", "darkblue"))
@@ -1255,6 +1255,53 @@ aa.hydrophobicity.conservation.plots <- plot.conservation.hydrophobicity.aa(1, n
 aa.combined.charge.hydro.plots <- aa.hydrophobicity.conservation.plots[[1]]/ aa.hydrophobicity.conservation.plots[[2]]+ patchwork::plot_layout(guides = "collect", axis_titles = "collect", axes = "collect") & theme(legend.position='top')
 
 save.double.width("figure/conservation_charge_hydro_aa.png", aa.combined.charge.hydro.plots, height = 100)
+#### Plot conservation of charge across AA MSA ####
+
+# Using emboss charge on cluster
+
+# charge fasta/combined.aa.fas -auto -window 10 -outfile charge/aa.charge.txt
+# split the output to separate files per sequence by making a # marker at 'CHARGE'
+# cat charge/aa.charge.txt | sed -e 's/CHARGE/#\nCHARGE/g' | csplit --suppress-matched -f "charge/charge_" - '/#/' '{*}'
+# delete any files that are empty
+# find charge -type f -empty -print -delete
+
+read.charge.file <- function(f){
+  content <- data.frame(rows= gsub ("\\t\\t", "\t", read_lines(f, skip = 3))) %>%
+    tidyr::separate_wider_delim(rows, delim = "\t", names  = c("Position", "Residue", "Charge")) %>%
+    dplyr::mutate(Position = as.numeric(Position),
+                  Charge = as.numeric(Charge))
+  header <- read_lines(f, n_max = 1)
+  sequence <- gsub(" from \\d+ to \\d+: window \\d+", "", gsub("CHARGE of ", "", header))
+  
+  # Correct positions to gapped alignment coordinates
+  aa.aln <- combined.aa.aln@unmasked[[sequence]]
+  content$position_gapped <- sapply(content$Position, function(i) convert.to.gapped.coordinate(i, gapped.seq = aa.aln))
+  
+  content$Sequence <- sequence
+  content
+}
+
+charge.files <- list.files(path = "charge", pattern = "charge_", full.names = TRUE)
+charge.data <- do.call(rbind, lapply(charge.files, read.charge.file))
+
+charge.data$Sequence <- factor(charge.data$Sequence, levels = rev(outgroup.taxa.name.order))
+
+charge.plot <- ggplot(charge.data, aes(x = position_gapped, y = Sequence))+
+  geom_tile(aes(fill=Charge))+
+  # scale_fill_viridis_c()+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = 1, limits = c(-1, 1))+
+  scale_x_continuous( expand = c(0, 0))+
+  theme_bw()+
+  theme(axis.text.y = element_text(size=6),
+        axis.title = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(size=6),
+        legend.position = "top",
+        legend.title = element_text(size = 6),
+        legend.text = element_text(size = 6))
+save.double.width("figure/charge.window.10.png", charge.plot, height = 120)
+
+
 #### Run GENECONV to test for gene conversion ####
 
 # We want to look at gene conversion within species lineages. We also want to
