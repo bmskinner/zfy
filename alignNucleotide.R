@@ -503,6 +503,59 @@ save.double.width("figure/dnds.png", kaks.pairwise.plot)
 
 # Strong purifying selection in all pairs, but weaker in rodents
 
+# Look at the final exon versus exons 1-6; is purifying selection more 
+# pronounced in the ZFs?
+
+exon.1.6.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start[1]:mouse.exons$end[6]-1] # -1 to ensure on a codon boundary
+ape::write.FASTA(exon.1.6.aln, file = "aln/exons/exon_1-6.kaks.aln")
+seqin.aln.exon.1.6 <- seqinr::read.alignment("aln/exons/exon_1-6.kaks.aln", format = "fasta")
+
+exon.7.aln <- as.matrix(ape.nt.aln)[,(mouse.exons$start[7]-1):mouse.exons$end[7]] # -1 to ensure on a codon boundary
+ape::write.FASTA(exon.7.aln, file = "aln/exons/exon_7.kaks.aln")
+seqin.aln.exon.7 <- seqinr::read.alignment("aln/exons/exon_7.kaks.aln", format = "fasta")
+
+create.pairwise.kaks.data <- function(seqinr.aln){
+  kaks.data <- seqinr::kaks(seqinr.aln)
+  kaks.ratio <- kaks.data$ka / kaks.data$ks
+  kaks.pairwise <- dist2list(kaks.ratio, tri = F)
+  kaks.pairwise$col <- factor(kaks.pairwise$col, 
+                                       levels = taxa.name.order)
+  kaks.pairwise$row <- factor(kaks.pairwise$row, 
+                                       levels = taxa.name.order)
+  
+  kaks.pairwise %>% 
+    dplyr::rowwise() %>%
+    dplyr::mutate(rownum = which(row==taxa.name.order),
+                  colnum = which(col==taxa.name.order)) %>%
+    dplyr::filter(rownum > colnum)
+}
+
+kaks.exon.1.6 <- create.pairwise.kaks.data(seqin.aln.exon.1.6)
+kaks.exon.7 <- create.pairwise.kaks.data(seqin.aln.exon.7)
+
+
+plot.kaks <- function(kaks.pairwise){
+  ggplot(kaks.pairwise, aes(x = col, y = row))+
+    geom_tile(aes(fill=value))+
+    scale_fill_viridis_c(limits = c(0, 1), direction = -1)+
+    labs(fill="dNdS")+
+    theme_bw()+
+    theme(axis.text.x = element_text(size = 5, angle = 45, hjust = 1),
+          axis.text.y = element_text(size = 5),
+          axis.title = element_blank(),
+          legend.position = c(0.8, 0.3),
+          legend.background = element_blank(),
+          legend.title = element_text(size = 5),
+          legend.text = element_text(size = 5))
+}
+exon.1.6.kaks.pairwise.plot <- plot.kaks(kaks.exon.1.6)
+
+exon.7.kaks.pairwise.plot <- plot.kaks(kaks.exon.7)
+
+exon.kaks.plot <- exon.1.6.kaks.pairwise.plot + exon.7.kaks.pairwise.plot +
+  patchwork::plot_annotation(tag_levels = c("A"))
+
+save.double.width("figure/exon.1-6.7.dnds.png", exon.kaks.plot, height=100)
 
 #### Plot extended outgroup AA MSA ####
 
@@ -523,24 +576,21 @@ msa.combined.aa.plot <- ggplot()+
 
 combined.aa.aln <- Biostrings::readAAMultipleAlignment(combined.aa.aln.file, format="fasta")
 
-locations.zf <- do.call(rbind, mapply(find.zf, aa=combined.aa.aln@unmasked, sequence.name = names(combined.aa.aln@unmasked), SIMPLIFY = FALSE)) %>%
+locations.zf <- do.call(rbind, mapply(find.zf, aa=combined.aa.aln@unmasked, 
+                                      sequence.name = names(combined.aa.aln@unmasked), 
+                                      SIMPLIFY = FALSE)) %>%
   dplyr::mutate(sequence = factor(sequence, 
                                   levels = rev(outgroup.taxa.name.order))) %>% # sort reverse to match tree
   dplyr::rowwise() %>%
-  dplyr::mutate(i = as.integer(sequence ) ) # Set the row indexes for plotting
-
-
-# Find the corresponding locations in the NT msa
-# check the NTs and AA alignments are the same length
-# TODO  - handle differences between mammal and combined alignments. 
-# Do we need to have separate start and end columns for each type of msa?
-if(!assertthat::are_equal(ncol(combined.aa.aln)*3, ncol(msa.nt.aln))){
-  stop("Check the alignments, AA and NT lengths do not match")
-}
-
-locations.zf %<>% dplyr::ungroup() %>%
-  dplyr::mutate(start_nt = start*3,
-                end_nt = end *3)
+  dplyr::mutate(i = as.integer(sequence)) %>%  # Set the row indexes for plotting
+  
+  # Add the gapped nt alignment coordinates for nt sequences
+  dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(msa.nt.aln@unmasked), # we have the nt alignment
+                                          convert.to.gapped.coordinate(start_nt_ungapped,  msa.nt.aln@unmasked[[sequence]]),
+                                          NA),
+                end_nt_gapped = ifelse( sequence %in% names(msa.nt.aln@unmasked), # we have the nt alignment
+                                          convert.to.gapped.coordinate(end_nt_ungapped,  msa.nt.aln@unmasked[[sequence]]),
+                                          NA))
 
 #### Identify the locations of the 9aaTAD in the extended outgroup AA MSA ####
 
@@ -549,11 +599,17 @@ locations.9aaTAD <- do.call(rbind, mapply(find.9aaTAD, aa=combined.aa.aln@unmask
                                                sequence.name = names(combined.aa.aln@unmasked),
                                                rc.threshold=100, SIMPLIFY = FALSE)) %>%
   dplyr::ungroup() %>%
-  dplyr::mutate(sequence = factor(sequence, levels = rev(outgroup.taxa.name.order)),
-                start_nt = start * 3,
-                end_nt = end * 3) %>% # sort reverse to match tree
+  dplyr::mutate(sequence = factor(sequence, levels = rev(outgroup.taxa.name.order))) %>% # sort reverse to match tree
   dplyr::rowwise() %>%
-  dplyr::mutate(i = as.integer(sequence)) # Set the row indexes for plotting
+  dplyr::mutate(i = as.integer(sequence)) %>%  # Set the row indexes for plotting
+  
+  # Add the gapped nt alignment coordinates for nt sequences
+  dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(msa.nt.aln@unmasked), # we have the nt alignment
+                                          convert.to.gapped.coordinate(start_nt_ungapped,  msa.nt.aln@unmasked[[sequence]]),
+                                          NA),
+                end_nt_gapped = ifelse( sequence %in% names(msa.nt.aln@unmasked), # we have the nt alignment
+                                        convert.to.gapped.coordinate(end_nt_ungapped,  msa.nt.aln@unmasked[[sequence]]),
+                                        NA))
 
 #### Identify the locations of the NLS in the extended outgroup AA MSA ####
  
@@ -578,22 +634,48 @@ if(!installr::is.windows()){
 
 # Read in the NLS prections
 locations.NLS <- read_table("nls/zfy.nls.filt.out", 
-                       col_names = c("sequence", "type", "posterior_prob", "start_raw", "end_raw", "aa"))
+                       col_names = c("sequence", "type", "posterior_prob", "start_ungapped", "end_ungapped", "aa"))
 
 # Adjust the raw sequences to their positions in aa msa
-locations.NLS$start <- sapply(1:nrow(locations.NLS), function(i) convert.to.gapped.coordinate(locations.NLS$start_raw[i], gapped.seq = combined.aa.aln@unmasked[[locations.NLS$sequence[i]]]))
-locations.NLS$end <- sapply(1:nrow(locations.NLS), function(i) convert.to.gapped.coordinate(locations.NLS$end_raw[i], gapped.seq = combined.aa.aln@unmasked[[locations.NLS$sequence[i]]]))
+locations.NLS$start_gapped <- sapply(1:nrow(locations.NLS), function(i) convert.to.gapped.coordinate(locations.NLS$start_ungapped[i], gapped.seq = combined.aa.aln@unmasked[[locations.NLS$sequence[i]]]))
+locations.NLS$end_gapped <- sapply(1:nrow(locations.NLS), function(i) convert.to.gapped.coordinate(locations.NLS$end_ungapped[i], gapped.seq = combined.aa.aln@unmasked[[locations.NLS$sequence[i]]]))
 
 locations.NLS %<>%
-dplyr::mutate(sequence = factor(sequence, levels = rev(outgroup.taxa.name.order)), # sort reverse to match tree
-              start_nt = start * 3,
-              end_nt = end * 3) %>% 
+  dplyr::mutate(sequence = factor(sequence, levels = rev(outgroup.taxa.name.order)), # sort reverse to match tree
+              start_nt_ungapped = start_ungapped * 3,
+              end_nt_ungapped = end_ungapped * 3) %>% 
   dplyr::rowwise() %>%
-  dplyr::mutate(i = as.integer(sequence)) # Set the row indexes for plotting
+  dplyr::mutate(i = as.integer(sequence)) %>%  # Set the row indexes for plotting
+  
+  # Add the gapped nt alignment coordinates for nt sequences
+  dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(msa.nt.aln@unmasked), # we have the nt alignment
+                                          convert.to.gapped.coordinate(start_nt_ungapped,  msa.nt.aln@unmasked[[sequence]]),
+                                          NA),
+                end_nt_gapped = ifelse( sequence %in% names(msa.nt.aln@unmasked), # we have the nt alignment
+                                        convert.to.gapped.coordinate(end_nt_ungapped,  msa.nt.aln@unmasked[[sequence]]),
+                                        NA))
 
 # Export the table of NLS sequences
-write_tsv(locations.NLS %>% dplyr::select(sequence, aa, posterior_prob, start_raw, end_raw, start_nt, end_nt), file = "figure/nls.output.tsv")
+write_tsv(locations.NLS, file = "figure/nls.output.tsv")
  
+#### Export the locations of the  ZFs,  9aaTADs, and NLS ####
+
+write_tsv(locations.zf %>% 
+            dplyr::select(sequence, start_ungapped, end_ungapped, 
+                          start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
+                          start_nt_gapped, end_nt_gapped),
+          "figure/locations.zf.tsv")
+write_tsv(locations.9aaTAD %>% 
+            dplyr::select(sequence, hit, rc_score, start_ungapped, end_ungapped, 
+                          start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
+                          start_nt_gapped, end_nt_gapped),
+          "figure/locations.9aaTAD.tsv")
+write_tsv(locations.NLS %>% 
+            dplyr::select(sequence, aa, type, posterior_prob, start_ungapped, end_ungapped, 
+                          start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
+                          start_nt_gapped, end_nt_gapped),
+          "figure/locations.NLS.tsv")
+
 #### Plot ZFs,  9aaTADs, and NLS in the extended outgroup AA MSA ####
 
 combined.aa.aln.tidy <- tidy_msa(combined.aa.aln)
@@ -616,9 +698,9 @@ make.aa.msa <- function(start, end){
              consensus_views = T, ref = "Opossum_ZFX", alpha = 0.5,
              custom_color = data.frame("names" = c("-"), "color" = c("grey"))
     )+
-    geom_rect(data = locations.zf, aes(xmin=start, xmax=end, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-    geom_rect(data = locations.9aaTAD, aes(xmin=start, xmax=end, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
-    geom_rect(data = locations.NLS, aes(xmin=start, xmax=end, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
+    geom_rect(data = locations.zf,     aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+    geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
+    geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
     coord_cartesian(xlim = c(start, end),
                     ylim = c(0, nrow(combined.aa.aln)))+
     labs(x = "Amino acid")+
@@ -878,19 +960,23 @@ if(!installr::is.windows()){
   
   #system2("cat", 'paml/site-branch/site.branch.paml.out.txt | grep "^ \{2,5\} [0-9]\{1,3\} [A-Z\-]" > paml/site-branch/zfy.site-branch.positive.sites.txt' )
 }
+#### Plot codeml branch-site model output  ####
 
-# Process the positive sites file 
-
+# Read the positive sites file 
 positive.sites <- read_table("paml/site-branch/zfy.site-branch.positive.sites.txt", col_names = c("site", "aa", "p"))
 positive.sites$p <- as.numeric(gsub("\\*+", "", positive.sites$p))
 
+positive.sites.y <- max(locations.zf$i) + 1.5
+
 positive.sites.plot <- ggplot()+
-  geom_rect(data = locations.zf, aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="grey", alpha=0.5)+
-  geom_rect(data = locations.9aaTAD, aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="blue", alpha=0.5)+
-  geom_rect(data = locations.NLS, aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="green", alpha=0.5)+
-  geom_point(data=positive.sites, aes(x = site, y = p) , size=0.25)+
-  geom_text(data = zf.labels, aes(x = mid, y = 1.05, label = label))+
-  labs(x = "Site", y = "Probability of positive selection p(ω>1)")+
+  geom_rect(data = locations.zf,     aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+  geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
+  geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
+  geom_rect(data = positive.sites,   aes(xmin=site-0.5, xmax=site+0.5, ymin=positive.sites.y, ymax=positive.sites.y+2, fill=p))+
+  
+  # geom_point(data=positive.sites,    aes(x = site, y = positive.sites.y, fill) , size=0.25)+
+  labs(x = "Site", fill = "p(ω>1)")+
+  scale_fill_viridis_c()+
   theme_bw()
 save.double.width("figure/positive.sites.png", positive.sites.plot, height = 85)
 
@@ -998,25 +1084,17 @@ msa.nt.aln.tidy.conservation <- ggmsa::tidy_msa(msa.nt.aln) %>%
   dplyr::summarise(n = n(), fraction = n/nrow(msa.nt.aln)) %>%
   dplyr::filter(matchesRef)
 
-
-
-# msa.nt.aln.tidy <- ggmsa::tidy_msa(msa.nt.aln) %>%
-#   dplyr::filter(character != "-") %>%
-#   dplyr::group_by(position, character) %>%
-#   dplyr::summarise(n = n(), fraction = n/nrow(msa.nt.aln)) %>%
-#   dplyr::group_by(position) %>%
-#   dplyr::arrange(desc(fraction)) %>%
-#   dplyr::slice_head(n=1) %>%
-#   dplyr::arrange(position)
-
 plot.conservation <- function(start, end){
+  
+  conservation.y <- max(locations.zf$i) + 1.5
+  
   ggplot(msa.nt.aln.tidy.conservation)+
     # geom_rect(data=mouse.exons, aes( xmin = start-0.5, xmax = end+0.5, ymin=0, ymax=1, fill=exon), alpha=1)+
-    geom_rect(data = locations.zf, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-    geom_rect(data = locations.9aaTAD, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
-    geom_rect(data = locations.NLS, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
+    geom_rect(data = locations.zf,     aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+    geom_rect(data = locations.9aaTAD, aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
+    geom_rect(data = locations.NLS,    aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
     
-    geom_rect(data=msa.nt.aln.tidy.conservation,  aes(xmin=position-0.5, xmax=position+0.5, ymin=59, ymax=60, fill=fraction))+
+    geom_rect(data=msa.nt.aln.tidy.conservation,  aes(xmin=position-0.5, xmax=position+0.5,  ymin=conservation.y, ymax=conservation.y+2, fill=fraction))+
     scale_fill_viridis_c(direction = -1)+
     # geom_line( aes(x=position, y=fraction*nrow(msa.nt.aln)))+
     # scale_fill_manual(values = rep(c("grey", "white"), 4))+
@@ -1055,9 +1133,9 @@ plot.conservation.aa <- function(start, end){
   conservation.y <- max(locations.zf$i) + 1.5
    ggplot()+
     # geom_rect(data=mouse.exons, aes( xmin = start-0.5, xmax = end+0.5, ymin=0, ymax=1, fill=exon), alpha=1)+
-    geom_rect(data = locations.zf, aes(xmin=start, xmax=end, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-    geom_rect(data = locations.9aaTAD, aes(xmin=start, xmax=end, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
-    geom_rect(data = locations.NLS, aes(xmin=start, xmax=end, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
+    geom_rect(data = locations.zf,     aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+    geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
+    geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
     
     geom_rect(data=msa.aa.aln.tidy.conservation,  aes(xmin=position-0.45, xmax=position+0.45, ymin=conservation.y, ymax=conservation.y+2, fill=fraction))+
     scale_fill_viridis_c(direction = -1)+

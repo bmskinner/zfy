@@ -110,14 +110,15 @@ find.9aaTAD <- function(aa, sequence.name, rc.threshold){
     as.data.frame %>%
     dplyr::mutate("hit" = candidates[rc.results>=rc.threshold],
                   "rc_score" = rc.results[rc.results>=rc.threshold]) %>%
-  
-
     dplyr::rowwise() %>%
+    dplyr::rename(start_ungapped = start,
+                  end_ungapped   = end) %>%
     # Now account for gaps by offsetting indexes back
-    dplyr::mutate(start = convert.to.gapped.coordinate(start, aa),
-                  end   = convert.to.gapped.coordinate(end, aa),
+    dplyr::mutate(start_gapped = convert.to.gapped.coordinate(start_ungapped, aa),
+                  end_gapped   = convert.to.gapped.coordinate(end_ungapped, aa),
+                  start_nt_ungapped = start_ungapped * 3,
+                  end_nt_ungapped = end_ungapped * 3,
                   sequence = sequence.name) %>%
     dplyr::ungroup() %>%
-    dplyr::arrange(start) %>%
-    dplyr::select(sequence, hit, rc_score, start, end)
+    dplyr::arrange(start_ungapped)
 }
