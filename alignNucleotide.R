@@ -204,6 +204,7 @@ printMultipleAlignment <- function(alignment, names=NULL, names.length=NA, chunk
 # Clear previous analyses
 filesstrings::dir.remove("aln")
 filesstrings::dir.remove("figure")
+filesstrings::dir.remove("pwm")
 
 # Create missing dirs if needed
 filesstrings::create_dir("aln")
@@ -360,8 +361,9 @@ system2("iqtree", paste("-s ", "aln/outgroup/combined.aa.aln",
 
 outgroup.tree <- ape::read.tree(paste0("aln/outgroup/combined.aa.aln.treefile"))
 
-# Root the tree on Xenopus nodes and resave
-outgroup.tree <- ape::root(outgroup.tree, outgroup = c("Frog_ZFX.S","Frog_ZFX.L"), resolve.root = TRUE)
+# Root the tree in the edge between Xenopus nodes and chicken
+xenopus.node <- ape::getMRCA(outgroup.tree, c("Frog_ZFX.S","Frog_ZFX.L"))
+outgroup.tree <- phytools::reroot(outgroup.tree, xenopus.node, position = 0.1)
 ape::write.tree(outgroup.tree, file = paste0("aln/outgroup/combined.aa.aln.rooted.treefile"))
 
 group_info <- split(combined.metadata$common.name, combined.metadata$group)
@@ -374,7 +376,6 @@ save.double.width("figure/combined.aa.tree.png", outgroup.plot)
 
 # Also save the order of taxa in the outgroup tree to use later
 outgroup.taxa.name.order <- get_taxa_name(outgroup.plot) 
-
 
 #### Make mammal CDS NT tree #####
 
@@ -394,8 +395,8 @@ system2("iqtree", paste("-s ", nt.aln.file,
 
 nt.aln.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
 
-# Root the tree on platypus and opossum and resave
-nt.aln.tree <- ape::root(nt.aln.tree, outgroup = c("Platypus_ZFX"), resolve.root = TRUE)
+# Root the tree on platypus and resave
+nt.aln.tree <- phytools::reroot(nt.aln.tree, which(nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
 ape::write.tree(nt.aln.tree, file = paste0(nt.aln.file, ".rooted.treefile"))
 
 # Find the nodes that are ZFY vs ZFX and add to tree
@@ -451,8 +452,8 @@ create.exon.plot <- function(i){
   if(!file.exists(paste0(exon.aln.file, ".treefile"))) return()
   
   exon.tree <- ape::read.tree(paste0(exon.aln.file, ".treefile"))
-  # Root the tree on platypus and opossum
-  exon.tree <- ape::root(exon.tree, c("Platypus_ZFX"), resolve.root = TRUE)
+  # Root the tree on platypus
+  exon.tree <- phytools::reroot(exon.tree, which(exon.tree$tip.label=="Platypus_ZFX"), position = 0.015)
   
   # Find the nodes that are ZFY vs ZFX and add to tree
   group_info <- split(metadata$common.name, metadata$group)
@@ -482,9 +483,8 @@ system2("iqtree", paste("-s ", exon.1.6.aln.file,
         stderr = paste0(exon.1.6.aln.file, ".iqtree.log"))
 
 exon.1.6.tree <- ape::read.tree(paste0(exon.1.6.aln.file, ".treefile"))
-# Root the tree on platypus and opossum
-exon.1.6.tree <- ape::root(exon.1.6.tree, c("Platypus_ZFX"), resolve.root = TRUE)
-
+# Root the tree on platypus
+exon.1.6.tree <- phytools::reroot(exon.1.6.tree, which(exon.1.6.tree$tip.label=="Platypus_ZFX"), position = 0.015)
 # Find the nodes that are ZFY vs ZFX and add to tree
 # Find the nodes that are ZFY vs ZFX and add to tree
 group_info <- split(metadata$common.name, metadata$group)
@@ -797,16 +797,16 @@ save.double.width("figure/aa.msa.2.png", aa.msa.plot.2)
 # predict the ZF targets in each sequence via pwm_predict (http://zf.princeton.edu/download2.php)
 
 if(!installr::is.windows()){
-  # pwm_predict zfy.aa.aln
-  system2("bin/pwm_predict/pwm_predict", "fasta/combined.aa.fas")
-  system2("mkdir", "-p pwm")
-  system2("mv", "fasta/combined.aa.pwm", "pwm/combined.aa.pwm")
+  old.wd <- getwd()
+  setwd("./bin/pwm_predict")
+  system2("./pwm_predict", "../../fasta/combined.aa.fas")
+  setwd(old.wd)
+  filesstrings::move_files(files = c("fasta/combined.aa.pwm"),
+                           destinations = c("pwm"),
+                           overwrite = TRUE)
   # Remove header and split the output PWMs to separate files
-  system2("cat", "cat fasta/combined.aa.pwm | grep -v ';' | split -l 5 - zf_")
+  system2("cat", "pwm/combined.aa.pwm | grep -v ';' | split -l 5 - pwm/zf_")
 }
-
-
-
 
 # Read each file, get headers and PWMs
 pwm.files <- list.files("pwm", pattern = "zf_", full.names = T)
@@ -1034,7 +1034,7 @@ if(RUN_PAML & !installr::is.windows() & !file.exists(paml.branch.site.output)){
           stdout = "paml/branch-site/zfy.branch-site.paml.log", 
           stderr = "paml/branch-site/zfy.branch-site.paml.log")
   
-  system2("cat", 'paml/branch-site/branch-site.paml.out.txt | grep "^ \{2,5\} [0-9]\{1,3\} [A-Z\-]" > paml/branch-site/zfy.branch-site.positive.sites.txt' )
+  system2("cat", 'paml/branch-site/branch-site.paml.out.txt | grep "^ \\{2,5\\} [0-9]\\{1,3\\} [A-Z\\-]" > paml/branch-site/zfy.branch-site.positive.sites.txt' )
   
   # Bayes Empirical Bayes (BEB) analysis (Yang, Wong & Nielsen 2005. Mol. Biol. Evol. 22:1107-1118)
   # Extract sites under positive selection
@@ -1056,8 +1056,6 @@ if(file.exists(paml.branch.site.output)){
     geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
     geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
     geom_rect(data = positive.sites,   aes(xmin=site-0.5, xmax=site+0.5, ymin=positive.sites.y, ymax=positive.sites.y+2, fill=p))+
-    
-    # geom_point(data=positive.sites,    aes(x = site, y = positive.sites.y, fill) , size=0.25)+
     labs(x = "Site", fill = "p(ω>1)")+
     scale_fill_viridis_c()+
     theme_bw()
@@ -1085,7 +1083,7 @@ ggtree(nt.aln.tree.nodes) +
   theme(legend.position = "none")
 
 # Node number returned includes number of tip labels; subtract to get node
-rodent.node <- ape::getMRCA(nt.aln.tree.nodes, c("Mouse_Zfy1", "Mongolian_gerbil_Zfx-like_putative-Zfy")) - length(nt.aln.tree.nodes$tip.label)
+rodent.node <- ape::getMRCA(nt.aln.tree.nodes, c("Mouse_Zfy1", "Desert_hamster_Zfx-like_putative-Zfy")) - length(nt.aln.tree.nodes$tip.label)
 eutheria.node <- getMRCA(nt.aln.tree.nodes, c("Mouse_Zfy1", "African_bush_elephant_ZFY")) - length(nt.aln.tree.nodes$tip.label)
 
 # Get ancestral rodent sequence
@@ -1140,8 +1138,13 @@ rodent.plus.anc.nt.msa.plot <- ggplot()+
            border=NA, color="Chemistry_NT", consensus_views = T, ref = rodent.ancestor.label, )+
   geom_rect(data = rodent.plus.anc.zf,     aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
   geom_rect(data = rodent.plus.anc.9aaTAD, aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
-  geom_rect(data = rodent.plus.anc.NLS,    aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
-  geom_point(data=positive.sites[positive.sites$p>0.9,], aes(x = site*3, y = p+6.5) , size=0.25)+
+  geom_rect(data = rodent.plus.anc.NLS,    aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)
+if(file.exists(paml.branch.site.output)){
+  rodent.plus.anc.nt.msa.plot <- rodent.plus.anc.nt.msa.plot +
+    geom_point(data=positive.sites[positive.sites$p>0.9,], aes(x = site*3, y = p+6.5) , size=0.25)
+}
+
+rodent.plus.anc.nt.msa.plot <- rodent.plus.anc.nt.msa.plot +
   theme_minimal()+
   theme(axis.text = element_text(size=5),
         axis.title.y = element_blank(),
@@ -1230,23 +1233,6 @@ combined.aa.aln <- readAAMultipleAlignment(combined.aa.aln.file, format = "fasta
 msa.aa.aln.tidy.frog.conservation <- calculate.conservation(combined.aa.aln,"Frog_ZFX.S" )
 msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(combined.aa.aln,"Chicken_ZFX" )
 msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(combined.aa.aln,"Opossum_ZFX" )
-
-# frog.aa.aln <-  ggmsa::tidy_msa(combined.aa.aln) %>%
-#   dplyr::filter(name=="Frog_ZFX.S") %>%
-#   dplyr::select(-name, position, frog_char = character)
-# 
-# msa.aa.aln.tidy.conservation <- ggmsa::tidy_msa(combined.aa.aln) %>%
-#   merge( frog.aa.aln, by = c("position")) %>%
-#   dplyr::filter(frog_char!="-") %>%
-#   dplyr::mutate(matchesFrog = character==frog_char) %>%
-#   dplyr::group_by(position, matchesFrog) %>%
-#   dplyr::summarise(n = n(), fraction = n/nrow(combined.aa.aln)) %>%
-#   dplyr::filter(matchesFrog)
-
-
-
-# msa.aa.aln.tidy.conservation$smoothed9 <- slider::slide_dbl(msa.aa.aln.tidy.conservation$fraction, mean, .before=4, .after = 4)
-# msa.aa.aln.tidy.conservation$smoothed5 <- slider::slide_dbl(msa.aa.aln.tidy.conservation$fraction, mean, .before=2, .after = 2)
 
 plot.conservation.aa <- function(start, end){
   
@@ -1426,9 +1412,10 @@ save.double.width("figure/charge.window.9.png", charge.plot, height = 120)
 # Combine the charge plot with the aa tree
 
 outgroup.tree.mini <- outgroup.tree
-outgroup.tree.mini$tip.label <- rep("", 62)
+# Replace the tip labels with empty string so no labels are plotted
+outgroup.tree.mini$tip.label <- rep("", length(outgroup.tree.mini$tip.label))
 charge.tree <- ggtree(outgroup.tree.mini, aes(color=group)) + 
-  geom_tiplab(align=TRUE, linetype='dashed', linesize=.3) + 
+  geom_tiplab(align=TRUE, linetype='dashed', linesize=.3) + # use tiplab to get lines
   coord_cartesian(ylim = c(1, n.taxa+8)) +
   theme(legend.position = "none",
         plot.margin = margin(r=0))+
@@ -1476,8 +1463,8 @@ zfy.nt.aln.tree <- drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2")
 zfy.nt.aln.tree <- drop.tip(zfy.nt.aln.tree, "African_Grass_Rat_ZFY2-like_1") 
 
 # Root the trees on platypus
-zfx.nt.aln.tree <- ape::root(zfx.nt.aln.tree, outgroup = c("Platypus_ZFX"), resolve.root = TRUE)
-zfy.nt.aln.tree <- ape::root(zfy.nt.aln.tree, outgroup = c("Platypus_ZFX"), resolve.root = TRUE)
+zfx.nt.aln.tree <- phytools::reroot(zfx.nt.aln.tree, which(zfx.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+zfy.nt.aln.tree <- phytools::reroot(zfy.nt.aln.tree, which(zfy.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
 
 # Remove gene names so tip labels are comparable
 zfx.nt.aln.tree$tip.label <- str_replace(zfx.nt.aln.tree$tip.label, "_Z[F|f][X|x].*", "")
