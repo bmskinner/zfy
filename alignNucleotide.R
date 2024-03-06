@@ -1,28 +1,40 @@
 # Analysis pipeline for ZFX/ZFY evolutionary analysis
+
+# The following binaries must be supplied in ./bin:
+# macse_v2.07.jar
+# muscle5.1.win64.exe / muscle5.1.linux_intelx64
+# nlstradamul.pl
+# pwm_predict/pwm_predict
+
+# Other binaries are expected on the PATH:
+# PAML
+# IQ-TREE
+# GENECONV
+
 RUN_PAML = as.logical(commandArgs(trailingOnly = T)[1])
 
 cat("Run PAML is", RUN_PAML, "\n")
 #### Imports #####
 
 install.cran <- function(package){
-  if(!require(package, character.only = TRUE)){
+  if(!require(package, character.only = TRUE, quietly = TRUE)){
     install.packages(package, repos = "https://cran.ma.imperial.ac.uk")
-    library(package, character.only = TRUE)
+    library(package, character.only = TRUE, quietly = TRUE)
   }
 }
 
 install.bioconductor <- function(package){
-  if(!require(package, character.only = TRUE)){
+  if(!require(package, character.only = TRUE, quietly = TRUE)){
     BiocManager::install(package, update = FALSE)
-    library(package, character.only = TRUE)
+    library(package, character.only = TRUE, quietly = TRUE)
   }
 }
 
 install.github <- function(package){
   pkg.name <- gsub("^.*\\/", "", package)
-  if(!require(pkg.name, character.only = TRUE)){
+  if(!require(pkg.name, character.only = TRUE, quietly = TRUE)){
     remotes::install_github(package)
-    library(pkg.name, character.only = TRUE)
+    library(pkg.name, character.only = TRUE, quietly = TRUE)
   }
 }
 
@@ -322,9 +334,19 @@ mouse.exons <- find.exons(msa.nt.aln)
 #### Run extended outgroup AA alignment ####
 
 # Use muscle to align the aa files and save out for iqtree
-combined.aa.aln <- ape::muscle5(combined.aa.raw, mc.cores = 6)
 combined.aa.aln.file <- "aln/outgroup/combined.aa.aln"
-ape::write.dna(combined.aa.aln, format = "fasta", file = combined.aa.aln.file, nbcol = -1, colsep = "")
+
+# Cluster has muscle 3.8.31, desktop has muscle 5
+if(installr::is.windows()){
+  system2("bin/muscle5.1.win64.exe", paste("-align", combined.aa.file,
+                                            "-output", combined.aa.aln.file))
+
+}else {
+  system2("bin/muscle5.1.linux_intel64", paste("-align", combined.aa.file,
+                                            "-output", combined.aa.aln.file))
+}
+
+combined.aa.aln <- ape::read.FASTA(combined.aa.aln.file)
 
 #### Plot extended outgroup AA tree ####
 
@@ -338,8 +360,8 @@ system2("iqtree", paste("-s ", "aln/outgroup/combined.aa.aln",
 
 outgroup.tree <- ape::read.tree(paste0("aln/outgroup/combined.aa.aln.treefile"))
 
-# Root the tree on Mouse_Zfp711 and resave
-outgroup.tree <- ape::root(outgroup.tree, outgroup = c("Mouse_Zfp711"), resolve.root = TRUE)
+# Root the tree on Xenopus nodes and resave
+outgroup.tree <- ape::root(outgroup.tree, outgroup = c("Frog_ZFX.S","Frog_ZFX.L"), resolve.root = TRUE)
 ape::write.tree(outgroup.tree, file = paste0("aln/outgroup/combined.aa.aln.rooted.treefile"))
 
 group_info <- split(combined.metadata$common.name, combined.metadata$group)
