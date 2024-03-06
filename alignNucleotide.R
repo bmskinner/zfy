@@ -1,30 +1,71 @@
 # Analysis pipeline for ZFX/ZFY evolutionary analysis
+RUN_PAML = as.logical(commandArgs(trailingOnly = T)[1])
 
+cat("Run PAML is", RUN_PAML, "\n")
 #### Imports #####
-library(tidyverse)
-library(ape) # for some plotting
-library(msa) # for pretty plotting
-library(filesstrings)
-library(ggmsa) # alternate pretty plots
-library(ggtree)
-library(seqinr)
-library(phangorn)
-library(installr)
-library(treeio)
-library(httr)
-library(seqLogo)
-library(seqvisr) # remotes::install_github("vragh/seqvisr")
-library(metagMisc) # remotes::install_github("vmikk/metagMisc")
-library(assertthat)
-library(aplot)
-library(treespace)
-library(paletteer)
-library(ggnewscale) 
-library(slider)
+
+install.cran <- function(package){
+  if(!require(package, character.only = TRUE)){
+    install.packages(package, repos = "https://cran.ma.imperial.ac.uk")
+    library(package, character.only = TRUE)
+  }
+}
+
+install.bioconductor <- function(package){
+  if(!require(package, character.only = TRUE)){
+    BiocManager::install(package, update = FALSE)
+    library(package, character.only = TRUE)
+  }
+}
+
+install.github <- function(package){
+  pkg.name <- gsub("^.*\\/", "", package)
+  if(!require(pkg.name, character.only = TRUE)){
+    remotes::install_github(package)
+    library(pkg.name, character.only = TRUE)
+  }
+}
+
+cran.packages <- c("tidyverse", "ape", "filesstrings", "seqinr", "phangorn",
+                   "installr","treespace", "httr", "seqLogo", "assertthat", "aplot",
+                   "paletteer", "ggnewscale", "slider", "BiocManager",
+                   "remotes")
+
+sapply(cran.packages, install.cran)
+
+github.packages <- c('YuLab-SMU/ggtree', # since ggtree cannot install in Bioconductor 3.15 on cluster
+                     "vragh/seqvisr", "vmikk/metagMisc")
+sapply(github.packages, install.github)
+
+bioconductor.packages <- c("msa", "ggmsa", "treeio")
+sapply(bioconductor.packages, install.bioconductor)
+
+# library(tidyverse) # CRAN
+# library(ape) # CRAN
+# library(msa) #  BiocManager::install("msa")
+# library(filesstrings)
+# library(ggmsa) # BiocManager
+# library(ggtree) # BiocManager
+# library(seqinr)
+# library(phangorn)
+# library(installr)
+# library(treeio) # BiocManager
+# library(httr)
+# library(seqLogo)
+# library(seqvisr) # remotes::install_github("vragh/seqvisr")
+# library(metagMisc) # remotes::install_github("vmikk/metagMisc")
+# library(assertthat)
+# library(aplot)
+# library(treespace)
+# library(paletteer)
+# library(ggnewscale) 
+# library(slider)
 
 source("find9aaTADs.R")
 source("findZF.R")
 source("calcCharge.R")
+
+cat("Packages loaded\n")
 
 #### Common functions ####
 
@@ -153,15 +194,20 @@ filesstrings::dir.remove("aln")
 filesstrings::dir.remove("figure")
 
 # Create missing dirs if needed
-if(!dir.exists("aln")) dir.create("aln")
-if(!dir.exists("aln/outgroup")) dir.create("aln/outgroup")
-if(!dir.exists("aln/exons")) dir.create("aln/exons")
-if(!dir.exists("aln/zfx_only")) dir.create("aln/zfx_only")
-if(!dir.exists("aln/zfy_only")) dir.create("aln/zfy_only")
-if(!dir.exists("bin")) dir.create("bin")
-if(!dir.exists("figure")) dir.create("figure")
-if(!dir.exists("paml/site-specific")) dir.create("paml/site-specific")
-if(!dir.exists("paml/site-branch")) dir.create("paml/site-branch")
+filesstrings::create_dir("aln")
+filesstrings::create_dir("aln/outgroup")
+filesstrings::create_dir("aln/exons")
+filesstrings::create_dir("aln/zfx_only")
+filesstrings::create_dir("aln/zfy_only")
+filesstrings::create_dir("bin")
+filesstrings::create_dir("figure")
+filesstrings::create_dir("paml")
+filesstrings::create_dir("paml/site-specific")
+filesstrings::create_dir("paml/branch-site")
+filesstrings::create_dir("pwm")
+filesstrings::create_dir("nls")
+
+writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
 
 #### Read mammal NT FA files #####
 
@@ -627,8 +673,8 @@ write.FASTA(combined.aa.raw, file = "fasta/combined.aa.fas")
 if(!installr::is.windows()){
   # ensure relatively lax threshold for broad detection
   # look for bipartite NLS
-  # perl nls/nlstradamus.pl -i fasta/combined.aa.fas -t 0.5 -m 2 > nls/combined.aa.nls.out
-  system2("perl", paste(" nls/nlstradamus.pl -i fasta/combined.aa.fas -t 0.5 > nls/combined.aa.nls.out"))
+  # perl bin/nlstradamus.pl -i fasta/combined.aa.fas -t 0.5 -m 2 > nls/combined.aa.nls.out
+  system2("perl", paste(" bin/nlstradamus.pl -i fasta/combined.aa.fas -t 0.5 > nls/combined.aa.nls.out"))
   
   # Remove the non-table output
   system2("cat", "nls/combined.aa.nls.out | grep -v 'Finished' | grep -v '=' | grep -v 'Analyzed' | grep -v 'sites' | grep -v 'Input' | grep -v 'Threshold' > nls/combined.aa.nls.filt.out")
@@ -728,10 +774,17 @@ save.double.width("figure/aa.msa.2.png", aa.msa.plot.2)
 # PWM prediction http://zf.princeton.edu/logoMain.php
 # predict the ZF targets in each sequence via pwm_predict (http://zf.princeton.edu/download2.php)
 
-# pwm_predict zfy.aa.aln
+if(!installr::is.windows()){
+  # pwm_predict zfy.aa.aln
+  system2("bin/pwm_predict/pwm_predict", "fasta/combined.aa.fas")
+  system2("mkdir", "-p pwm")
+  system2("mv", "fasta/combined.aa.pwm", "pwm/combined.aa.pwm")
+  # Remove header and split the output PWMs to separate files
+  system2("cat", "cat fasta/combined.aa.pwm | grep -v ';' | split -l 5 - zf_")
+}
 
-# Remove header and split the output PWMs to separate files
-# cat zfxy.aa.pwm | grep -v ';' | split -l 5 - zf_
+
+
 
 # Read each file, get headers and PWMs
 pwm.files <- list.files("pwm", pattern = "zf_", full.names = T)
@@ -843,7 +896,7 @@ paml.site.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\n",
                          "omega     = 0.5 * initial omega value\n")
 write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
 
-if(!installr::is.windows()){
+if(RUN_PAML & !installr::is.windows()){
   # Run codeml
   system2("codeml", "paml/site-specific/zfy.site-specific.paml.ctl",
           stdout = "paml/site-specific/zfy.site-specific.paml.log", 
@@ -851,60 +904,62 @@ if(!installr::is.windows()){
   
   # Extract lnl
   system2("cat", "zfy.out.txt | grep --before-context=5 'lnL' | grep -e 'lnL' -e 'Model'| paste -d ' '  - - > zfy.out.lnl.txt")
+  
+  # Process the output file to find log likelihood values to calculate LRT
+  # (likelihood ratio test): twice the difference in log-likelihood ℓ between the
+  # null and alternative hypotheses, 2Δℓ = 2(ℓ1 − ℓ0), where ℓ0 is the
+  # log-likelihood score for the null model, whereas ℓ1 is the log-likelihood
+  # under the alternative model.
+  
+  # ℓ is in the output file at lines starting lnL
+  # Grep the lnL and previous 5 lines (which has model name).
+  # Get just the lnL and model lines from these 5
+  # Paste alternate lines together with a space
+  # cat zfy.out.txt | grep --before-context=5 'lnL' | grep -e 'lnL' -e 'Model'| paste -d " "  - -
+  # Note that there are other lines with 'model' in the file so we still need the first grep
+  
+  # e.g. values from testing
+  # Model 0: one-ratio lnL(ntime: 95  np:160): -20797.229748      +0.000000
+  # Model 1: NearlyNeutral (2 categories) lnL(ntime: 95  np:161): -20712.485759      +0.000000
+  # Model 2: PositiveSelection (3 categories) lnL(ntime: 95  np:163): -20712.488036      +0.000000
+  # Model 7: beta (10 categories) lnL(ntime: 95  np:161): -20614.279484      +0.000000
+  # Model 8: Model 8: beta&w>1 (11 categories) lnL(ntime: 95  np:163): -20614.287541      +0.000000
+  
+  # Calculate the liklihood ratio test for two models
+  # lnl - the log likelihoods
+  # np - the number of free parameters
+  # This calculates the LRT and tests it against the chi-distribution where the
+  # degrees of freedom are the difference in the number of free parameters between
+  # the models. 
+  calc.LRT <- function(lnl0, lnl1, np0, np1){
+    lrt <- 2 * (lnl1-lnl0)
+    df <- abs(np1-np0)
+    crit.value =  qchisq(p=0.05, df=df, lower.tail = FALSE)
+    list("crit.value" = crit.value,
+         "p.value" = pchisq(lrt, df, lower.tail = FALSE),
+         "lrt" = lrt)
+  }
+  
+  # M0 vs. M1a (one-ratio vs. nearly neutral)
+  
+  # This is a test for variability of selective pressure among amino acid sites
+  # rather than a test of positive selection. M1a fits the data much better than
+  # M0,indicating that the selective pressure reflected by ω
+  # varies hugely among sites.
+  m0m1a <- calc.LRT(-20797.229748, -20712.485759, 160, 161)
+  
+  # Compared with M1a, M2a adds a class of sites under positive selection with ω2
+  # > 1 (in proportion p2). This does not improve the fit of the model
+  # significantly
+  m1am2a <- calc.LRT(-20712.485759, -20712.488036, 161, 163) # (nearly neutral vs. positive selection)
+  
+  # Additional test for positive selection by comparing M7 (beta, null model)
+  # against M8 (beta&ω, alternative model).
+  m7m8 <- calc.LRT(-20614.279484, -20614.287541, 161, 163) # (positive selection vs null model)
+  # No evidence for sites under positive selection 
 }
 
-# Process the output file to find log likelihood values to calculate LRT
-# (likelihood ratio test): twice the difference in log-likelihood ℓ between the
-# null and alternative hypotheses, 2Δℓ = 2(ℓ1 − ℓ0), where ℓ0 is the
-# log-likelihood score for the null model, whereas ℓ1 is the log-likelihood
-# under the alternative model.
 
-# ℓ is in the output file at lines starting lnL
-# Grep the lnL and previous 5 lines (which has model name).
-# Get just the lnL and model lines from these 5
-# Paste alternate lines together with a space
-# cat zfy.out.txt | grep --before-context=5 'lnL' | grep -e 'lnL' -e 'Model'| paste -d " "  - -
-# Note that there are other lines with 'model' in the file so we still need the first grep
-
-# e.g. values from testing
-# Model 0: one-ratio lnL(ntime: 95  np:160): -20797.229748      +0.000000
-# Model 1: NearlyNeutral (2 categories) lnL(ntime: 95  np:161): -20712.485759      +0.000000
-# Model 2: PositiveSelection (3 categories) lnL(ntime: 95  np:163): -20712.488036      +0.000000
-# Model 7: beta (10 categories) lnL(ntime: 95  np:161): -20614.279484      +0.000000
-# Model 8: Model 8: beta&w>1 (11 categories) lnL(ntime: 95  np:163): -20614.287541      +0.000000
-
-# Calculate the liklihood ratio test for two models
-# lnl - the log likelihoods
-# np - the number of free parameters
-# This calculates the LRT and tests it against the chi-distribution where the
-# degrees of freedom are the difference in the number of free parameters between
-# the models. 
-calc.LRT <- function(lnl0, lnl1, np0, np1){
-  lrt <- 2 * (lnl1-lnl0)
-  df <- abs(np1-np0)
-  crit.value =  qchisq(p=0.05, df=df, lower.tail = FALSE)
-  list("crit.value" = crit.value,
-       "p.value" = pchisq(lrt, df, lower.tail = FALSE),
-       "lrt" = lrt)
-}
-
-# M0 vs. M1a (one-ratio vs. nearly neutral)
-
-# This is a test for variability of selective pressure among amino acid sites
-# rather than a test of positive selection. M1a fits the data much better than
-# M0,indicating that the selective pressure reflected by ω
-# varies hugely among sites.
-m0m1a <- calc.LRT(-20797.229748, -20712.485759, 160, 161)
-
-# Compared with M1a, M2a adds a class of sites under positive selection with ω2
-# > 1 (in proportion p2). This does not improve the fit of the model
-# significantly
-m1am2a <- calc.LRT(-20712.485759, -20712.488036, 161, 163) # (nearly neutral vs. positive selection)
-
-# Additional test for positive selection by comparing M7 (beta, null model)
-# against M8 (beta&ω, alternative model).
-m7m8 <- calc.LRT(-20614.279484, -20614.287541, 161, 163) # (positive selection vs null model)
-# No evidence for sites under positive selection 
 
 #### Run codeml to look for selection specifically in rodents after beaver ####
 
@@ -919,18 +974,18 @@ labelled.tree <- nt.aln.tree
 labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
 labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
 labelled.tree <- treeio::label_branch_paml(labelled.tree, rodent.node, "#1")
-ape::write.tree(labelled.tree, file = "paml/site-branch/zfxy.nt.aln.paml.treefile")
+ape::write.tree(labelled.tree, file = "paml/branch-site/zfxy.nt.aln.paml.treefile")
 
 # Then remove the branch lengths, separate the labels from taxon names and resave
-newick.test <- read_file("paml/site-branch/zfxy.nt.aln.paml.treefile")
+newick.test <- read_file("paml/branch-site/zfxy.nt.aln.paml.treefile")
 newick.test <- gsub(":1", "", newick.test) # branch lengths we set to 1
 newick.test <- gsub("_#1", " #1", newick.test) # fg labels
-write_file(newick.test, "paml/site-branch/zfxy.nt.aln.paml.fg.treefile")
+write_file(newick.test, "paml/branch-site/zfxy.nt.aln.paml.fg.treefile")
 
 # This control file tests site models With heterogeneous ω Across Sites
 paml.site.branch.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\n",
-                                "treefile  = paml/site-branch/zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
-                                "outfile   = paml/site-branch/site.branch.paml.out.txt\n",
+                                "treefile  = paml/branch-site/zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
+                                "outfile   = paml/branch-site/site.branch.paml.out.txt\n",
                                 "\n",
                                 "noisy     = 3 * on screen logging\n",
                                 "verbose   = 1 * detailed output in file\n",
@@ -947,14 +1002,17 @@ paml.site.branch.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\
                                 "clock     = 0 * assume no clock\n",
                                 "fix_omega = 0 * enables option to estimate omega\n",
                                 "omega     = 0.5 * initial omega value\n")
-write_file(paml.site.branch.file, "paml/site-branch/zfy.site-branch.paml.ctl")
+write_file(paml.site.branch.file, "paml/branch-site/zfy.site-branch.paml.ctl")
 
 
-if(!installr::is.windows()){
+paml.branch.site.output <- "paml/branch-site/zfy.site-branch.positive.sites.txt"
+if(RUN_PAML & !installr::is.windows() & !file.exists(paml.branch.site.output)){
   # Run codeml
-  system2("codeml", "paml/site-branch/zfy.site-branch.paml.ctl",
-          stdout = "paml/site-branch/zfy.site.branch.paml.log", 
-          stderr = "paml/site-branch/zfy.site.branch.paml.log")
+  system2("codeml", "paml/branch-site/zfy.branch-site.paml.ctl",
+          stdout = "paml/branch-site/zfy.branch-site.paml.log", 
+          stderr = "paml/branch-site/zfy.branch-site.paml.log")
+  
+  system2("cat", 'paml/branch-site/branch-site.paml.out.txt | grep "^ \{2,5\} [0-9]\{1,3\} [A-Z\-]" > paml/branch-site/zfy.branch-site.positive.sites.txt' )
   
   # Bayes Empirical Bayes (BEB) analysis (Yang, Wong & Nielsen 2005. Mol. Biol. Evol. 22:1107-1118)
   # Extract sites under positive selection
@@ -964,24 +1022,25 @@ if(!installr::is.windows()){
 }
 #### Plot codeml branch-site model output  ####
 
-# Read the positive sites file 
-positive.sites <- read_table("paml/site-branch/zfy.site-branch.positive.sites.txt", col_names = c("site", "aa", "p"))
-positive.sites$p <- as.numeric(gsub("\\*+", "", positive.sites$p))
-
-positive.sites.y <- max(locations.zf$i) + 1.5
-
-positive.sites.plot <- ggplot()+
-  geom_rect(data = locations.zf,     aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-  geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
-  geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
-  geom_rect(data = positive.sites,   aes(xmin=site-0.5, xmax=site+0.5, ymin=positive.sites.y, ymax=positive.sites.y+2, fill=p))+
+if(file.exists(paml.branch.site.output)){
+  # Read the positive sites file 
+  positive.sites <- read_table(paml.branch.site.output, col_names = c("site", "aa", "p"))
+  positive.sites$p <- as.numeric(gsub("\\*+", "", positive.sites$p))
   
-  # geom_point(data=positive.sites,    aes(x = site, y = positive.sites.y, fill) , size=0.25)+
-  labs(x = "Site", fill = "p(ω>1)")+
-  scale_fill_viridis_c()+
-  theme_bw()
-save.double.width("figure/positive.sites.png", positive.sites.plot, height = 85)
-
+  positive.sites.y <- max(locations.zf$i) + 1.5
+  
+  positive.sites.plot <- ggplot()+
+    geom_rect(data = locations.zf,     aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+    geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
+    geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
+    geom_rect(data = positive.sites,   aes(xmin=site-0.5, xmax=site+0.5, ymin=positive.sites.y, ymax=positive.sites.y+2, fill=p))+
+    
+    # geom_point(data=positive.sites,    aes(x = site, y = positive.sites.y, fill) , size=0.25)+
+    labs(x = "Site", fill = "p(ω>1)")+
+    scale_fill_viridis_c()+
+    theme_bw()
+  save.double.width("figure/positive.sites.png", positive.sites.plot, height = 85)
+}
 #### Ancestral sequence reconstruction #####
 
 # Read the ancestral reconstruction
@@ -1315,7 +1374,7 @@ n.taxa <- length(outgroup.taxa.name.order) +1.5
 charge.plot <- ggplot()+
   # Draw the charges per sequence
   geom_tile(data=msa.aa.aln.tidy.charge,  aes(x = position_gapped, y = sequence, fill=charge_smoothed))+
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = 1, limits = c(-1, 1))+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(-1, 1))+
   labs(fill="Charge (smoothed 9)")+
   
   # Draw the conservation with Xenopus
