@@ -362,7 +362,7 @@ system2("iqtree", paste("-s ", "aln/outgroup/combined.aa.aln",
 outgroup.tree <- ape::read.tree(paste0("aln/outgroup/combined.aa.aln.treefile"))
 
 # Root the tree in the edge between Xenopus nodes and chicken
-xenopus.node <- ape::getMRCA(outgroup.tree, c("Frog_ZFX.S","Frog_ZFX.L"))
+xenopus.node <- ape::getMRCA(outgroup.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
 outgroup.tree <- phytools::reroot(outgroup.tree, xenopus.node, position = 0.1)
 ape::write.tree(outgroup.tree, file = paste0("aln/outgroup/combined.aa.aln.rooted.treefile"))
 
@@ -1230,7 +1230,7 @@ calculate.conservation <-function(aa.aln, outgroup.name){
 combined.aa.aln <- readAAMultipleAlignment(combined.aa.aln.file, format = "fasta")
 
 # Use Xenopus ZFX.S as the comparison group
-msa.aa.aln.tidy.frog.conservation <- calculate.conservation(combined.aa.aln,"Frog_ZFX.S" )
+msa.aa.aln.tidy.frog.conservation <- calculate.conservation(combined.aa.aln,"Xenopus_ZFX.S" )
 msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(combined.aa.aln,"Chicken_ZFX" )
 msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(combined.aa.aln,"Opossum_ZFX" )
 
