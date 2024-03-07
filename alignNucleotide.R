@@ -90,7 +90,8 @@ save.double.width <- function(filename, plot, height=170) ggsave(filename, plot,
 # site.no.gap - the integer site in an ungapped sequence to convert
 # gapped.seq - the sequence with gaps from an alignment
 convert.to.gapped.coordinate <- function(site.no.gap, gapped.seq){
-  
+
+  if(is.na(site.no.gap)) return(NA)
   gapped.seq.char <- as.character(gapped.seq)
   # find gaps and stop codons
   gaps <- str_locate_all(gapped.seq.char, "-|\\*")[[1]][,1]
@@ -103,7 +104,8 @@ convert.to.gapped.coordinate <- function(site.no.gap, gapped.seq){
 
 # Exon by exon coordinates of the alignment will be needed for clear
 # testing of selection. Match these in the final alignment via mouse Zfy1
-# biostrings.alignment - an MSA from Biostrings::readDNAMultipleAlignment
+# biostrings.nt.alignment - an MSA from Biostrings::readDNAMultipleAlignment
+# biostrings.aa.alignment - an MSA from Biostrings::readAAMultipleAlignment
 find.exons <- function(biostrings.nt.alignment, biostrings.aa.alignment){
   
   mouse.zfy1.nt <- as.character(biostrings.nt.alignment@unmasked$Mouse_Zfy1)
@@ -112,27 +114,27 @@ find.exons <- function(biostrings.nt.alignment, biostrings.aa.alignment){
   mouse.zfy1.aa <- as.character(biostrings.aa.alignment@unmasked$Mouse_Zfy1)
   mouse.zfy1.aa.ungapped <- str_remove_all(mouse.zfy1.aa, "-|\\*")
   
-  mouse.exons <- data.frame("exon" = c("1", "2", "3",  "4", "5", "6",  "7"),
+  mouse.exons <- data.frame("exon"     = c("1", "2", "3",  "4", "5", "6",  "7"),
                             "start_nt" = c("ATGGATGAA", "GAGCTGATGCA", "TGGATGAACC", 
                                            "GAGAAACTAT", "AAGTAATTGT", "ATAATAATTCT", "CAATATTTGTT"),
-                            "end_nt" = c("TGGAATAG", "ATGATGTCTT", "GGATGAATTAG", 
-                                         "GAAGAAGATACTG", "GACAGCAGCTTATG", "CAGTACCAGTCAG", "CCTGCCCTAA"),
+                            "end_nt"   = c("TGGAATAG", "ATGATGTCTT", "GGATGAATTAG", 
+                                         "GAAGAAGATACTG", "GACAGCAGCTTATG", "CAGTACCAGTCAG", "CCTGCCC"),
                             "start_aa" = c("MDEDEIEL", "GADAVHMD", "LDEPSKADL", "LGETIHAVE",
                                            "EVIVGDED", "DNNSDEIE", "AIFVAPDGQ"),
-                            "end_aa" = c("KSFFDGIG", "INCEDYLMMSL","ADSEVDEL", "SQKEEEDTE",
+                            "end_aa"   = c("KSFFDGIG", "INCEDYLMMSL","ADSEVDEL", "SQKEEEDTE",
                                          "PIAWTAAYD", "PESKQYQSA", "RHHKVGLP"))
   
   start.nt <- sapply(mouse.exons$start_nt, str_locate, string=mouse.zfy1.nt.ungapped)[1,]
-  end.nt <- sapply(mouse.exons$end_nt, str_locate, string=mouse.zfy1.nt.ungapped)[2,]
+  end.nt   <- sapply(mouse.exons$end_nt,   str_locate, string=mouse.zfy1.nt.ungapped)[2,]
   
   start.aa <- sapply(mouse.exons$start_aa, str_locate, string=mouse.zfy1.aa.ungapped)[1,]
-  end.aa <- sapply(mouse.exons$end_aa, str_locate, string=mouse.zfy1.aa.ungapped)[2,]
+  end.aa   <- sapply(mouse.exons$end_aa,   str_locate, string=mouse.zfy1.aa.ungapped)[2,]
   
-  data.frame("exon" = mouse.exons$exon,
-             "start" = sapply(start.nt, convert.to.gapped.coordinate, mouse.zfy1.nt),
-             "end" = sapply(end.nt, convert.to.gapped.coordinate, mouse.zfy1.nt),
+  data.frame("exon"     = mouse.exons$exon,
+             "start"    = sapply(start.nt, convert.to.gapped.coordinate, mouse.zfy1.nt),
+             "end"      = sapply(end.nt,   convert.to.gapped.coordinate, mouse.zfy1.nt),
              "start_aa" = sapply(start.aa, convert.to.gapped.coordinate, mouse.zfy1.aa),
-             "end_aa" = sapply(end.aa, convert.to.gapped.coordinate, mouse.zfy1.aa))
+             "end_aa"   = sapply(end.aa,   convert.to.gapped.coordinate, mouse.zfy1.aa))
 }
 
 plot.tree <- function(tree.data, ...){
@@ -277,6 +279,7 @@ writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
 # Read FASTA file and extract metadata
 read.fasta <- function(f){
   fa.data <- ape::read.FASTA(f)
+
   original.name <- names(fa.data)
   common.names <-  str_extract(original.name, "\\[.*\\]") %>%
     str_replace_all("\\[", "")  %>%
@@ -377,7 +380,6 @@ ape.nt.aln <- ape::read.FASTA(nt.aln.file)
 
 # Calculate conservation at each site
 msa.nt.aln <- Biostrings::readDNAMultipleAlignment(nt.aln.file, format="fasta")
-
 
 #### Run extended outgroup AA alignment ####
 

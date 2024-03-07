@@ -11,3 +11,5 @@ bin/*
 figure/*
 paml/*
 pwm/*
+nls/*
+rdp5/*
