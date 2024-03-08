@@ -1556,8 +1556,8 @@ zfx.nt.aln.tree <- ape::read.tree("aln/zfx_only/zfx.aln.treefile")
 zfy.nt.aln.tree <- ape::read.tree("aln/zfy_only/zfy.aln.treefile")
 
 # Drop the second ZFYs in mouse and rat
-zfy.nt.aln.tree <- drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2") 
-zfy.nt.aln.tree <- drop.tip(zfy.nt.aln.tree, "African_Grass_Rat_ZFY2-like_1") 
+zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2") 
+zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "African_Grass_Rat_ZFY2-like_1") 
 
 # Root the trees on platypus
 zfx.nt.aln.tree <- phytools::reroot(zfx.nt.aln.tree, which(zfx.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
@@ -1565,10 +1565,10 @@ zfy.nt.aln.tree <- phytools::reroot(zfy.nt.aln.tree, which(zfy.nt.aln.tree$tip.l
 
 # Remove gene names so tip labels are comparable
 zfx.nt.aln.tree$tip.label <- str_replace(zfx.nt.aln.tree$tip.label, "_Z[F|f][X|x].*", "")
-zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "_Z[F|f][X|x|Y|y].*", "")
+zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", "")
 
 # Export comparison of the trees
-png(filename = "figure/zfx.zfy.nt.aln.tree.plot.png")
+png(filename = "figure/zfx.zfy.nt.ancestral.treediff.png")
 treespace::plotTreeDiff(zfx.nt.aln.tree, zfy.nt.aln.tree, treesFacing=TRUE)
 dev.off()
 
@@ -1576,7 +1576,7 @@ dev.off()
 zfx.nt.aln.tree.plot <- plot.tree(zfx.nt.aln.tree)
 zfy.nt.aln.tree.plot <- plot.tree(zfy.nt.aln.tree)
 zfx.zfy.aln.tree.plot <- zfx.nt.aln.tree.plot + zfy.nt.aln.tree.plot + patchwork::plot_annotation(tag_levels = list(c("ZFX", "ZFY")))
-save.double.width("figure/zfx.zfy.aln.tree.png", zfx.zfy.aln.tree.plot)
+save.double.width("figure/zfx.zfy.ancestral.comparison.tree.png", zfx.zfy.aln.tree.plot)
 
 # Find the matching nodes
 zfy.zfx.common.nodes <- ape::comparePhylo(zfx.nt.aln.tree, zfy.nt.aln.tree)$NODES %>%
