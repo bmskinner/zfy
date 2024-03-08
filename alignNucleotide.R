@@ -11,7 +11,14 @@
 # IQ-TREE
 # GENECONV
 
+# HyPhy is a python package installed into a conda environment:
+# conda create -n hyphy # create conda environment
+# conda activate hyphy # enter the environment
+# conda install -c bioconda hyphy # install hyphy from bioconda
+
 RUN_PAML = as.logical(commandArgs(trailingOnly = T)[1])
+
+if(is.na(RUN_PAML)) RUN_PAML <- FALSE
 
 cat("Run PAML is", RUN_PAML, "\n")
 #### Imports #####
@@ -41,7 +48,7 @@ install.github <- function(package){
 cran.packages <- c("tidyverse", "ape", "filesstrings", "seqinr", "phangorn",
                    "installr","treespace", "httr", "seqLogo", "assertthat", "aplot",
                    "paletteer", "ggnewscale", "slider", "BiocManager",
-                   "remotes")
+                   "remotes", "patchwork")
 
 sapply(cran.packages, install.cran)
 
@@ -263,6 +270,7 @@ filesstrings::create_dir("aln/zfx_only")
 filesstrings::create_dir("aln/zfy_only")
 filesstrings::create_dir("bin")
 filesstrings::create_dir("figure")
+filesstrings::create_dir("hyphy")
 filesstrings::create_dir("nls")
 filesstrings::create_dir("paml")
 filesstrings::create_dir("paml/site-specific")
@@ -655,29 +663,28 @@ create.pairwise.kaks.data <- function(seqinr.aln){
 kaks.exon.1.6 <- create.pairwise.kaks.data(seqin.aln.exon.1.6)
 kaks.exon.7 <- create.pairwise.kaks.data(seqin.aln.exon.7)
 
-
 plot.kaks <- function(kaks.pairwise){
   ggplot(kaks.pairwise, aes(x = col, y = row))+
     geom_tile(aes(fill=value))+
     scale_fill_viridis_c(limits = c(0, 1), direction = -1)+
     labs(fill="dNdS")+
     theme_bw()+
-    theme(axis.text.x = element_text(size = 5, angle = 45, hjust = 1),
-          axis.text.y = element_text(size = 5),
+    theme(axis.text.x = element_text(size = 4, angle = 90, vjust = 0.5, hjust=1),
+          axis.text.y = element_text(size = 4),
           axis.title = element_blank(),
           legend.position = c(0.8, 0.3),
           legend.background = element_blank(),
           legend.title = element_text(size = 5),
           legend.text = element_text(size = 5))
 }
-exon.1.6.kaks.pairwise.plot <- plot.kaks(kaks.exon.1.6)
 
+exon.1.6.kaks.pairwise.plot <- plot.kaks(kaks.exon.1.6)
 exon.7.kaks.pairwise.plot <- plot.kaks(kaks.exon.7)
 
 exon.kaks.plot <- exon.1.6.kaks.pairwise.plot + exon.7.kaks.pairwise.plot +
-  patchwork::plot_annotation(tag_levels = c("A"))
+  patchwork::plot_annotation(tag_levels = c("A")) + plot_layout(axes="collect")
 
-save.double.width("figure/exon.1-6.7.dnds.png", exon.kaks.plot, height=100)
+save.double.width("figure/exon.1-6.7.dnds.png", exon.kaks.plot, height=110)
 
 #### Plot extended outgroup AA MSA ####
 
@@ -945,12 +952,16 @@ write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
 
 if(RUN_PAML & !installr::is.windows()){
   # Run codeml
-  system2("codeml", "paml/site-specific/zfy.site-specific.paml.ctl",
-          stdout = "paml/site-specific/zfy.site-specific.paml.log", 
-          stderr = "paml/site-specific/zfy.site-specific.paml.log")
+  old.wd <- getwd()
+  setwd("paml/site-specific")
+  system2("codeml", "zfy.site-specific.paml.ctl",
+          stdout = "zfy.site-specific.paml.log", 
+          stderr = "zfy.site-specific.paml.log")
   
   # Extract lnl
   system2("cat", "zfy.out.txt | grep --before-context=5 'lnL' | grep -e 'lnL' -e 'Model'| paste -d ' '  - - > zfy.out.lnl.txt")
+  
+  setwd(old.wd)
   
   # Process the output file to find log likelihood values to calculate LRT
   # (likelihood ratio test): twice the difference in log-likelihood ℓ between the
@@ -1054,12 +1065,17 @@ write_file(paml.site.branch.file, "paml/branch-site/zfy.site-branch.paml.ctl")
 
 paml.branch.site.output <- "paml/branch-site/zfy.site-branch.positive.sites.txt"
 if(RUN_PAML & !installr::is.windows() & !file.exists(paml.branch.site.output)){
-  # Run codeml
-  system2("codeml", "paml/branch-site/zfy.branch-site.paml.ctl",
-          stdout = "paml/branch-site/zfy.branch-site.paml.log", 
-          stderr = "paml/branch-site/zfy.branch-site.paml.log")
   
-  system2("cat", 'paml/branch-site/branch-site.paml.out.txt | grep "^ \\{2,5\\} [0-9]\\{1,3\\} [A-Z\\-]" > paml/branch-site/zfy.branch-site.positive.sites.txt' )
+  old.wd <- getwd()
+  setwd("paml/branch-site")
+  # Run codeml
+  system2("codeml", "zfy.branch-site.paml.ctl",
+          stdout = "zfy.branch-site.paml.log", 
+          stderr = "zfy.branch-site.paml.log")
+  
+  system2("cat", 'branch-site.paml.out.txt | grep "^ \\{2,5\\} [0-9]\\{1,3\\} [A-Z\\-]" > zfy.branch-site.positive.sites.txt' )
+  setwd(old.wd)
+  
   
   # Bayes Empirical Bayes (BEB) analysis (Yang, Wong & Nielsen 2005. Mol. Biol. Evol. 22:1107-1118)
   # Extract sites under positive selection
@@ -1067,6 +1083,31 @@ if(RUN_PAML & !installr::is.windows() & !file.exists(paml.branch.site.output)){
   
   #system2("cat", 'paml/site-branch/site.branch.paml.out.txt | grep "^ \{2,5\} [0-9]\{1,3\} [A-Z\-]" > paml/site-branch/zfy.site-branch.positive.sites.txt' )
 }
+
+#### Run HyPhy RELAX to test for relaxed selection ####
+
+# Newick tree tips and nodes need to be tagged with {Test} and {Reference}
+# Set all branches and nodes to reference
+hyphy.tree <- nt.aln.tree
+hyphy.tree$node.label <- rep("", length(hyphy.tree$node.label)) # remove all node names
+hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
+hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
+hyphy.tree <- treeio::label_branch_paml(hyphy.tree, rodent.node, "{Test}") # now rodents are test
+hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
+hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
+ape::write.tree(hyphy.tree, file = "hyphy/mammal.nt.aln.hyphy.treefile")
+
+# HyPhy should be installed in a conda environment
+# This script should be invoked within the conda environment
+if(!installr::is.windows()){
+  
+  # hyphy relax --alignment ../aln/zfxy.nt.aln --tree mammal.nt.aln.hyphy.treefile --reference "Reference" --test "Test" --output mammal.relax.json
+  system2("hyphy", " relax --alignment aln/zfxy.nt.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/mammal.relax.json")
+  
+  # Read the json file and parse results
+  # hyphy.data <- jsonlite::read_json("hyphy/mammal.relax.json")
+}
+
 #### Plot codeml branch-site model output  ####
 
 if(file.exists(paml.branch.site.output)){
@@ -1682,52 +1723,6 @@ if(installr::is.windows()){
   
 }
 
-
-#### Run RDP5 as alternate test for gene conversion? ####
-
-# see also RDP5 - covers more tests, more sensitive?
-# can we do it via command line?
-
-# this needs to be run as admin on windows
-# Run manually when needed.
-
-# if(installr::is.windows()){
-
-#   # Read the csv output
-#   rdp5.file <- "rdp5/zfxy.rdp5.csv"
-#   
-#   rdp5.data <- readr::read_csv(rdp5.file, skip = 15, skip_empty_rows = TRUE,
-#                         col_types = "nccccccccccccccccccccc",
-#                         col_names = c("Recombination_Event", "Number_in_file", "Start_aln", "End_aln",
-#                                       "Start_recomb", "End_recomb", "Start_Af_Grass_Rat", "End_Af_Grass_Rat",
-#                                       "Recombinant_seq", "Minor_parent", "Major_parent", "RDP", "GENCONV",
-#                                       "Bootscan", "Maxchi", "Chimaera", "SiSscan", "PhylPro", "LARD", "seq_3")) %>%
-#     dplyr::filter(!is.na(Recombination_Event)) %>%
-#     tidyr::fill(Number_in_file:seq_3, .direction = "down") %>%
-#     dplyr::mutate(Recombinant_seq = str_replace(Recombinant_seq, "\\^", ""),
-#                   Minor_parent = str_replace(Minor_parent, "\\^", ""),
-#                   Major_parent = str_replace(Major_parent, "\\^", ""),
-#       i = as.numeric(str_replace(Number_in_file, "~", "")),
-#                   start_nt = as.numeric(str_replace(Start_aln, "\\*", "")),
-#                   end_nt = as.numeric(str_replace(End_aln, "\\*", "")))
-#                   
-#   
-#   rdp5.plot <- ggplot()+
-#     geom_rect(data = locations.zf, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-#     geom_rect(data = locations.9aaTAD, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
-#     geom_rect(data = locations.NLS, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
-#     geom_segment(data = rdp5.data, aes(x=start_nt, y = i, xend = end_nt, yend = i), linewidth = 2)+
-#     # coord_cartesian(xlim = c(1, 2600))+
-#     # scale_fill_manual(values = c("grey", "white", "grey", "white", "grey", "white", "grey"))+
-#     scale_y_continuous(labels = rev(taxa.name.order), breaks = 1:length(taxa.name.order))+
-#     labs(x = "Position", y = "Bonferroni corrected p-value")+
-#     guides(fill = "none")+
-#     theme_bw()+
-#     theme(axis.title = element_blank())
-#   
-#   save.double.width("figure/zfxy_geneconv.png", geneconv.plot)
-# 
-# }
 
 
 
