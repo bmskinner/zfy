@@ -137,11 +137,26 @@ find.exons <- function(biostrings.nt.alignment, biostrings.aa.alignment){
   start.aa <- sapply(mouse.exons$start_aa, str_locate, string=mouse.zfy1.aa.ungapped)[1,]
   end.aa   <- sapply(mouse.exons$end_aa,   str_locate, string=mouse.zfy1.aa.ungapped)[2,]
   
+  # Note that the aa and nt positions are not from equivalent alignments!
+  # NT is from mammals, AA is from mammals + outgroups
   data.frame("exon"     = mouse.exons$exon,
              "start"    = sapply(start.nt, convert.to.gapped.coordinate, mouse.zfy1.nt),
              "end"      = sapply(end.nt,   convert.to.gapped.coordinate, mouse.zfy1.nt),
              "start_aa" = sapply(start.aa, convert.to.gapped.coordinate, mouse.zfy1.aa),
-             "end_aa"   = sapply(end.aa,   convert.to.gapped.coordinate, mouse.zfy1.aa))
+             "end_aa"   = sapply(end.aa,   convert.to.gapped.coordinate, mouse.zfy1.aa),
+             "is_even"  = sapply(mouse.exons$exon, function(i) as.numeric(i)%%2==0))%>%
+    dplyr::mutate(length_nt = end - start,
+                  offset_aa = length_nt%%3, # remainder after division by 3
+                  
+                   # TODO - need to fix the offsets to get ORF
+                  start_nt_codon_offset = case_when(exon==1 ~ start, # hardcode the codon offsets for subsetting
+                                                    exon>=2 ~ start-1),
+                  end_nt_codon_offset   = case_when(exon==1 ~ end-1,
+                                                    exon==2 ~ end,
+                                                    exon==3 ~ end-1,
+                                                    exon<7 ~ end-1,
+                                                    exon==7 ~ end),
+                  corrected_offset_length = (end_nt_codon_offset - start_nt_codon_offset)%%3) # check divisible by 3 
 }
 
 plot.tree <- function(tree.data, ...){
@@ -275,6 +290,9 @@ filesstrings::create_dir("nls")
 filesstrings::create_dir("paml")
 filesstrings::create_dir("paml/site-specific")
 filesstrings::create_dir("paml/branch-site")
+filesstrings::create_dir("paml/exon_1_3-6")
+filesstrings::create_dir("paml/exon_2")
+filesstrings::create_dir("paml/exon_7")
 filesstrings::create_dir("pwm")
 
 writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
@@ -726,7 +744,7 @@ locations.zf <- do.call(rbind, mapply(find.zf, aa=combined.aa.aln@unmasked,
 # Only report the highest confidence 9aaTADs
 locations.9aaTAD <- do.call(rbind, mapply(find.9aaTAD, aa=combined.aa.aln@unmasked, 
                                                sequence.name = names(combined.aa.aln@unmasked),
-                                               rc.threshold=100, SIMPLIFY = FALSE)) %>%
+                                               rc.threshold=0, SIMPLIFY = FALSE)) %>%
   dplyr::ungroup() %>%
   dplyr::mutate(sequence = factor(sequence, levels = rev(outgroup.taxa.name.order))) %>% # sort reverse to match tree
   dplyr::rowwise() %>%
@@ -820,7 +838,6 @@ find.common.overlaps <- function(locations.data){
 ranges.ZF.common <- find.common.overlaps(locations.zf)
 ranges.9aaTAD.common <- find.common.overlaps(locations.9aaTAD)
 ranges.9aaTAD.common$label <- LETTERS[1:nrow(ranges.9aaTAD.common)]
-
 ranges.NLS.common <- find.common.overlaps(locations.NLS)
 
 #### Identify binding motifs of the ZFs in each species ####
@@ -911,22 +928,19 @@ if(!file.exists( "time.tree.data.tsv")){
 # Two files need to be uploaded to the cluster for running codeml:
 # - alignment
 # - tree file (unrooted)
-# The treefile created earlier needs node names and branch lengths removing: 
-# cat aln/zfxy.nt.aln.treefile | sed -e 's/Node[0-9]\+\/[0-9\.]\+\/[0-9\.]\+:[0-9\.]\+//g'  > paml/site-specific/zfxy.nt.aln.paml.treefile
 
-# cat aln/zfxy.nt.aln.unrooted.treefile | sed -e 's/Node[0-9]\+\/[0-9\.]\+\/[0-9\.]\+:[0-9\.]\+//g' | sed -e 's/:[0-9\.]\+//g'  > paml/site-specific/zfxy.nt.aln.paml.treefile
-
-# sed -e 's/:[0-9\.]\+//g'
-
-labelled.tree <- nt.aln.tree
+# The treefile created earlier needs node names and branch lengths removing.
+# Set node names to the empty string, and set branch lengths to 1
+labelled.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
 labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
 labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
 ape::write.tree(labelled.tree, file = "paml/site-specific/zfxy.nt.aln.paml.treefile")
 
-# Then remove the branch lengths, separate the labels from taxon names and resave
-newick.test <- read_file("paml/site-specific/zfxy.nt.aln.paml.treefile")
-newick.test <- gsub(":1", "", newick.test)
-write_file(newick.test, "paml/site-specific/zfxy.nt.aln.paml.treefile")
+# We now read the tree as a raw string to remove the branch lengths entirely,
+# separate the labels from taxon names and resave
+labelled.tree <- readr::read_file("paml/site-specific/zfxy.nt.aln.paml.treefile")
+labelled.tree <- gsub(":1", "", labelled.tree)
+readr::write_file(labelled.tree, "paml/site-specific/zfxy.nt.aln.paml.treefile")
 
 # This control file tests site models With heterogeneous ω Across Sites
 paml.site.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\n",
@@ -1019,7 +1033,7 @@ if(RUN_PAML & !installr::is.windows()){
 
 
 
-#### Run codeml to look for selection specifically in rodents after beaver ####
+#### Run codeml to look for selection specifically in Muroidea ####
 
 # To look at the rodent clade, we need a rooted tree
 
@@ -1084,7 +1098,157 @@ if(RUN_PAML & !installr::is.windows() & !file.exists(paml.branch.site.output)){
   #system2("cat", 'paml/site-branch/site.branch.paml.out.txt | grep "^ \{2,5\} [0-9]\{1,3\} [A-Z\-]" > paml/site-branch/zfy.site-branch.positive.sites.txt' )
 }
 
-#### Run HyPhy RELAX to test for relaxed selection ####
+#### Create codeml files to look for selection in Muroidea across exon 1,3-6 ####
+
+# We need to extract just the exon 1, 3-6 coordinates; however we must be careful
+# not to disrupt codon boundaries. Coordinates have been adjusted in the mouse
+# exon detection function
+exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset[1]:mouse.exons$end_nt_codon_offset[1], 
+                    mouse.exons$start_nt_codon_offset[3]:mouse.exons$end_nt_codon_offset[6])
+
+exon1.3_6.aln <- as.matrix(ape.nt.aln)[,exon1.3_6.locs]
+# exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
+ape::write.FASTA(exon1.3_6.aln, file = "paml/exon_1_3-6/exon_1_3-6.aln")
+
+# This control file tests branch site models With heterogeneous ω Across Sites for exons 1 and 3-6
+paml.exon1.3_6.file <- paste0("seqfile     = exon_1_3-6.aln  * alignment file\n",
+                                "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
+                                "outfile   = exon_1_3-6.paml.out.txt\n",
+                                "\n",
+                                "noisy     = 3 * on screen logging\n",
+                                "verbose   = 1 * detailed output in file\n",
+                                "\n",
+                                "seqtype   = 1 * codon data\n",
+                                "ndata     = 1 * one gene alignment\n",
+                                "icode     = 0 * universal genetic code\n",
+                                "cleandata = 0 * keep sites with ambiguity data\n",
+                                "\n",
+                                "model     = 2 * 2 ω values across branches\n",
+                                "NSsites   = 2 * Model M2a\n",
+                                "CodonFreq = 7 * use mutation selection model\n",
+                                "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                                "clock     = 0 * assume no clock\n",
+                                "fix_omega = 0 * enables option to estimate omega\n",
+                                "omega     = 0.5 * initial omega value\n")
+write_file(paml.exon1.3_6.file, "paml/exon_1_3-6/exon_1_3-6.paml.ctl")
+
+
+exon1.3_6.output.file <- "paml/exon_1_3-6/exon_1_3-6.positive.sites.txt"
+if(file.exists(exon1.3_6.output.file)){
+  # Read the positive sites file 
+  positive.sites <- read_table(exon1.3_6.output.file, col_names = c("site", "aa", "p"))
+  positive.sites$p <- as.numeric(gsub("\\*+", "", positive.sites$p))
+  
+  positive.sites.y <- max(locations.zf$i) + 1.5
+  
+  positive.sites.plot <- ggplot()+
+    # geom_rect(data = locations.zf,     aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+    # geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
+    # geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
+    geom_rect(data = positive.sites,   aes(xmin=site-0.5, xmax=site+0.5, ymin=positive.sites.y, ymax=positive.sites.y+2, fill=p))+
+    labs(x = "Site", fill = "p(ω>1)")+
+    scale_fill_viridis_c()+
+    theme_bw()
+  save.double.width("figure/exon_1_3-6.positive.sites.png", positive.sites.plot, height = 85)
+}
+
+
+#### Create codeml files to look for selection in Muroidea across exon 2 ####
+
+exon2.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start_nt_codon_offset[2]:(mouse.exons$end_nt_codon_offset[2]-1)]
+# exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
+ape::write.FASTA(exon2.aln, file = "paml/exon_2/exon_2.aln")
+
+# This control file tests branch site models With heterogeneous ω Across Sites for exons 1 and 3-6
+paml.exon2.file <- paste0("seqfile   = exon_2.aln  * alignment file\n",
+                              "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
+                              "outfile   = exon_2.paml.out.txt\n",
+                              "\n",
+                              "noisy     = 3 * on screen logging\n",
+                              "verbose   = 1 * detailed output in file\n",
+                              "\n",
+                              "seqtype   = 1 * codon data\n",
+                              "ndata     = 1 * one gene alignment\n",
+                              "icode     = 0 * universal genetic code\n",
+                              "cleandata = 0 * keep sites with ambiguity data\n",
+                              "\n",
+                              "model     = 2 * 2 ω values across branches\n",
+                              "NSsites   = 2 * Model M2a\n",
+                              "CodonFreq = 7 * use mutation selection model\n",
+                              "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                              "clock     = 0 * assume no clock\n",
+                              "fix_omega = 0 * enables option to estimate omega\n",
+                              "omega     = 0.5 * initial omega value\n")
+write_file(paml.exon2.file, "paml/exon_2/exon_2.paml.ctl")
+
+exon.2.output.file <- "paml/exon_2/exon_2.positive.sites.txt"
+if(file.exists(exon.2.output.file)){
+  # Read the positive sites file 
+  positive.sites <- read_table(exon.2.output.file, col_names = c("site", "aa", "p"))
+  positive.sites$p <- as.numeric(gsub("\\*+", "", positive.sites$p))
+  
+  positive.sites.y <- max(locations.zf$i) + 1.5
+  
+  positive.sites.plot <- ggplot()+
+    # geom_rect(data = locations.zf,     aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+    # geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
+    # geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
+    geom_rect(data = positive.sites,   aes(xmin=site-0.5, xmax=site+0.5, ymin=positive.sites.y, ymax=positive.sites.y+2, fill=p))+
+    labs(x = "Site", fill = "p(ω>1)")+
+    scale_fill_viridis_c()+
+    theme_bw()
+  save.double.width("figure/exon_2.positive.sites.png", positive.sites.plot, height = 85)
+}
+
+
+#### Create codeml files to look for selection in Muroidea across exon 7 ####
+exon7.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start_nt_codon_offset[7]:mouse.exons$end_nt_codon_offset[7]]
+# exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
+ape::write.FASTA(exon7.aln, file = "paml/exon_7/exon_7.aln")
+
+# This control file tests branch site models With heterogeneous ω Across Sites for exons 1 and 3-6
+paml.exon7.file <- paste0("seqfile   = exon_7.aln  * alignment file\n",
+                              "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
+                              "outfile   = exon_7.paml.out.txt\n",
+                              "\n",
+                              "noisy     = 3 * on screen logging\n",
+                              "verbose   = 1 * detailed output in file\n",
+                              "\n",
+                              "seqtype   = 1 * codon data\n",
+                              "ndata     = 1 * one gene alignment\n",
+                              "icode     = 0 * universal genetic code\n",
+                              "cleandata = 0 * keep sites with ambiguity data\n",
+                              "\n",
+                              "model     = 2 * 2 ω values across branches\n",
+                              "NSsites   = 2 * Model M2a\n",
+                              "CodonFreq = 7 * use mutation selection model\n",
+                              "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                              "clock     = 0 * assume no clock\n",
+                              "fix_omega = 0 * enables option to estimate omega\n",
+                              "omega     = 0.5 * initial omega value\n")
+write_file(paml.exon7.file, "paml/exon_7/exon_7.paml.ctl")
+
+exon.7.output.file <- "paml/exon_7/exon_7.positive.sites.txt"
+if(file.exists(exon.2.output.file)){
+  # Read the positive sites file 
+  positive.sites <- read_table(exon.2.output.file, col_names = c("site", "aa", "p"))
+  positive.sites$p <- as.numeric(gsub("\\*+", "", positive.sites$p))
+  
+  positive.sites.y <- max(locations.zf$i) + 1.5
+  
+  positive.sites.plot <- ggplot()+
+    # geom_rect(data = locations.zf,     aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
+    # geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
+    # geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
+    geom_rect(data = positive.sites,   aes(xmin=site-0.5, xmax=site+0.5, ymin=positive.sites.y, ymax=positive.sites.y+2, fill=p))+
+    labs(x = "Site", fill = "p(ω>1)")+
+    scale_fill_viridis_c()+
+    theme_bw()
+  save.double.width("figure/exon_7.positive.sites.png", positive.sites.plot, height = 85)
+}
+
+
+#### Run HyPhy RELAX to test for relaxed selection in Muroidea ####
 
 # Newick tree tips and nodes need to be tagged with {Test} and {Reference}
 # Set all branches and nodes to reference
@@ -1102,11 +1266,102 @@ ape::write.tree(hyphy.tree, file = "hyphy/mammal.nt.aln.hyphy.treefile")
 if(!installr::is.windows()){
   
   # hyphy relax --alignment ../aln/zfxy.nt.aln --tree mammal.nt.aln.hyphy.treefile --reference "Reference" --test "Test" --output mammal.relax.json
+  
+  # Test relaxation of selection across the entire sequence in Muroidea
   system2("hyphy", " relax --alignment aln/zfxy.nt.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/mammal.relax.json")
   
+  # also run separately on the 3 exon partitions
+  system2("hyphy", " relax --alignment paml/exon_1_3-6/exon_1_3-6.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_1_3-6.relax.json")
+  system2("hyphy", " relax --alignment paml/exon_2/exon_2.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_2.relax.json")
+  system2("hyphy", " relax --alignment paml/exon_7/exon_7.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_7.relax.json")
+  
+  # create an sh file to submit these manually
+  hyphy.sh.data <- paste0("#!/bin/bash\n",
+                          "source activate hyphy\n",
+                          "hyphy relax --alignment paml/exon_1_3-6/exon_1_3-6.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_1_3-6.relax.json\n",
+                          "hyphy relax --alignment paml/exon_2/exon_2.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_2.relax.json\n",
+                          "hyphy relax --alignment paml/exon_2/exon_7.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_7.relax.json\n",
+                          "hyphy relax --alignment aln/zfxy.nt.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/mammal.relax.json\n"
+  )
+  write_file(hyphy.sh.data, "hyphy.sh")
+  
   # Read the json file and parse results
-  # hyphy.data <- jsonlite::read_json("hyphy/mammal.relax.json")
+  hyphy.data <- jsonlite::read_json("hyphy/mammal.relax.json")
+  # Note that the tree needs to terminate with ; otherwise read.tree returns NULL
+  hyphy.input.tree <- ape::read.tree(text = paste0(hyphy.data$input$trees[["0"]], ";"))
+  
+  # Coloration of tree by k based on https://observablehq.com/@spond/plotting-relax-k-values-on-branches-of-the-tree
+  
+  # Make a dataframe with the k values and node numbers
+  k.vals <- data.frame("k" = sapply(hyphy.data$`branch attributes`[["0"]], function(x) x$`k (general descriptive)`))
+  k.vals$NodeLab <- rownames(k.vals)
+  k.vals$node <- sapply(k.vals$NodeLab,  treeio::nodeid, tree = hyphy.input.tree)
+  k.vals$group <- ifelse(k.vals$k < 1, "Relax", ifelse(k.vals$k<20, "Intense", "Very intense"))
+  # Rescale values above 1 to the range 1-2 so we get a clean diverging scale
+  k.vals$adj.k <- ifelse(k.vals$k <= 1, k.vals$k, (k.vals$k/max(k.vals$k)+1))
+  k.vals[nrow(k.vals)+1,] <- list(0, "", 61, "Relax", 1) # add noot node
+  
+  # Get the branch lengths from the HyPhy output
+  k.vals$branch.length <-  sapply(k.vals$NodeLab, function(x) ifelse(x=="", 0, hyphy.data$`branch attributes`[["0"]][[x]]$`MG94xREV with separate rates for branch sets`))
+
+  # Reorder the branches to match the node/tip order of the tree
+  # Ordering in hyphy.input.tree$edge[,2] (the destination node, lengthss are for incoming branches)
+  branch.lengths <- unlist(sapply(hyphy.input.tree$edge[,2], function(x)  k.vals[k.vals$node==x,"branch.length"]))
+  hyphy.input.tree$edge.length <- branch.lengths
+  
+  p <- ggtree(hyphy.input.tree) + geom_tiplab()
+  p <- p %<+% k.vals + aes(colour=adj.k) + 
+    scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                            direction = -1, 
+                            limits = c(0, 2),
+                            labels = c("0.0", "0.5", "1.0", round(max(k.vals$k)/2, digits = 0), round(max(k.vals$k), digits = 0)))+
+    labs(color = "K")+
+    theme(legend.position = c(0.1, 0.8))
+  save.double.width("figure/mammal.hyphy.K.png", p)
+  
+  #+ colorspace::scale_color_continuous_diverging(palette = "Blue-Red", mid=1)
+  #+ scale_color_manual(values = c("orange", "blue", "red"))
+  # p %<+% k.vals + aes(colour=k) + 
 }
+
+#### Run HyPhy GARD to test for recombination ####
+
+if(!installr::is.windows()){
+  
+  system2("hyphy", " gard --alignment aln/zfxy.nt.aln --type codon --output hyphy/mammal.gard.json")
+  
+  # Read the json file and parse results
+  hyphy.data <- jsonlite::read_json("hyphy/mammal.gard.json")
+  
+  siteBreakPointSupport <- data.frame("site" = as.numeric(names(hyphy.data$siteBreakPointSupport)),
+                                         "support" = unlist(hyphy.data$siteBreakPointSupport))
+  
+  ggplot() +
+    geom_rect(data = mouse.exons,          aes(xmin = start_aa, xmax = end_aa, ymin = 2, ymax = 3, fill = is_even))+
+    scale_fill_manual(values=c("grey", "white"))+
+    geom_rect(data = ranges.ZF.common,     aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="grey", alpha=0.5)+
+    geom_rect(data = ranges.9aaTAD.common, aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="blue", alpha=0.5)+
+    geom_rect(data = ranges.NLS.common,    aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="green", alpha=0.5)+
+    geom_vline(xintercept = 488)+
+    geom_vline(xintercept = 884)+
+    scale_x_continuous(expand = c(0,0))+
+    guides(fill = "none")+
+    # geom_point(data =siteBreakPointSupport, aes(x = site, y = log10(support) ))+
+    theme_bw()+
+    theme(axis.text.y = element_blank())
+  
+  tree.1.488 <- hyphy.data$breakpointData[[1]]$tree
+  readr::write_file(tree.1.488, file = "hyphy/tree.1.488.treefile")
+  tree.1.488 <- read.tree("hyphy/tree.1.488.treefile")
+  
+  tree.489.884 <- hyphy.data$breakpointData[[2]]$tree
+  readr::write_file(tree.489.884, file = "hyphy/tree.489.884.treefile")
+  tree.489.884 <- read.tree("hyphy/tree.489.884.treefile")
+    
+  # Trees are entirely unconvincing, leave this
+  
+}
+
 
 #### Plot codeml branch-site model output  ####
 
@@ -1305,8 +1560,13 @@ plot.conservation.aa <- function(start, end){
   conservation.y <- max(locations.zf$i) + 1
    ggplot()+
     geom_rect(data = locations.zf,     aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-    geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
+    geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5, fill = as.factor(round(rc_score))), alpha=0.9)+
     geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
+     labs(fill = "RC score (%)")+
+     # scale_fill_paletteer_d("ggthemes::Blue", direction = 1)+
+     new_scale_fill()+
+
+     
      scale_fill_viridis_c(limits = c(0, 1))+
      geom_rect(data=msa.aa.aln.tidy.frog.conservation,  aes(xmin=position-0.45, 
                                                             xmax=position+0.45, 
@@ -1347,7 +1607,7 @@ plot.conservation.aa <- function(start, end){
      geom_text(data=ranges.9aaTAD.common, 
                aes(x =(start+end)/2, y= conservation.y+10, label=label), size=1.8, col="white")+
 
-    scale_x_continuous(expand = c(0, 0))+
+    scale_x_continuous(expand = c(0, 0), breaks = seq(0, 900, 50))+
      scale_y_discrete(expand = c(0, 0))+
     coord_cartesian(xlim = c(0, max(msa.aa.aln.tidy.frog.conservation$position)))+
     labs(x = "Position in alignment", fill = "Fraction conserved")+
@@ -1628,7 +1888,7 @@ split.gene.names <- metadata %>%
   dplyr::mutate(common.name = str_replace(common.name, "putative-Zfy", "putative-Y"),
                 common.name = str_replace(common.name, "putative_Zfy", "putative_Y")) %>%
   separate_wider_delim(common.name, 
-                       delim= "Z", names = c("Species", "Gene")) %>%
+                       delim= "Z", names = c("Species", "Gene"), too_few = "debug") %>%
   dplyr::mutate(Species = str_replace(Species, "_$", ""),
                 Gene = paste0("Z", Gene)) %>%
   # Repair gene names following the split earlier
