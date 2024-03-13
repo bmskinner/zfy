@@ -50,7 +50,7 @@ install.github <- function(package){
 cran.packages <- c("tidyverse", "ape", "filesstrings", "seqinr", "phangorn",
                    "installr","treespace", "httr", "seqLogo", "assertthat", "aplot",
                    "paletteer", "ggnewscale", "slider", "BiocManager",
-                   "remotes", "patchwork")
+                   "remotes", "patchwork", "ggpattern")
 
 sapply(cran.packages, install.cran)
 
@@ -287,9 +287,13 @@ add.conservation.track <- function(ranges,  y.start, y.end, ...){
 
 # Add an exon track to a plot
 add.exon.track <- function(y.start, y.end, ...){
-  geom_rect(data = mouse.exons, aes(xmin = start_aa, xmax = end_aa, 
-                                    ymin = y.start, ymax = y.end, 
-                                    fill = exon),...)
+  # The second exon is alternatively spliced, so mark it with a striped fill
+  # via ggpattern::geom_rect_pattern
+  geom_rect_pattern(data = mouse.exons, aes(xmin = start_aa, xmax = end_aa, 
+                                    ymin = y.start, ymax = y.end,
+                                    pattern = exon==2, fill=exon), 
+                    pattern_angle = 45, pattern_density = 0.3, pattern_spacing = 0.025,
+                    pattern_frequency = 0.2, ...)
 }
 # Add exon labels track to a plot
 add.exon.labels <- function(y.start, y.end, ...){
@@ -318,8 +322,11 @@ annotate.structure.plot <- function(plot, n.taxa){
     add.track.labels(ranges.9aaTAD.common, n.taxa+9, n.taxa+11)+   # Label the 9aaTADs
     
     new_scale_fill()+
-    scale_fill_manual(values=c("grey", "salmon", "white", "grey", "white", "grey", "white"))+
-    guides(fill = "none")+
+    scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
+    scale_pattern_fill_manual(values=c("white", "grey"))+
+    scale_pattern_fill2_manual(values=c("black", "white"))+
+    scale_pattern_manual(values = c("none", "stripe")) +
+    guides(fill = "none", pattern="none")+
     add.exon.track(n.taxa+12, n.taxa+14, col = "black")+
     add.exon.labels(n.taxa+12, n.taxa+14)+
     
