@@ -15,6 +15,8 @@
 # conda create -n hyphy # create conda environment
 # conda activate hyphy # enter the environment
 # conda install -c bioconda hyphy # install hyphy from bioconda
+# To activate conda from a shell script:
+# source activate hyphy
 
 RUN_PAML = as.logical(commandArgs(trailingOnly = T)[1])
 
@@ -146,15 +148,10 @@ find.exons <- function(biostrings.nt.alignment, biostrings.aa.alignment){
              "end_aa"   = sapply(end.aa,   convert.to.gapped.coordinate, mouse.zfy1.aa),
              "is_even"  = sapply(mouse.exons$exon, function(i) as.numeric(i)%%2==0))%>%
     dplyr::mutate(length_nt = end - start,
-                  offset_aa = length_nt%%3, # remainder after division by 3
-                  
-                   # TODO - need to fix the offsets to get ORF
+                   # fix the offsets to get ORF
                   start_nt_codon_offset = case_when(exon==1 ~ start, # hardcode the codon offsets for subsetting
                                                     exon>=2 ~ start-1),
-                  end_nt_codon_offset   = case_when(exon==1 ~ end-1,
-                                                    exon==2 ~ end,
-                                                    exon==3 ~ end-1,
-                                                    exon<7 ~ end-1,
+                  end_nt_codon_offset   = case_when(exon<7 ~ end-1,
                                                     exon==7 ~ end),
                   corrected_offset_length = (end_nt_codon_offset - start_nt_codon_offset)%%3) # check divisible by 3 
 }
@@ -187,21 +184,21 @@ plot.tree <- function(tree.data, ...){
 
 # Create a line-only tree scaled to the given max y. This allows the tree
 # to be combined with other plots with larger max y values.
-make.outgroup.mini.tree <-function(outgroup.tree, text.labels){
-  outgroup.tree.mini <- outgroup.tree
+make.outgroup.mini.tree <-function(combined.outgroup.tree, text.labels){
+  combined.outgroup.tree.mini <- combined.outgroup.tree
   
   # How many labels do we need above the tree?
   # 2 rows per label, plus one spacer
-  max.y <- length(outgroup.tree.mini$tip.label) + (length(text.labels)*3)
+  max.y <- length(combined.outgroup.tree.mini$tip.label) + (length(text.labels)*3)
 
   
   # Replace the tip labels with empty string so no labels are plotted
-  outgroup.tree.mini$tip.label <- rep("", length(outgroup.tree.mini$tip.label))
-  result <- ggtree(outgroup.tree.mini, aes(color=group)) + 
+  combined.outgroup.tree.mini$tip.label <- rep("", length(combined.outgroup.tree.mini$tip.label))
+  result <- ggtree(combined.outgroup.tree.mini, aes(color=group)) + 
     geom_tiplab(align=TRUE, linetype='dashed', linesize=.3) + # use tiplab to get lines
     coord_cartesian(ylim = c(1, max.y))
   
-  curr.y <- length(outgroup.tree.mini$tip.label) + 2.5
+  curr.y <- length(combined.outgroup.tree.mini$tip.label) + 2.5
   for(i in 1:length(text.labels)){
     result <- result + annotate(geom="text", x=0.6, y=curr.y, 
                                 label=text.labels[i], size=2, hjust=1, vjust=0.5)
@@ -266,6 +263,83 @@ printMultipleAlignment <- function(alignment, names=NULL, names.length=NA, chunk
   result <- unlist(lapply(line.starts, create.block))
   cat(paste0(result, "\n"))
   result
+}
+
+# Add a rectangle track to a plot
+add.track <- function(ranges, y.start, y.end, ...){
+  geom_rect(data=ranges, 
+            aes(xmin = start, xmax = end, ymin = y.start, ymax=y.end),
+            ...)
+}
+# Add a rectangle track labels to a plot
+add.track.labels <- function(ranges, y.start, y.end, ...){
+  geom_text(data=ranges,
+            aes(x =(start+end)/2, y=(y.start+y.end)/2, label=label), size=1.8, col="white")
+}
+# Add a conservation track to a plot
+add.conservation.track <- function(ranges,  y.start, y.end, ...){
+  geom_rect(data=ranges,  aes(xmin=position-0.45, 
+                              xmax=position+0.45, 
+                              ymin=y.start, 
+                              ymax=y.end, 
+                              fill=smoothed9))
+}
+
+# Add an exon track to a plot
+add.exon.track <- function(y.start, y.end, ...){
+  geom_rect(data = mouse.exons, aes(xmin = start_aa, xmax = end_aa, 
+                                    ymin = y.start, ymax = y.end, 
+                                    fill = exon),...)
+}
+# Add exon labels track to a plot
+add.exon.labels <- function(y.start, y.end, ...){
+  geom_text(data=mouse.exons,
+            aes(x =(start_aa+end_aa)/2, y=(y.start+y.end)/2, label=exon), size=1.8, col="black")
+}
+
+# Annotate Zfy structures to a plot
+# plot - the plot to annotate
+# n.taxa - the number of rows within data; annotation tracks are above this
+annotate.structure.plot <- function(plot, n.taxa){
+  
+  plot <- plot+
+    # Draw the conservation with Xenopus, chicken and opossum
+    new_scale_fill()+
+    scale_fill_viridis_c(limits = c(0, 1))+
+    labs(fill="Conservation (9-window smooth)")+
+    add.conservation.track(msa.aa.aln.tidy.frog.conservation,    n.taxa,   n.taxa+2)+
+    add.conservation.track(msa.aa.aln.tidy.chicken.conservation, n.taxa+3, n.taxa+5)+
+    add.conservation.track(msa.aa.aln.tidy.opossum.conservation, n.taxa+6, n.taxa+8)+
+    
+    # Draw the structures
+    add.track(ranges.ZF.common,     n.taxa+9, n.taxa+11, fill="lightgrey")+
+    add.track(ranges.NLS.common,    n.taxa+9, n.taxa+11, fill="green", alpha = 0.5)+
+    add.track(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, fill="blue",  alpha = 0.5)+
+    add.track.labels(ranges.9aaTAD.common, n.taxa+9, n.taxa+11)+   # Label the 9aaTADs
+    
+    new_scale_fill()+
+    scale_fill_manual(values=c("grey", "salmon", "white", "grey", "white", "grey", "white"))+
+    guides(fill = "none")+
+    add.exon.track(n.taxa+12, n.taxa+14, col = "black")+
+    add.exon.labels(n.taxa+12, n.taxa+14)+
+    
+    scale_x_continuous(expand = c(0, 0))+
+    coord_cartesian(xlim = c(0, max(msa.aa.aln.tidy.frog.conservation$position)))+
+    theme_bw()+
+    theme(axis.text.y = element_blank(),
+          axis.title = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.text.x = element_text(size=6),
+          legend.position = "top",
+          legend.title = element_text(size = 6, vjust = 0.7),
+          legend.text = element_text(size = 6),
+          panel.grid = element_blank())
+  
+  # Add the tree with the outgroups
+  make.outgroup.mini.tree(combined.outgroup.tree,
+                          text.labels = c("Xenopus", "Chicken", "Opossum", "Features", "Exons"))+
+    plot +
+    patchwork::plot_layout(widths = c(0.1, 0.9))
 }
 
 
@@ -437,17 +511,22 @@ system2("iqtree", paste("-s ", "aln/outgroup/combined.aa.aln",
         stderr = paste0("aln/outgroup/combined.aa.iqtree.log"))
 
 
-outgroup.tree <- ape::read.tree(paste0("aln/outgroup/combined.aa.aln.treefile"))
+read.combined.outgroup.tree <- function(file){
+  combined.outgroup.tree <- ape::read.tree(paste0(file))
+  
+  # Root the tree in the edge between Xenopus nodes and chicken
+  xenopus.node <- ape::getMRCA(combined.outgroup.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
+  combined.outgroup.tree <- phytools::reroot(combined.outgroup.tree, xenopus.node, position = 0.1)
+  ape::write.tree(combined.outgroup.tree, file = paste0("aln/outgroup/combined.aa.aln.rooted.treefile"))
+  
+  group_info <- split(combined.metadata$common.name, combined.metadata$group)
+  combined.outgroup.tree <- groupOTU(combined.outgroup.tree, group_info, group_name = "group")
+  combined.outgroup.tree
+}
 
-# Root the tree in the edge between Xenopus nodes and chicken
-xenopus.node <- ape::getMRCA(outgroup.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
-outgroup.tree <- phytools::reroot(outgroup.tree, xenopus.node, position = 0.1)
-ape::write.tree(outgroup.tree, file = paste0("aln/outgroup/combined.aa.aln.rooted.treefile"))
+combined.outgroup.tree <- read.combined.outgroup.tree("aln/outgroup/combined.aa.aln.treefile")
 
-group_info <- split(combined.metadata$common.name, combined.metadata$group)
-outgroup.tree <- groupOTU(outgroup.tree, group_info, group_name = "group")
-
-outgroup.plot <- plot.tree(outgroup.tree, col = "group")+
+outgroup.plot <- plot.tree(combined.outgroup.tree, col = "group")+
   coord_cartesian(clip="off", xlim = c(0, 0.9), ylim= c(-2, 62))
 
 save.double.width("figure/combined.aa.tree.png", outgroup.plot)
@@ -651,19 +730,28 @@ save.double.width("figure/dnds.png", kaks.pairwise.plot)
 
 # Strong purifying selection in all pairs, but weaker in rodents
 
-# Look at the final exon versus exons 1-6; is purifying selection more 
-# pronounced in the ZFs?
+#### Test selection globally partition by partition in mammals ####
 
-exon.1.6.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start[1]:mouse.exons$end[6]-1] # -1 to ensure on a codon boundary
-ape::write.FASTA(exon.1.6.aln, file = "aln/exons/exon_1-6.kaks.aln")
-seqin.aln.exon.1.6 <- seqinr::read.alignment("aln/exons/exon_1-6.kaks.aln", format = "fasta")
+# Look at the final exon versus exons 1&3-6; is purifying selection more 
+# pronounced in the ZFs versus exon 2 and exon 7?
+exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset[1]:mouse.exons$end_nt_codon_offset[1], 
+                    mouse.exons$start_nt_codon_offset[3]:mouse.exons$end_nt_codon_offset[6])
+exon1.3_6.aln <- as.matrix(ape.nt.aln)[,exon1.3_6.locs]
 
-exon.7.aln <- as.matrix(ape.nt.aln)[,(mouse.exons$start[7]-1):mouse.exons$end[7]] # -1 to ensure on a codon boundary
+ape::write.FASTA(exon1.3_6.aln, file = "aln/exons/exon_1_3-6.kaks.aln")
+seqin.aln.exon.1.3_6 <- seqinr::read.alignment("aln/exons/exon_1_3-6.kaks.aln", format = "fasta")
+
+exon2.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start_nt_codon_offset[2]:(mouse.exons$end_nt_codon_offset[2])]
+ape::write.FASTA(exon2.aln, file = "aln/exons/exon_2.kaks.aln")
+seqin.aln.exon.2 <- seqinr::read.alignment("aln/exons/exon_2.kaks.aln", format = "fasta")
+exon2.aln.msa <- ape::read.FASTA("aln/exons/exon_2.kaks.aln")
+
+exon.7.aln <- as.matrix(ape.nt.aln)[,(mouse.exons$start_nt_codon_offset[7]):mouse.exons$end_nt_codon_offset[7]] 
 ape::write.FASTA(exon.7.aln, file = "aln/exons/exon_7.kaks.aln")
 seqin.aln.exon.7 <- seqinr::read.alignment("aln/exons/exon_7.kaks.aln", format = "fasta")
 
 create.pairwise.kaks.data <- function(seqinr.aln){
-  kaks.data <- seqinr::kaks(seqinr.aln)
+  kaks.data <- seqinr::kaks(seqinr.aln, rmgap = FALSE)
   kaks.ratio <- kaks.data$ka / kaks.data$ks
   kaks.pairwise <- dist2list(kaks.ratio, tri = F)
   kaks.pairwise$col <- factor(kaks.pairwise$col, 
@@ -674,17 +762,19 @@ create.pairwise.kaks.data <- function(seqinr.aln){
   kaks.pairwise %>% 
     dplyr::rowwise() %>%
     dplyr::mutate(rownum = which(row==taxa.name.order),
-                  colnum = which(col==taxa.name.order)) %>%
+                  colnum = which(col==taxa.name.order),
+                  value  = ifelse(value==1, NA, value)) %>%  # values of exactly 1 are from missing data
     dplyr::filter(rownum > colnum)
 }
 
-kaks.exon.1.6 <- create.pairwise.kaks.data(seqin.aln.exon.1.6)
+kaks.exon.1.3_6 <- create.pairwise.kaks.data(seqin.aln.exon.1.3_6)
+kaks.exon.2 <- create.pairwise.kaks.data(seqin.aln.exon.2)
 kaks.exon.7 <- create.pairwise.kaks.data(seqin.aln.exon.7)
 
 plot.kaks <- function(kaks.pairwise){
   ggplot(kaks.pairwise, aes(x = col, y = row))+
     geom_tile(aes(fill=value))+
-    scale_fill_viridis_c(limits = c(0, 1), direction = -1)+
+    scale_fill_viridis_c(limits = c(0, 1), direction = -1, na.value="white")+
     labs(fill="dNdS")+
     theme_bw()+
     theme(axis.text.x = element_text(size = 4, angle = 90, vjust = 0.5, hjust=1),
@@ -696,13 +786,14 @@ plot.kaks <- function(kaks.pairwise){
           legend.text = element_text(size = 5))
 }
 
-exon.1.6.kaks.pairwise.plot <- plot.kaks(kaks.exon.1.6)
+exon.1.3_6.kaks.pairwise.plot <- plot.kaks(kaks.exon.1.3_6)
+exon.2.kaks.pairwise.plot <- plot.kaks(kaks.exon.2)
 exon.7.kaks.pairwise.plot <- plot.kaks(kaks.exon.7)
 
-exon.kaks.plot <- exon.1.6.kaks.pairwise.plot + exon.7.kaks.pairwise.plot +
+exon.kaks.plot <- exon.1.3_6.kaks.pairwise.plot + exon.2.kaks.pairwise.plot + exon.7.kaks.pairwise.plot +
   patchwork::plot_annotation(tag_levels = c("A")) + plot_layout(axes="collect")
 
-save.double.width("figure/exon.1-6.7.dnds.png", exon.kaks.plot, height=110)
+save.double.width("figure/exon.1_3-6.2.7.dnds.png", exon.kaks.plot, height=110)
 
 #### Plot extended outgroup AA MSA ####
 
@@ -1285,43 +1376,65 @@ if(!installr::is.windows()){
   )
   write_file(hyphy.sh.data, "hyphy.sh")
   
-  # Read the json file and parse results
-  hyphy.data <- jsonlite::read_json("hyphy/mammal.relax.json")
-  # Note that the tree needs to terminate with ; otherwise read.tree returns NULL
-  hyphy.input.tree <- ape::read.tree(text = paste0(hyphy.data$input$trees[["0"]], ";"))
   
-  # Coloration of tree by k based on https://observablehq.com/@spond/plotting-relax-k-values-on-branches-of-the-tree
+  create.relax.k.tree <- function(json.file){
+    # Read the json file and parse results
+    hyphy.data <- jsonlite::read_json(json.file)
+    # Note that the tree needs to terminate with ; otherwise read.tree returns NULL
+    hyphy.input.tree <- ape::read.tree(text = paste0(hyphy.data$input$trees[["0"]], ";"))
+    
+    # Coloration of tree by k based on https://observablehq.com/@spond/plotting-relax-k-values-on-branches-of-the-tree
+    
+    # Make a dataframe with the k values and node numbers
+    k.vals <- data.frame("k" = sapply(hyphy.data$`branch attributes`[["0"]], function(x) x$`k (general descriptive)`))
+    k.vals$NodeLab <- rownames(k.vals)
+    k.vals$node <- sapply(k.vals$NodeLab,  treeio::nodeid, tree = hyphy.input.tree)
+    # Rescale values above 1 to the range 1-2 so we get a clean diverging scale
+    k.vals$adj.k <- ifelse(k.vals$k <= 1, k.vals$k, (k.vals$k/max(k.vals$k)+1))
+    
+    # Add a new row for the root node
+    k.vals[nrow(k.vals)+1,] <- list(0, "", length(hyphy.input.tree$tip.label)+1, 1)
+    
+    # Get the branch lengths from the HyPhy output
+    k.vals$branch.length <-  sapply(k.vals$NodeLab, function(x) ifelse(x=="", 0, hyphy.data$`branch attributes`[["0"]][[x]]$`MG94xREV with separate rates for branch sets`))
+    
+    # Reorder the branches to match the node/tip order of the tree
+    # Ordering in hyphy.input.tree$edge[,2] (the destination node, lengths are for incoming branches)
+    branch.lengths <- unlist(sapply(hyphy.input.tree$edge[,2], function(x)  k.vals[k.vals$node==x,"branch.length"]))
+    hyphy.input.tree$edge.length <- branch.lengths
+    
+    p <- ggtree(hyphy.input.tree) + geom_tiplab()
+    p <- p %<+% k.vals + aes(colour=adj.k) + 
+      scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                              direction = -1, 
+                              limits = c(0, 2),
+                              labels = c("0.0", "0.5", "1.0", round(max(k.vals$k)/2, digits = 0), round(max(k.vals$k), digits = 0)))+
+      labs(color = "K")+
+      coord_cartesian(xlim = c(0, 0.7))+
+      annotate(geom="text", x = 0.3, y = 62, 
+               label = paste("K(Muroidea) =", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2)))+
+      theme(legend.position = c(0.8, 0.2))
+    
+    p
+  }
   
-  # Make a dataframe with the k values and node numbers
-  k.vals <- data.frame("k" = sapply(hyphy.data$`branch attributes`[["0"]], function(x) x$`k (general descriptive)`))
-  k.vals$NodeLab <- rownames(k.vals)
-  k.vals$node <- sapply(k.vals$NodeLab,  treeio::nodeid, tree = hyphy.input.tree)
-  k.vals$group <- ifelse(k.vals$k < 1, "Relax", ifelse(k.vals$k<20, "Intense", "Very intense"))
-  # Rescale values above 1 to the range 1-2 so we get a clean diverging scale
-  k.vals$adj.k <- ifelse(k.vals$k <= 1, k.vals$k, (k.vals$k/max(k.vals$k)+1))
-  k.vals[nrow(k.vals)+1,] <- list(0, "", 61, "Relax", 1) # add noot node
   
-  # Get the branch lengths from the HyPhy output
-  k.vals$branch.length <-  sapply(k.vals$NodeLab, function(x) ifelse(x=="", 0, hyphy.data$`branch attributes`[["0"]][[x]]$`MG94xREV with separate rates for branch sets`))
-
-  # Reorder the branches to match the node/tip order of the tree
-  # Ordering in hyphy.input.tree$edge[,2] (the destination node, lengthss are for incoming branches)
-  branch.lengths <- unlist(sapply(hyphy.input.tree$edge[,2], function(x)  k.vals[k.vals$node==x,"branch.length"]))
-  hyphy.input.tree$edge.length <- branch.lengths
-  
-  p <- ggtree(hyphy.input.tree) + geom_tiplab()
-  p <- p %<+% k.vals + aes(colour=adj.k) + 
-    scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
-                            direction = -1, 
-                            limits = c(0, 2),
-                            labels = c("0.0", "0.5", "1.0", round(max(k.vals$k)/2, digits = 0), round(max(k.vals$k), digits = 0)))+
-    labs(color = "K")+
-    theme(legend.position = c(0.1, 0.8))
-  save.double.width("figure/mammal.hyphy.K.png", p)
-  
-  #+ colorspace::scale_color_continuous_diverging(palette = "Blue-Red", mid=1)
-  #+ scale_color_manual(values = c("orange", "blue", "red"))
-  # p %<+% k.vals + aes(colour=k) + 
+  if(file.exists("hyphy/mammal.relax.json")){
+    relax.tree.all <- create.relax.k.tree("hyphy/mammal.relax.json")
+    save.double.width("figure/mammal.relax.K.png", relax.tree.all)
+  }
+  if(file.exists("hyphy/exon_1_3-6.relax.json")){
+    relax.tree.e1_3_6 <- create.relax.k.tree("hyphy/exon_1_3-6.relax.json")
+    save.double.width("figure/exon_1_3-6.relax.K.png", relax.tree.e1_3_6)
+  }
+  if(file.exists("hyphy/exon_2.relax.json")){
+    relax.tree.e2 <- create.relax.k.tree("hyphy/exon_2.relax.json")
+    save.double.width("figure/exon_2.relax.K.png", relax.tree.e2)
+  }
+  if(file.exists("hyphy/exon_7.relax.json")){
+    relax.tree.e7 <- create.relax.k.tree("hyphy/exon_7.relax.json")
+    save.double.width("figure/exon_7.relax.K.png", relax.tree.e7)
+  }
 }
 
 #### Run HyPhy GARD to test for recombination ####
@@ -1530,9 +1643,9 @@ calculate.conservation <-function(aa.aln, outgroup.name){
     dplyr::filter(name==outgroup.name) %>%
     dplyr::select(-name, position, ref_char = character)
   
-  # Filter the alignment to only those species diverging after the outgroup
+  # Filter the alignment to only mammalia after opossum
   # We can use the sequence level order for this
-  outgroup.level <- which(outgroup.taxa.name.order==outgroup.name)
+  outgroup.level <- which(outgroup.taxa.name.order=="Opossum_ZFX")
   species.to.calc <- outgroup.taxa.name.order[1:outgroup.level-1]
   
   ggmsa::tidy_msa(aa.aln) %>%
@@ -1551,91 +1664,29 @@ calculate.conservation <-function(aa.aln, outgroup.name){
 combined.aa.aln <- readAAMultipleAlignment(combined.aa.aln.file, format = "fasta")
 
 # Use Xenopus ZFX.S as the comparison group
-msa.aa.aln.tidy.frog.conservation <- calculate.conservation(combined.aa.aln,"Xenopus_ZFX.S" )
+msa.aa.aln.tidy.frog.conservation    <- calculate.conservation(combined.aa.aln,"Xenopus_ZFX.S" )
 msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(combined.aa.aln,"Chicken_ZFX" )
 msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(combined.aa.aln,"Opossum_ZFX" )
 
-plot.conservation.aa <- function(start, end){
-  
-  conservation.y <- max(locations.zf$i) + 1
-   ggplot()+
-    geom_rect(data = locations.zf,     aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-    geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5, fill = as.factor(round(rc_score))), alpha=0.9)+
-    geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
-     labs(fill = "RC score (%)")+
-     # scale_fill_paletteer_d("ggthemes::Blue", direction = 1)+
-     new_scale_fill()+
-
-     
-     scale_fill_viridis_c(limits = c(0, 1))+
-     geom_rect(data=msa.aa.aln.tidy.frog.conservation,  aes(xmin=position-0.45, 
-                                                            xmax=position+0.45, 
-                                                            ymin=conservation.y, 
-                                                            ymax=conservation.y+2, 
-                                                            fill=smoothed9))+
-     geom_rect(data=msa.aa.aln.tidy.chicken.conservation,  aes(xmin=position-0.45, 
-                                                               xmax=position+0.45, 
-                                                               ymin=conservation.y+3, 
-                                                               ymax=conservation.y+5, 
-                                                               fill=smoothed9))+
-     geom_rect(data=msa.aa.aln.tidy.opossum.conservation,  aes(xmin=position-0.45, 
-                                                               xmax=position+0.45, 
-                                                               ymin=conservation.y+6, 
-                                                               ymax=conservation.y+8,
-                                                               fill=smoothed9))+
-     labs(fill = "Fraction conserved")+
-     new_scale_fill()+
-     scale_fill_manual(values = c("white", "darkgrey"))+
-     guides(fill="none")+
-     geom_rect(data=mouse.exons,  aes(xmin=start_aa-0.45, 
-                                      xmax=end_aa+0.45, 
-                                      ymin=conservation.y+9, 
-                                      ymax=conservation.y+11, fill=as.numeric(exon)%%2==0), col="black")+
-     
-     # Draw the structures
-     geom_rect(data=ranges.ZF.common, 
-               aes(xmin = start, xmax = end, ymin = conservation.y+9, ymax=conservation.y+11),
-               fill = "lightgrey")+
-     
-     geom_rect(data=ranges.NLS.common , 
-               aes(xmin = start, xmax = end, ymin = conservation.y+9, ymax=conservation.y+11),
-               fill = "green", alpha=0.5)+
-     
-     geom_rect(data=ranges.9aaTAD.common, 
-               aes(xmin = start, xmax = end, ymin = conservation.y+9, ymax=conservation.y+11),
-               fill = "blue", alpha=0.5)+
-     geom_text(data=ranges.9aaTAD.common, 
-               aes(x =(start+end)/2, y= conservation.y+10, label=label), size=1.8, col="white")+
-
-    scale_x_continuous(expand = c(0, 0), breaks = seq(0, 900, 50))+
-     scale_y_discrete(expand = c(0, 0))+
-    coord_cartesian(xlim = c(0, max(msa.aa.aln.tidy.frog.conservation$position)))+
-    labs(x = "Position in alignment", fill = "Fraction conserved")+
-    theme_bw()+
-    theme(axis.text.y = element_blank(),
-          axis.title.y = element_blank(),
-          axis.ticks.y = element_blank(),
-          legend.position = "top",
-          legend.title = element_text(size = 6, vjust = 0.7),
-          legend.text = element_text(size = 6),
-          legend.key.height = unit(4, "mm"),
-          legend.margin = margin(t=1, b=1, unit="mm"),
-          legend.spacing.y = unit(1, "mm"))
-}
-
-aa.conservation.plot <- plot.conservation.aa(1, ncol(combined.aa.aln))
-save.double.width("figure/conservation_aa.png", aa.conservation.plot, height = 85)
-
 # Combine the structural conservation plot with the aa tree
+aa.structure.plot <- ggplot()+
+  geom_tile(data = locations.zf,     aes(x=(start_gapped+end_gapped)/2,
+                                         width = (end_gapped-start_gapped),
+                                         y=sequence),
+            fill="grey", alpha=0.5)+
+  geom_tile(data = locations.9aaTAD,     aes(x=(start_gapped+end_gapped)/2,
+                                         width = (end_gapped-start_gapped),
+                                         y=sequence,
+                                         fill=as.factor(round(rc_score))),
+            alpha=0.9)+
+  geom_tile(data = locations.NLS,     aes(x=(start_gapped+end_gapped)/2,
+                                         width = (end_gapped-start_gapped),
+                                         y=sequence),
+            fill="green", alpha=0.5)+
+  labs(fill = "RC score (%)")
+aa.structure.plot <- annotate.structure.plot(aa.structure.plot, length(outgroup.taxa.name.order) + 1.5)
 
-aa.structure.tree <- make.outgroup.mini.tree(outgroup.tree,
-                                             text.labels = c("Xenopus", "Chicken", "Opossum", "Schematic"))+
-                                             # text.y = c(max(locations.zf$i) + 1.5,
-                                             #            max(locations.zf$i) + 4.5,
-                                             #            max(locations.zf$i) + 7.5))+
-  aa.conservation.plot +
-  patchwork::plot_layout(widths = c(0.1, 0.9))
-save.double.width("figure/aa.structure.convervation.tree.png", aa.structure.tree, height = 120)
+save.double.width("figure/aa.structure.png", aa.structure.plot, height = 120)
 
 
 #### Plot the conservation of hydrophobicity across AA MSA ####
@@ -1646,70 +1697,14 @@ msa.aa.aln.tidy.hydrophobicity <- do.call(rbind, mapply(calc.hydrophobicity, aa=
                                                 SIMPLIFY = FALSE))  %>%
   dplyr::mutate(sequence = factor(sequence, levels = rev(outgroup.taxa.name.order))) # sort reverse to match tree
 
-n.taxa <- length(outgroup.taxa.name.order) +1.5
+n.taxa <- length(outgroup.taxa.name.order) + 1.5
 
 hydrophobicity.plot <- ggplot()+
-  # Draw the charges per sequence
   geom_tile(data=msa.aa.aln.tidy.hydrophobicity,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
   scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
-  labs(fill="Hydrophobicity (smoothed 9)")+
-  
-  # Draw the conservation with Xenopus
-  new_scale_fill()+
-  geom_rect(data=msa.aa.aln.tidy.frog.conservation,  aes(xmin=position-0.45, 
-                                                         xmax=position+0.45, 
-                                                         ymin=n.taxa, 
-                                                         ymax=n.taxa+2, 
-                                                         fill=smoothed9))+
-  geom_rect(data=msa.aa.aln.tidy.chicken.conservation,  aes(xmin=position-0.45, 
-                                                            xmax=position+0.45, 
-                                                            ymin=n.taxa+3, 
-                                                            ymax=n.taxa+5, 
-                                                            fill=smoothed9))+
-  geom_rect(data=msa.aa.aln.tidy.opossum.conservation,  aes(xmin=position-0.45, 
-                                                            xmax=position+0.45, 
-                                                            ymin=n.taxa+6, 
-                                                            ymax=n.taxa+8, 
-                                                            fill=smoothed9))+
-
-  # Draw the structures
-  geom_rect(data=ranges.ZF.common, 
-            aes(xmin = start, xmax = end, ymin = n.taxa+9, ymax=n.taxa+11),
-            fill = "lightgrey")+
-  
-  geom_rect(data=ranges.NLS.common , 
-            aes(xmin = start, xmax = end, ymin = n.taxa+9, ymax=n.taxa+11),
-            fill = "green", alpha=0.5)+
-  
-  geom_rect(data=ranges.9aaTAD.common, 
-            aes(xmin = start, xmax = end, ymin = n.taxa+9, ymax=n.taxa+11),
-            fill = "blue", alpha=0.5)+
-  geom_text(data=ranges.9aaTAD.common, 
-            aes(x =(start+end)/2, y= n.taxa+10, label=label), size=1.8, col="white")+
-  
-  scale_fill_viridis_c(limits = c(0, 1))+
-  labs(fill="Conservation (smoothed 9)")+
-  scale_x_continuous(expand = c(0, 0))+
-  coord_cartesian(xlim = c(0, max(msa.aa.aln.tidy.frog.conservation$position)))+
-  theme_bw()+
-  theme(axis.text.y = element_blank(),
-        axis.title = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.x = element_text(size=6),
-        legend.position = "top",
-        legend.title = element_text(size = 6, vjust = 0.7),
-        legend.text = element_text(size = 6),
-        panel.grid = element_blank())
-save.double.width("figure/hydrophobicity.window.9.png", hydrophobicity.plot, height = 120)
-
-
-# Combine the hydrophobicity plot with the aa tree
-
-hydrophobicity.tree <- make.outgroup.mini.tree(outgroup.tree,
-                                             text.labels = c("Xenopus", "Chicken", "Opossum", "Features"))+
-  hydrophobicity.plot +
-  patchwork::plot_layout(widths = c(0.1, 0.9))
-save.double.width("figure/hydrophobicity.convervation.tree.png", hydrophobicity.tree, height = 120)
+  labs(fill="Hydrophobicity (9-window smooth)")
+hydrophobicity.plot <- annotate.structure.plot(hydrophobicity.plot, n.taxa)
+save.double.width("figure/hydrophobicity.convervation.tree.png", hydrophobicity.plot, height = 120)
 
 #### Plot conservation of charge across AA MSA ####
 
@@ -1719,67 +1714,18 @@ msa.aa.aln.tidy.charge <- do.call(rbind, mapply(calc.charge, aa=combined.aa.aln@
                                                 SIMPLIFY = FALSE))  %>%
   dplyr::mutate(sequence = factor(sequence, levels = rev(outgroup.taxa.name.order))) # sort reverse to match tree
 
-n.taxa <- length(outgroup.taxa.name.order) +1.5
-
 charge.plot <- ggplot()+
   # Draw the charges per sequence
   geom_tile(data=msa.aa.aln.tidy.charge,  aes(x = position_gapped, y = sequence, fill=charge_smoothed))+
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(-1, 1))+
-  labs(fill="Charge (smoothed 9)")+
-  
-  # Draw the conservation with Xenopus
-  new_scale_fill()+
-  geom_rect(data=msa.aa.aln.tidy.frog.conservation,  aes(xmin=position-0.45, 
-                                                         xmax=position+0.45, 
-                                                         ymin=n.taxa, ymax=n.taxa+2, 
-                                                         fill=smoothed9))+
-  geom_rect(data=msa.aa.aln.tidy.chicken.conservation,  aes(xmin=position-0.45,
-                                                            xmax=position+0.45, 
-                                                            ymin=n.taxa+3, 
-                                                            ymax=n.taxa+5, 
-                                                            fill=smoothed9))+
-  geom_rect(data=msa.aa.aln.tidy.opossum.conservation,  aes(xmin=position-0.45, 
-                                                            xmax=position+0.45, 
-                                                            ymin=n.taxa+6, 
-                                                            ymax=n.taxa+8, 
-                                                            fill=smoothed9))+
-  
-  # Draw the structures
-  geom_rect(data=ranges.ZF.common, 
-            aes(xmin = start, xmax = end, ymin = n.taxa+9, ymax=n.taxa+11),
-            fill = "lightgrey")+
-  
-  geom_rect(data=ranges.NLS.common , 
-            aes(xmin = start, xmax = end, ymin = n.taxa+9, ymax=n.taxa+11),
-            fill = "green", alpha=0.5)+
-  
-  geom_rect(data=ranges.9aaTAD.common, 
-            aes(xmin = start, xmax = end, ymin = n.taxa+9, ymax=n.taxa+11),
-            fill = "blue", alpha=0.5)+
-  
-  geom_text(data=ranges.9aaTAD.common, 
-            aes(x =(start+end)/2, y= n.taxa+10, label=label), size=1.8, col="white")+
-  
-  scale_fill_viridis_c(limits = c(0, 1))+
-  labs(fill="Conservation (smoothed 9)")+
-  scale_x_continuous(expand = c(0, 0))+
-  coord_cartesian(xlim = c(-40, max(msa.aa.aln.tidy.frog.conservation$position)))+
-  theme_bw()+
-  theme(axis.text.y = element_blank(),
-        axis.title = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.x = element_text(size=6),
-        legend.position = "top",
-        legend.title = element_text(size = 6, vjust = 0.7),
-        legend.text = element_text(size = 6),
-        panel.grid = element_blank())
-save.double.width("figure/charge.window.9.png", charge.plot, height = 120)
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = 1, limits = c(-1, 1))+
+  labs(fill="Charge (9-window smooth)")
+charge.plot <- annotate.structure.plot(charge.plot, n.taxa)
+save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 120)
 
-# Combine the charge plot with the aa tree
-charge.tree <- make.outgroup.mini.tree(outgroup.tree, text.labels = c("Xenopus", "Chicken", "Opossum", "Features"))+
-  charge.plot +
-  patchwork::plot_layout(widths = c(0.1, 0.9))
-save.double.width("figure/charge.convervation.tree.png", charge.tree, height = 120)
+#### Combine all structure plots ####
+
+structure.plot <- (aa.structure.plot) / (hydrophobicity.plot) / (charge.plot) + plot_layout(ncol = 1)
+save.double.width("figure/structure.plot.png", structure.plot, height = 230)
 
 #### Run GENECONV to test for gene conversion ####
 
@@ -1990,7 +1936,7 @@ if(installr::is.windows()){
 
 
 # testing of side-by-side plots
-# p <- ggtree(outgroup.tree) + geom_tiplab(size=3, aes(col = group), align=F)
+# p <- ggtree(combined.outgroup.tree) + geom_tiplab(size=3, aes(col = group), align=F)
  # msaplot(p, combined.aa.aln.file, offset=0.4, width=2)+theme(legend.position = "none")
 
 # p %>% aplot::insert_right(msa.combined.aa.plot)
@@ -1998,6 +1944,6 @@ if(installr::is.windows()){
 
 
 
-# ggmsa::treeMSA_plot(ggtree(outgroup.tree)+geom_tiplab(size=3, aes(col = group)), msa.outgroup.aln.tidy, color = "Chemistry_AA",
+# ggmsa::treeMSA_plot(ggtree(combined.outgroup.tree)+geom_tiplab(size=3, aes(col = group)), msa.outgroup.aln.tidy, color = "Chemistry_AA",
 #                     border=NA, font=NULL)
 #  
