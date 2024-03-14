@@ -306,44 +306,6 @@ exon.joint.tree <- plot.exon.1.6.tree + exon.1.7.plots[[2]] + exon.1.7.plots[[7]
   patchwork::plot_annotation(tag_levels = list(c("Exons 1-6", "Exon 2", "Exon 7"))) &
   theme(plot.tag = element_text(size = 6))
 save.double.width("figure/exon.joint.tree.png", exon.joint.tree, height=120)
-#### Plot exon by exon NT MSA #####
-
-# nt.aln.tidy <- tidy_msa(msa.nt.aln) %>%
-#   dplyr::mutate(name = factor(name, 
-#                                  levels = rev(mammal.taxa.name.order))) # sort reverse to match tree
-# for(i in 1:nrow(mouse.exons)){
-#   start <- mouse.exons$start[i]
-#   end <- mouse.exons$end[i]
-#   exon <- mouse.exons$exon[i]
-#   
-#   msa.plot <- ggplot()+
-#     geom_msa(data = nt.aln.tidy, seq_name = T, font=NULL, 
-#              border=NA, color="Chemistry_NT", consensus_views = T, ref = "Platypus_ZFX", )+
-#     coord_cartesian(xlim = c(start, end))+
-#     theme_minimal()+
-#     theme(axis.text = element_text(size=6),
-#           axis.title.y = element_blank(),
-#           axis.title.x = element_blank(),
-#           panel.grid = element_blank())
-#   
-#   ggsave(paste0("figure/msa_exon_", exon, ".png"),  
-#          msa.plot, dpi = 300, units = "mm", width = 170)
-# }
-
-#### Plot mammal CDS NT MSA #####
-
-# msa.nt.plot <- ggplot()+
-#   geom_msa(data = nt.aln.tidy, seq_name = T, font=NULL, 
-#            border=NA, color="Chemistry_NT", consensus_views = T, ref = "Platypus_ZFX", )+
-#   facet_msa(field = 400)+
-#   theme_minimal()+
-#   theme(axis.text = element_text(size=2),
-#         axis.title.y = element_blank(),
-#         panel.grid = element_blank())
-# 
-# ggsave(paste0("figure/msa.nt.mammal.png"),
-#        msa.nt.plot, dpi = 300, units = "mm", width = 170, height = 170)
-
 #### Test selection globally in mammals ####
 
 # ape::dnds(ape.nt.aln) # errors
@@ -444,21 +406,6 @@ exon.kaks.plot <- exon.1.3_6.kaks.pairwise.plot + exon.2.kaks.pairwise.plot + ex
 
 save.double.width("figure/exon.1_3-6.2.7.dnds.png", exon.kaks.plot, height=110)
 
-# #### Plot extended outgroup AA MSA ####
-# 
-# msa.outgroup.aln <- Biostrings::readAAMultipleAlignment("aln/outgroup/combined.aa.aln", format="fasta")
-# msa.outgroup.aln.tidy <- tidy_msa(msa.outgroup.aln)
-# 
-# msa.combined.aa.plot <- ggplot()+
-#   geom_msa(data = msa.outgroup.aln.tidy, seq_name = T, font=NULL, border=NA,
-#            consensus_views = T, ref = "Platypus_ZFX", alpha = 0.5
-#   )+
-#   labs(x = "Amino acid")+
-#   theme_minimal()+
-#   theme(axis.text = element_text(size=6),
-#         axis.title.y = element_blank(),
-#         panel.grid = element_blank())
-
 #### Identify the locations of the ZFs, 9aaTADs and NLS in the AA & NT MSAs ####
 
 locations.zf <- locate.zfs.in.alignment(combined.aa.aln.file, nt.aln.file, combined.taxa.name.order)
@@ -482,8 +429,6 @@ write_tsv(locations.NLS %>%
                           start_nt_gapped, end_nt_gapped),
           "figure/locations.NLS.tsv")
 
-#### Plot ZFs,  9aaTADs, and NLS in the mammal/outgroup AA MSA ####
-
 # We need to combine the full set of structure locations into an overlapping set
 # to be plotted in a single row. Keep those that overlap in >=5 species
 
@@ -495,10 +440,10 @@ find.common.overlaps <- function(locations.data){
   as.data.frame(ranges.9aaTAD.reduce[n.sequences.in.range>4,])
 }
 ranges.ZF.common <- find.common.overlaps(locations.zf)
-ranges.9aaTAD.common <- find.common.overlaps(locations.9aaTAD)
+# Only keep the high confidence 9aaTADs for the track
+ranges.9aaTAD.common <- find.common.overlaps(locations.9aaTAD[locations.9aaTAD$rc_score==100,])
 ranges.9aaTAD.common$label <- LETTERS[1:nrow(ranges.9aaTAD.common)]
 ranges.NLS.common <- find.common.overlaps(locations.NLS)
-
 #### Identify binding motifs of the ZFs in each species ####
 
 # PWM prediction http://zf.princeton.edu/logoMain.php
@@ -1098,7 +1043,7 @@ rodent.anc.nt <- ape::as.DNAbin(rodent.anc.nt$State)
 rodent.plus.anc.nt.aln <- rbind(as.matrix(ape.nt.aln), rodent.anc.nt)
 
 # Convert back to list and add names
-rodent.ancestor.label <- "Ancestral_post-beaver_rodent"
+rodent.ancestor.label <- "Muroidea ancestral Zfy"
 rodent.plus.anc.nt.aln <- as.list.DNAbin(rodent.plus.anc.nt.aln)
 names(rodent.plus.anc.nt.aln) <- c(names(ape.nt.aln), rodent.ancestor.label)
 
@@ -1155,55 +1100,9 @@ rodent.plus.anc.nt.msa.plot <- rodent.plus.anc.nt.msa.plot +
 
 save.double.width("figure/rodent.ancestral.nt.msa.png", rodent.plus.anc.nt.msa.plot, height = 30)
 
-#### Plot the conservation across the NT domains ####
+#### Calculate the conservation across the mammal AA domains for outgroup levels ####
 
-# Plot conservation versus structural features
-
-# Use Platypus ZFX as the outgroup?
-platypus.nt.aln <-  ggmsa::tidy_msa(msa.nt.aln) %>%
-  dplyr::filter(name=="Platypus_ZFX") %>%
-  dplyr::select(-name, position, ref_char = character)
-
-msa.nt.aln.tidy.conservation <- ggmsa::tidy_msa(msa.nt.aln) %>%
-  merge( platypus.nt.aln, by = c("position")) %>%
-  dplyr::filter(ref_char!="-") %>%
-  dplyr::mutate(matchesRef = character==ref_char) %>%
-  dplyr::group_by(position, matchesRef) %>%
-  dplyr::summarise(n = n(), fraction = n/nrow(msa.nt.aln)) %>%
-  dplyr::filter(matchesRef)
-
-plot.conservation <- function(start, end){
-  
-  conservation.y <- max(locations.zf$i) + 1.5
-  
-  ggplot(msa.nt.aln.tidy.conservation)+
-    # geom_rect(data=mouse.exons, aes( xmin = start-0.5, xmax = end+0.5, ymin=0, ymax=1, fill=exon), alpha=1)+
-    geom_rect(data = locations.zf,     aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-    geom_rect(data = locations.9aaTAD, aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
-    geom_rect(data = locations.NLS,    aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
-    
-    geom_rect(data=msa.nt.aln.tidy.conservation,  aes(xmin=position-0.5, xmax=position+0.5,  ymin=conservation.y, ymax=conservation.y+2, fill=fraction))+
-    scale_fill_viridis_c(direction = -1)+
-    # geom_line( aes(x=position, y=fraction*nrow(msa.nt.aln)))+
-    # scale_fill_manual(values = rep(c("grey", "white"), 4))+
-    coord_cartesian(xlim = c(start, end))+
-    labs(x = "Position in alignment", y = "Fraction of species with consensus nucleotide")+
-    theme_bw()+
-    theme(axis.text.y = element_blank())
-}
-
-conservation.plot.1 <- plot.conservation(1, ncol(msa.nt.aln)/3)
-conservation.plot.2 <- plot.conservation(ncol(msa.nt.aln)/3+1, (ncol(msa.nt.aln)/3)*2)
-conservation.plot.3 <- plot.conservation((ncol(msa.nt.aln)/3)*2+1, ncol(msa.nt.aln))
-
-conservation.plot <- conservation.plot.1 / conservation.plot.2 / conservation.plot.3 + patchwork::plot_layout(axis_titles = "collect_y", guides = "collect")
-save.double.width("figure/conservation_nt.png", conservation.plot, height = 150)
-
-#### Calculate the conservation across the AA domains for outgroup levels ####
-
-# Mammalian outgroup - opossum
-
-# Calculate the fraction of sequences conserved with the given outgroup
+# Calculate the fraction of AA sequences conserved with the given outgroup
 calculate.conservation <-function(aa.aln, outgroup.name){
   
   # Find the characters in the reference sequence
@@ -1237,6 +1136,7 @@ msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(combined.aa.aln,"
 msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(combined.aa.aln,"Opossum_ZFX" )
 
 # Combine the structural conservation plot with the aa tree
+# This should show all the 9aaTADs
 aa.structure.plot <- ggplot()+
   geom_tile(data = locations.zf,     aes(x=(start_gapped+end_gapped)/2,
                                          width = (end_gapped-start_gapped),
@@ -1247,6 +1147,7 @@ aa.structure.plot <- ggplot()+
                                          y=sequence,
                                          fill=as.factor(round(rc_score))),
             alpha=0.9)+
+  paletteer:::scale_fill_paletteer_d("cartography::blue.pal",dynamic = TRUE) +
   geom_tile(data = locations.NLS,     aes(x=(start_gapped+end_gapped)/2,
                                          width = (end_gapped-start_gapped),
                                          y=sequence),
@@ -1255,6 +1156,27 @@ aa.structure.plot <- ggplot()+
 aa.structure.plot <- annotate.structure.plot(aa.structure.plot, length(combined.taxa.name.order) + 1.5)
 
 save.double.width("figure/aa.structure.png", aa.structure.plot, height = 120)
+
+# Also create a trimmed down version that has only the 83, 92, 100% confidence 9aaTADs
+aa.structure.confident.plot <- ggplot()+
+  geom_tile(data = locations.zf,     aes(x=(start_gapped+end_gapped)/2,
+                                         width = (end_gapped-start_gapped),
+                                         y=sequence),
+            fill="grey", alpha=0.5)+
+  geom_tile(data = locations.9aaTAD[locations.9aaTAD$rc_score>80,],     aes(x=(start_gapped+end_gapped)/2,
+                                             width = (end_gapped-start_gapped),
+                                             y=sequence,
+                                             fill=as.factor(round(rc_score))),
+            alpha=0.9)+
+  paletteer:::scale_fill_paletteer_d("cartography::blue.pal",dynamic = TRUE) +
+  geom_tile(data = locations.NLS,     aes(x=(start_gapped+end_gapped)/2,
+                                          width = (end_gapped-start_gapped),
+                                          y=sequence),
+            fill="green", alpha=0.5)+
+  labs(fill = "RC score (%)")
+aa.structure.confident.plot <- annotate.structure.plot(aa.structure.confident.plot, length(combined.taxa.name.order) + 1.5)
+
+save.double.width("figure/aa.structure.confident.png", aa.structure.confident.plot, height = 120)
 
 
 #### Plot the conservation of hydrophobicity across mammal/outgroup AA MSA ####
@@ -1270,7 +1192,7 @@ n.taxa <- length(combined.taxa.name.order) + 1.5
 hydrophobicity.plot <- ggplot()+
   geom_tile(data=msa.aa.aln.tidy.hydrophobicity,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
   scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
-  labs(fill="Hydrophobicity (9-window smooth)")
+  labs(fill="Hydrophobicity (9 site average)")
 hydrophobicity.plot <- annotate.structure.plot(hydrophobicity.plot, n.taxa)
 save.double.width("figure/hydrophobicity.convervation.tree.png", hydrophobicity.plot, height = 120)
 

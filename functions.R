@@ -76,7 +76,8 @@ read.metadata <- function(read.fasta.output){
   # Grouping for trees
   metadata %<>%
     dplyr::mutate(group = case_when(grepl("ZFY", common.name, ignore.case=T) ~ "ZFY",
-                                    common.name %in% c("Platypus_ZFX", "Opossum_ZFX") ~ "Outgroup",
+                                    common.name %in% c("Platypus_ZFX", "Opossum_ZFX", 
+                                                       "Xenopus_ZFX.S", "Xenopus_ZFX.L", "Chicken_ZFX") ~ "Outgroup",
                                     T ~ "ZFX"))
   metadata
 }
@@ -283,8 +284,11 @@ add.exon.track <- function(y.start, y.end, ...){
   geom_rect_pattern(data = mouse.exons, aes(xmin = start_aa, xmax = end_aa, 
                                             ymin = y.start, ymax = y.end,
                                             pattern = exon==2, fill=exon), 
-                    pattern_angle = 45, pattern_density = 0.3, pattern_spacing = 0.025,
-                    pattern_frequency = 0.2, ...)
+                    pattern_angle = 45, 
+                    pattern_density = 0.5, # equal stripe widths
+                    pattern_spacing = 0.05, # enough space for text label
+                    pattern_fill = "grey", # match background color of exon
+                     ...)
 }
 # Add exon labels track to a plot
 add.exon.labels <- function(y.start, y.end, ...){
@@ -301,7 +305,7 @@ annotate.structure.plot <- function(plot, n.taxa){
     # Draw the conservation with Xenopus, chicken and opossum
     new_scale_fill()+
     scale_fill_viridis_c(limits = c(0, 1))+
-    labs(fill="Conservation (9-window smooth)")+
+    labs(fill="Conservation (9 site average)")+
     add.conservation.track(msa.aa.aln.tidy.frog.conservation,    n.taxa,   n.taxa+2)+
     add.conservation.track(msa.aa.aln.tidy.chicken.conservation, n.taxa+3, n.taxa+5)+
     add.conservation.track(msa.aa.aln.tidy.opossum.conservation, n.taxa+6, n.taxa+8)+
@@ -309,19 +313,19 @@ annotate.structure.plot <- function(plot, n.taxa){
     # Draw the structures
     add.track(ranges.ZF.common,     n.taxa+9, n.taxa+11, fill="lightgrey")+
     add.track(ranges.NLS.common,    n.taxa+9, n.taxa+11, fill="green", alpha = 0.5)+
-    add.track(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, fill="blue",  alpha = 0.5)+
+    add.track(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, fill="#19506F",  alpha = 0.9)+
     add.track.labels(ranges.9aaTAD.common, n.taxa+9, n.taxa+11)+   # Label the 9aaTADs
     
     new_scale_fill()+
     scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
-    scale_pattern_fill_manual(values=c("white", "grey"))+
-    scale_pattern_fill2_manual(values=c("black", "white"))+
-    scale_pattern_manual(values = c("none", "stripe")) +
+    scale_pattern_color_manual(values=c("white", "white"))+
+
+    scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
     guides(fill = "none", pattern="none")+
-    add.exon.track(n.taxa+12, n.taxa+14, col = "black")+
+    add.exon.track(n.taxa+12, n.taxa+14, col = "black")+ # color of border
     add.exon.labels(n.taxa+12, n.taxa+14)+
     
-    scale_x_continuous(expand = c(0, 0))+
+    scale_x_continuous(expand = c(0, 0), breaks = seq(0, 950, 50))+
     coord_cartesian(xlim = c(0, max(msa.aa.aln.tidy.frog.conservation$position)))+
     theme_bw()+
     theme(axis.text.y = element_blank(),
@@ -329,8 +333,10 @@ annotate.structure.plot <- function(plot, n.taxa){
           axis.ticks.y = element_blank(),
           axis.text.x = element_text(size=6),
           legend.position = "top",
-          legend.title = element_text(size = 6, vjust = 0.7),
+          legend.title = element_text(size = 6, vjust = 0.85),
           legend.text = element_text(size = 6),
+          legend.key.height = unit(3, "mm"),
+          legend.spacing.y = unit(2, "mm"),
           panel.grid = element_blank())
   
   # Add the tree with the outgroups
