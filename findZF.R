@@ -7,10 +7,11 @@
 # Returns - a tibble with ZFs, their coordinates in the sequence, and the
 # sequence name. If the input contains gaps ("-"),
 # the coordinates will be with respect to the gapped alignment.
-find.zf <- function(aa, sequence.name){
+find.zf <- function(aa, sequence.name, start, end){
   if(!require(dplyr)) stop("dplyr is required")
-
-  zf.regex <- ".C(.{2,4}?)C.{12}H(.{3,5}?)H"
+  # zf.regex <- ".C(.{2,4}?)C.{12}H(.{3,5}?)H"
+  
+  aa <- aa@unmasked[[sequence.name]]
   
   # Convert ungapped coordinates back to gapped
   # site.no.gap - the integer site in an ungapped sequence to convert
@@ -35,8 +36,7 @@ find.zf <- function(aa, sequence.name){
   
   # Get the location of the hits in the ungapped sequence and correct for
   # alignment gaps
-  str_locate_all(aa.char.nogap, zf.regex) %>%
-    as.data.frame %>%
+  data.frame("sequence" = sequence.name, "start" = start, "end" = end) %>%
     dplyr::rowwise() %>%
     dplyr::rename(start_ungapped = start,
                   end_ungapped   = end) %>%

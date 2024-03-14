@@ -351,10 +351,22 @@ locate.zfs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
   aa.aln <- Biostrings::readAAMultipleAlignment(aa.alignment.file, format="fasta")
   nt.aln <- Biostrings::readDNAMultipleAlignment(nt.alignment.file, format="fasta")
   
+  # Run the prediction from pwm_predict
+  system2("hmmsearch", "--domtblout pwm/combined.aa.hmm.dom.txt  bin/pwm_predict/zf_C2H2.ls.hmm fasta/combined.aa.fas")
+  
+  # Parse the resulting table
+  zf.data <- read_table("pwm/combined.aa.hmm.dom.txt", comment = "#",
+             col_names = FALSE)
+  zf.data <- zf.data[,c(1, 20, 21)]
+  colnames(zf.data) <- c("sequence", "start_ungapped", "end_ungapped")
+
   # Find ZFs in each aa sequence, then find the gapped coordinates in the nt alignment
-  do.call(rbind, mapply(find.zf, aa=aa.aln@unmasked, 
-                                        sequence.name = names(aa.aln@unmasked), 
-                                        SIMPLIFY = FALSE)) %>%
+  do.call(rbind, mapply(find.zf, 
+                        sequence.name = zf.data$sequence, 
+                        start = zf.data$start_ungapped,
+                        end = zf.data$end_ungapped,
+                        MoreArgs = list(aa=aa.aln),
+                        SIMPLIFY = FALSE)) %>%
     dplyr::mutate(sequence = factor(sequence, 
                                     levels = rev(taxa.order))) %>% # sort reverse to match tree
     dplyr::rowwise() %>%

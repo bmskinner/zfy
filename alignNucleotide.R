@@ -501,7 +501,7 @@ locations.NLS %>%
 if(!installr::is.windows()){
   old.wd <- getwd()
   setwd("./bin/pwm_predict")
-  system2("./pwm_predict", "../../fasta/combined.aa.fas")
+  system2("./pwm_predict", "-l 20 ../../fasta/combined.aa.fas") # ensure all ZFs linked
   setwd(old.wd)
   filesstrings::move_files(files = c("fasta/combined.aa.pwm"),
                            destinations = c("pwm"),
