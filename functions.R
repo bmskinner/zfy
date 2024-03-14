@@ -28,7 +28,7 @@ load.packages <- function(){
   cran.packages <- c("tidyverse", "ape", "filesstrings", "seqinr", "phangorn",
                      "installr","treespace", "httr", "seqLogo", "assertthat", "aplot",
                      "paletteer", "ggnewscale", "slider", "BiocManager",
-                     "remotes", "patchwork", "ggpattern")
+                     "remotes", "patchwork", "ggpattern", "xlsx")
   
   sapply(cran.packages, install.cran)
   
@@ -313,7 +313,7 @@ annotate.structure.plot <- function(plot, n.taxa){
     # Draw the structures
     add.track(ranges.ZF.common,     n.taxa+9, n.taxa+11, fill="lightgrey")+
     add.track(ranges.NLS.common,    n.taxa+9, n.taxa+11, fill="green", alpha = 0.5)+
-    add.track(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, fill="#19506F",  alpha = 0.9)+
+    add.track(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, fill="#00366C",  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
     add.track.labels(ranges.9aaTAD.common, n.taxa+9, n.taxa+11)+   # Label the 9aaTADs
     
     new_scale_fill()+
@@ -337,6 +337,7 @@ annotate.structure.plot <- function(plot, n.taxa){
           legend.text = element_text(size = 6),
           legend.key.height = unit(3, "mm"),
           legend.spacing.y = unit(2, "mm"),
+          legend.box.spacing = unit(2, "mm"),
           panel.grid = element_blank())
   
   # Add the tree with the outgroups
@@ -365,7 +366,9 @@ locate.zfs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
                                             NA),
                   end_nt_gapped = ifelse( sequence %in% names(msa.nt.aln@unmasked), # we have the nt alignment
                                           convert.to.gapped.coordinate(end_nt_ungapped,  nt.aln@unmasked[[sequence]]),
-                                          NA))
+                                          NA)) %>%
+    # Add the actual AA sequence covered by the ZF
+    dplyr::mutate(aa_motif = gsub("-", "", aa.aln@unmasked[[sequence]][start_gapped:end_gapped]))
 }
 
 locate.9aaTADs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.order){
@@ -376,6 +379,7 @@ locate.9aaTADs.in.alignment <- function(aa.alignment.file, nt.alignment.file, ta
   do.call(rbind, mapply(find.9aaTAD, aa=aa.aln@unmasked, 
                         sequence.name = names(aa.aln@unmasked),
                         rc.threshold=0, SIMPLIFY = FALSE)) %>%
+    dplyr::rename(aa_motif = hit) %>%
     dplyr::ungroup() %>%
     dplyr::mutate(sequence = factor(sequence, levels = rev(taxa.order))) %>% # sort reverse to match tree
     dplyr::rowwise() %>%
@@ -411,7 +415,7 @@ locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
   }
   # Read in the NLS prections
   locations.NLS <- read_table("nls/combined.aa.nls.filt.out", 
-                              col_names = c("sequence", "type", "posterior_prob", "start_ungapped", "end_ungapped", "aa"))
+                              col_names = c("sequence", "type", "posterior_prob", "start_ungapped", "end_ungapped", "aa_motif"))
   
   # Adjust the raw sequences to their positions in aa msa
   locations.NLS$start_gapped <- sapply(1:nrow(locations.NLS),

@@ -414,17 +414,17 @@ locations.NLS <- locate.NLS.in.alignment(combined.aa.aln.file, nt.aln.file, comb
 
 # Export the locations of the  ZFs,  9aaTADs, and NLS
 write_tsv(locations.zf %>% 
-            dplyr::select(sequence, start_ungapped, end_ungapped, 
+            dplyr::select(sequence, aa_motif, start_ungapped, end_ungapped, 
                           start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
                           start_nt_gapped, end_nt_gapped),
           "figure/locations.zf.tsv")
 write_tsv(locations.9aaTAD %>% 
-            dplyr::select(sequence, hit, rc_score, start_ungapped, end_ungapped, 
+            dplyr::select(sequence, aa_motif, rc_score, start_ungapped, end_ungapped, 
                           start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
                           start_nt_gapped, end_nt_gapped),
           "figure/locations.9aaTAD.tsv")
 write_tsv(locations.NLS %>% 
-            dplyr::select(sequence, aa, type, posterior_prob, start_ungapped, end_ungapped, 
+            dplyr::select(sequence, aa_motif, type, posterior_prob, start_ungapped, end_ungapped, 
                           start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
                           start_nt_gapped, end_nt_gapped),
           "figure/locations.NLS.tsv")
@@ -435,15 +435,64 @@ write_tsv(locations.NLS %>%
 find.common.overlaps <- function(locations.data){
   ranges.9aaTAD <- IRanges(start=locations.data$start_gapped, end = locations.data$end_gapped, names = locations.data$sequence)
   ranges.9aaTAD.reduce <- IRanges::reduce(ranges.9aaTAD)
-  findOverlaps(ranges.9aaTAD, ranges.9aaTAD.reduce)
+
   n.sequences.in.range <- sapply(1:length(ranges.9aaTAD.reduce), function(i) length(subsetByOverlaps(ranges.9aaTAD, ranges.9aaTAD.reduce[i,])))
-  as.data.frame(ranges.9aaTAD.reduce[n.sequences.in.range>4,])
+  as.data.frame(ranges.9aaTAD.reduce[n.sequences.in.range>4,]) %>%
+    dplyr::mutate(motif_number = row_number())
 }
 ranges.ZF.common <- find.common.overlaps(locations.zf)
 # Only keep the high confidence 9aaTADs for the track
 ranges.9aaTAD.common <- find.common.overlaps(locations.9aaTAD[locations.9aaTAD$rc_score==100,])
 ranges.9aaTAD.common$label <- LETTERS[1:nrow(ranges.9aaTAD.common)]
 ranges.NLS.common <- find.common.overlaps(locations.NLS)
+
+find.matching.range <-function(start, end, ranges){
+  hit <- ranges[ranges$start<=start & ranges$end>=end,]$motif_number
+  if(length(hit)==0) 0 else hit
+}
+
+# Annotate the individual ZFs, 9aaTADs and NLS with which consensus motif they belong to (0 if none)
+locations.zf %<>% 
+  dplyr::rowwise() %>%
+  dplyr::mutate(motif_number = find.matching.range(start_gapped, end_gapped, ranges.ZF.common )) %>%
+  dplyr::ungroup()
+
+locations.9aaTAD %<>% 
+  dplyr::rowwise() %>%
+  dplyr::mutate(motif_number = find.matching.range(start_gapped, end_gapped, ranges.9aaTAD.common )) %>%
+  dplyr::ungroup()
+
+locations.NLS %<>% 
+  dplyr::rowwise() %>%
+  dplyr::mutate(motif_number = find.matching.range(start_gapped, end_gapped, ranges.NLS.common )) %>%
+  dplyr::ungroup()
+
+#### Export the residues within each ZF and 9aaTAD
+
+locations.zf %>%
+  dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
+  dplyr::mutate(motif_number = paste0("ZF_", motif_number)) %>%
+  tidyr::pivot_wider(id_cols = Sequence, names_from = motif_number, values_from = aa_motif) %>%
+  as.data.frame %>%
+  xlsx::write.xlsx(., file="figure/locations.zf.xlsx", showNA = FALSE, row.names = FALSE)
+
+locations.9aaTAD %>%
+  dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
+  dplyr::filter(motif_number >0) %>%
+  dplyr::mutate(motif_number = paste0("9aaTAD_", motif_number)) %>%
+  tidyr::pivot_wider(id_cols = c(Sequence), names_from = motif_number, 
+                     values_from = aa_motif, values_fn = ~paste(.x, collapse = ", ")) %>%
+  as.data.frame %>%
+  xlsx::write.xlsx(., file="figure/locations.9aaTAD.xlsx", showNA = FALSE, row.names = FALSE)
+
+locations.NLS %>%
+  dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
+  dplyr::mutate(motif_number = paste0("NLS_", motif_number)) %>%
+  tidyr::pivot_wider(id_cols = Sequence, names_from = motif_number, values_from = aa_motif,
+                     values_fn = ~paste(.x, collapse = ", ")) %>%
+  as.data.frame %>%
+  xlsx::write.xlsx(., file="figure/locations.NLS.xlsx", showNA = FALSE, row.names = FALSE)
+
 #### Identify binding motifs of the ZFs in each species ####
 
 # PWM prediction http://zf.princeton.edu/logoMain.php
@@ -1145,14 +1194,13 @@ aa.structure.plot <- ggplot()+
   geom_tile(data = locations.9aaTAD,     aes(x=(start_gapped+end_gapped)/2,
                                          width = (end_gapped-start_gapped),
                                          y=sequence,
-                                         fill=as.factor(round(rc_score))),
+                                         fill=round(rc_score)),
             alpha=0.9)+
-  paletteer:::scale_fill_paletteer_d("cartography::blue.pal",dynamic = TRUE) +
+  paletteer::scale_fill_paletteer_c("grDevices::Blues 3", "9aaTAD RC score (%)", direction = -1, limits = c(50, 100)) +
   geom_tile(data = locations.NLS,     aes(x=(start_gapped+end_gapped)/2,
                                          width = (end_gapped-start_gapped),
                                          y=sequence),
-            fill="green", alpha=0.5)+
-  labs(fill = "RC score (%)")
+            fill="green", alpha=0.5)
 aa.structure.plot <- annotate.structure.plot(aa.structure.plot, length(combined.taxa.name.order) + 1.5)
 
 save.double.width("figure/aa.structure.png", aa.structure.plot, height = 120)
@@ -1166,14 +1214,13 @@ aa.structure.confident.plot <- ggplot()+
   geom_tile(data = locations.9aaTAD[locations.9aaTAD$rc_score>80,],     aes(x=(start_gapped+end_gapped)/2,
                                              width = (end_gapped-start_gapped),
                                              y=sequence,
-                                             fill=as.factor(round(rc_score))),
+                                             fill=round(rc_score)),
             alpha=0.9)+
-  paletteer:::scale_fill_paletteer_d("cartography::blue.pal",dynamic = TRUE) +
+  paletteer::scale_fill_paletteer_c("grDevices::Blues 3", "9aaTAD RC score (%)", direction = -1, limits = c(50, 100)) +
   geom_tile(data = locations.NLS,     aes(x=(start_gapped+end_gapped)/2,
                                           width = (end_gapped-start_gapped),
                                           y=sequence),
-            fill="green", alpha=0.5)+
-  labs(fill = "RC score (%)")
+            fill="green", alpha=0.5)
 aa.structure.confident.plot <- annotate.structure.plot(aa.structure.confident.plot, length(combined.taxa.name.order) + 1.5)
 
 save.double.width("figure/aa.structure.confident.png", aa.structure.confident.plot, height = 120)
