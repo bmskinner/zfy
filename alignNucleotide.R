@@ -532,14 +532,25 @@ set.rich.text.on.vv <- function(wb, sh, col.index){
   }
 }
 
-
-
+# Full ZF motifs
 locations.zf %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
+  dplyr::arrange(desc(motif_number)) %>% # so we display 13 - 1
   dplyr::mutate(motif_number = paste0("ZF_", motif_number)) %>%
   tidyr::pivot_wider(id_cols = Sequence, names_from = motif_number, values_from = aa_motif) %>%
   as.data.frame %>%
+  dplyr::arrange(as.integer(Sequence)) %>%
   create.xlsx(., "figure/locations.zf.xlsx", cols.to.fixed.size.font = 2:14)
+
+# Just the ZF contact bases
+locations.zf %>%
+  dplyr::select(Sequence = sequence, motif_number, contact_bases) %>%
+  dplyr::arrange(desc(motif_number)) %>% # so we display 13 - 1
+  dplyr::mutate(motif_number = paste0("ZF_", motif_number)) %>%
+  tidyr::pivot_wider(id_cols = Sequence, names_from = motif_number, values_from = contact_bases) %>%
+  as.data.frame %>%
+  dplyr::arrange(as.integer(Sequence)) %>%
+  create.xlsx(., "figure/locations.zf.contact_bases.xlsx", cols.to.fixed.size.font = 2:14)
 
 locations.9aaTAD %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
@@ -569,6 +580,8 @@ locations.NLS %>%
   tidyr::pivot_wider(id_cols = Sequence, names_from = motif_number, values_from = aa_motif,
                      values_fn = ~paste(.x, collapse = ", ")) %>%
   as.data.frame %>%
+  dplyr::arrange(as.integer(Sequence)) %>%
+  dplyr::
   create.xlsx(., "figure/locations.NLS.xlsx", cols.to.fixed.size.font = 2:4)
 
 #### Identify binding motifs of the ZFs in each species ####

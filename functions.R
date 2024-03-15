@@ -380,7 +380,14 @@ locate.zfs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
                                           convert.to.gapped.coordinate(end_nt_ungapped,  nt.aln@unmasked[[sequence]]),
                                           NA)) %>%
     # Add the actual AA sequence covered by the ZF
-    dplyr::mutate(aa_motif = gsub("-", "", aa.aln@unmasked[[sequence]][start_gapped:end_gapped]))
+    dplyr::mutate(aa_motif = gsub("-", "", aa.aln@unmasked[[sequence]][start_gapped:end_gapped]),
+                                                                             # 6    32  -1
+                  # find the contact motif within the ZF (if available) .*H.{3}H(.)..(..).(.).{5}C..C.*
+                  # via https://genomebiology.biomedcentral.com/articles/10.1186/s13059-017-1287-y
+                  # but reverse to match our sequences : C..C.{5}(.).(..)..(.)H.{3}.H
+                  contact_bases = paste(str_match(aa_motif, "C..C.....(.).(..)..(.)H.{3,4}")[,2:4], collapse = "" ),
+                  contact_bases = ifelse(contact_bases=="NANANA", NA, contact_bases)
+                  )
 }
 
 locate.9aaTADs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.order){
