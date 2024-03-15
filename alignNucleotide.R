@@ -9,6 +9,7 @@
 # Other binaries are expected on the PATH:
 # PAML
 # IQ-TREE
+# hmmsearch (HMMR v3.3)
 
 # HyPhy is a python package installed into a conda environment:
 # conda create -n hyphy # create conda environment
@@ -469,21 +470,98 @@ locations.NLS %<>%
 
 #### Export the residues within each ZF and 9aaTAD
 
+# Create an Excel file with column filtering
+create.xlsx = function(data, file.name, cols.to.fixed.size.font, cols.to.rich.text = NULL){
+  oldOpt = options()
+  options(xlsx.date.format="yyyy-mm-dd") # change date format
+  wb = xlsx::createWorkbook(type = "xlsx")
+  sh = xlsx::createSheet(wb)
+  xlsx::addDataFrame(data, sh, row.names = F)
+  cols.to.filter = paste0("A1:", LETTERS[ncol(data)], "1")
+  xlsx::addAutoFilter(sh, cols.to.filter)
+  xlsx::createFreezePane(sh, 2, 2, 2, 2) # freeze top row and first column
+  cs <- xlsx::CellStyle(wb) + 
+    xlsx::Font(wb,heightInPoints = 10, isBold = FALSE, name="Courier New")
+  for(i in xlsx::getCells(xlsx::getRows(sh), colIndex=cols.to.fixed.size.font)){
+    xlsx::setCellStyle(i, cs)
+  }
+  
+  if(!is.null(cols.to.rich.text)) {
+   for(col in cols.to.rich.text) set.rich.text.on.vv(wb, sh, col)
+
+  }
+  xlsx::autoSizeColumn(sh, 1:ncol(data))
+  xlsx::saveWorkbook(wb, file=file.name)
+  options(oldOpt)
+}
+
+set.rich.text.on.vv <- function(wb, sh, col.index){
+  
+  normal.font.ref <-  xlsx::Font(wb, heightInPoints = 10, isBold=FALSE, name = "Courier New")$ref
+  highlight.font.ref <- xlsx::Font(wb, heightInPoints = 10, color="red", isBold=TRUE,  name = "Courier New")$ref
+  
+  for(cell in xlsx::getCells(xlsx::getRows(sh), colIndex=col.index)){
+    
+    oldval <- xlsx::getCellValue(cell)
+    vv.locs <- str_locate_all(oldval, "VV")
+    
+    if( nrow(vv.locs[[1]]) > 0 ){
+      
+      # Create a rich text string
+      new.value <- rJava::.jnew("org/apache/poi/xssf/usermodel/XSSFRichTextString",
+                                oldval )
+      
+      # Set entire cell to normal style
+      rJava::.jcall(obj=new.value, returnSig = "V",  # void return
+                    method="applyFont", normal.font.ref)
+      
+      for(r in 1:nrow(vv.locs[[1]])){
+        # Apply the new font to the correct indexes (0-indexed inclusive)
+        rJava::.jcall(obj=new.value,returnSig = "V",  # void return
+                      method="applyFont", 
+                      as.integer(vv.locs[[1]][r,1]-1), # start index
+                      as.integer(vv.locs[[1]][r,2]), # end index
+                      highlight.font.ref)
+      }
+      
+      
+      # Set the new cell value and cast to a rich text string
+      rJava::.jcall(cell, "V", "setCellValue",
+                    rJava::.jcast(new.value, "org/apache/poi/ss/usermodel/RichTextString"))
+    }
+  }
+}
+
+
+
 locations.zf %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
   dplyr::mutate(motif_number = paste0("ZF_", motif_number)) %>%
   tidyr::pivot_wider(id_cols = Sequence, names_from = motif_number, values_from = aa_motif) %>%
   as.data.frame %>%
-  xlsx::write.xlsx(., file="figure/locations.zf.xlsx", showNA = FALSE, row.names = FALSE)
+  create.xlsx(., "figure/locations.zf.xlsx", cols.to.fixed.size.font = 2:14)
 
 locations.9aaTAD %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
   dplyr::filter(motif_number >0) %>%
-  dplyr::mutate(motif_number = paste0("9aaTAD_", motif_number)) %>%
+  dplyr::mutate(motif_number = paste0("9aaTAD_", LETTERS[motif_number])) %>%
+  # summarise unique motifs
+  dplyr::group_by(motif_number, aa_motif) %>%
+  dplyr::summarise(Count = n(),
+                   Sequences =case_when(Count > 6 ~ "Others",
+                   .default = paste(Sequence, collapse = ", ")))%>%
+  as.data.frame %>%
+  create.xlsx(., "figure/locations.9aaTAD.unique.xlsx", cols.to.fixed.size.font = 2, cols.to.rich.text = 2)
+
+locations.9aaTAD %>%
+  dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
+  dplyr::filter(motif_number >0) %>%
+  dplyr::mutate(motif_number = paste0("9aaTAD_", LETTERS[motif_number])) %>%
   tidyr::pivot_wider(id_cols = c(Sequence), names_from = motif_number, 
                      values_from = aa_motif, values_fn = ~paste(.x, collapse = ", ")) %>%
   as.data.frame %>%
-  xlsx::write.xlsx(., file="figure/locations.9aaTAD.xlsx", showNA = FALSE, row.names = FALSE)
+  create.xlsx(., "figure/locations.9aaTAD.xlsx", cols.to.fixed.size.font = 2:5, 
+              cols.to.rich.text = 2:5)
 
 locations.NLS %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
@@ -491,24 +569,22 @@ locations.NLS %>%
   tidyr::pivot_wider(id_cols = Sequence, names_from = motif_number, values_from = aa_motif,
                      values_fn = ~paste(.x, collapse = ", ")) %>%
   as.data.frame %>%
-  xlsx::write.xlsx(., file="figure/locations.NLS.xlsx", showNA = FALSE, row.names = FALSE)
+  create.xlsx(., "figure/locations.NLS.xlsx", cols.to.fixed.size.font = 2:4)
 
 #### Identify binding motifs of the ZFs in each species ####
 
 # PWM prediction http://zf.princeton.edu/logoMain.php
 # predict the ZF targets in each sequence via pwm_predict (http://zf.princeton.edu/download2.php)
+old.wd <- getwd()
+setwd("./bin/pwm_predict")
+system2("./pwm_predict", "-l 20 ../../fasta/combined.aa.fas") # ensure all ZFs linked
+setwd(old.wd)
+filesstrings::move_files(files = c("fasta/combined.aa.pwm"),
+                         destinations = c("pwm"),
+                         overwrite = TRUE)
+# Remove header and split the output PWMs to separate files
+system2("cat", "pwm/combined.aa.pwm | grep -v ';' | split -l 5 - pwm/zf_")
 
-if(!installr::is.windows()){
-  old.wd <- getwd()
-  setwd("./bin/pwm_predict")
-  system2("./pwm_predict", "-l 20 ../../fasta/combined.aa.fas") # ensure all ZFs linked
-  setwd(old.wd)
-  filesstrings::move_files(files = c("fasta/combined.aa.pwm"),
-                           destinations = c("pwm"),
-                           overwrite = TRUE)
-  # Remove header and split the output PWMs to separate files
-  system2("cat", "pwm/combined.aa.pwm | grep -v ';' | split -l 5 - pwm/zf_")
-}
 
 # Read each file, get headers and PWMs
 pwm.files <- list.files("pwm", pattern = "zf_", full.names = T)
@@ -532,10 +608,7 @@ pwm.predictions <- do.call(rbind, lapply(pwm.files, read.pwm)) %>%
   dplyr::group_by(zf_target_1, zf_target_2) %>%
   dplyr::summarise(total = n(), sequences = paste(sequence, collapse = ", ")) %>%
   dplyr::mutate(sequences = ifelse(total>40, "All others", sequences))
-
-
 write_tsv(pwm.predictions, "figure/zf_targets.tsv")
-
 
 #### Fetch divergence times to highlight the rapid evolution in the rodents ####
 
