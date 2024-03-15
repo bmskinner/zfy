@@ -1350,6 +1350,43 @@ save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 1
 structure.plot <- (aa.structure.plot) / (hydrophobicity.plot) / (charge.plot) + plot_layout(ncol = 1)
 save.double.width("figure/structure.plot.png", structure.plot, height = 230)
 
+#### What are the hydrophobic patches in exons 3 and 5 that are not 9aaTADs?
+
+exon3.patch <- msa.aa.aln.tidy.hydrophobicity %>%
+  dplyr::filter(position_gapped>mouse.exons$start_aa[3]+42 & position_gapped<mouse.exons$end_aa[3]-2)
+
+exon3.hydro.plot <- ggplot()+
+  # Draw the charges per sequence
+  geom_tile(data=exon3.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
+  labs(fill="Hydrophobicity (9 site average)")
+
+# Get the region from the msa
+exon3.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  function(i) list("Sequence" = i, "exon_3_285-305"= as.character(msa.aa.aln@unmasked[[i]][285:305])))) %>%
+  as.data.frame %>%
+  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+  dplyr::arrange(as.integer(Sequence))
+
+exon5.patch <- msa.aa.aln.tidy.hydrophobicity %>%
+  dplyr::filter(position_gapped>mouse.exons$start_aa[5]+38 & position_gapped<mouse.exons$end_aa[5]+3)
+exon5.hydro.plot <- ggplot()+
+  # Draw the charges per sequence
+  geom_tile(data=exon5.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
+  labs(fill="Hydrophobicity (9 site average)")
+
+exon5.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  function(i) list("Sequence" = i, "exon_5_399-418"= as.character(msa.aa.aln@unmasked[[i]][399:418])))) %>%
+  as.data.frame %>%
+  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+  dplyr::arrange(as.integer(Sequence))
+
+exon.patch.table <- merge(exon3.patch.table, exon5.patch.table, by=c("Sequence")) %>%
+  create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:3)
+
+# Get consensus strings for the two patches
+paste(s2c(consensusString(msa.aa.aln))[285:305], collapse = "")
+paste(s2c(consensusString(msa.aa.aln))[399:418], collapse = "")
+
 #### ####
 
 
