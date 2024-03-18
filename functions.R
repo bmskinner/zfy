@@ -32,14 +32,15 @@ load.packages <- function(){
   
   sapply(cran.packages, install.cran)
   
-  github.packages <- c('YuLab-SMU/ggtree', # since ggtree cannot install in Bioconductor 3.15 on cluster
-                       "vragh/seqvisr", "vmikk/metagMisc")
+  github.packages <- c('YuLab-SMU/ggtree' # since ggtree cannot install in Bioconductor 3.15 on cluster
+                        )#"vragh/seqvisr", "vmikk/metagMisc"
   sapply(github.packages, install.github)
   
   bioconductor.packages <- c("msa", "ggmsa", "treeio")
   sapply(bioconductor.packages, install.bioconductor)
   return()
 }
+load.packages() # load on source
 
 # Read the given FASTA file and extract metadata
 # Returns as a list containing FA sequence and metadata dataframe
@@ -379,23 +380,24 @@ locate.zfs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
                   end_nt_gapped = ifelse( sequence %in% names(msa.nt.aln@unmasked), # we have the nt alignment
                                           convert.to.gapped.coordinate(end_nt_ungapped,  nt.aln@unmasked[[sequence]]),
                                           NA)) %>%
-    # Add the actual AA sequence covered by the ZF
+    # Add the AA sequence covered by the ZF and motifs
     dplyr::mutate(aa_motif = gsub("-", "", aa.aln@unmasked[[sequence]][start_gapped:end_gapped]),
                                                                              # 6    32  -1
                   # find the contact motif within the ZF (if available) .*H.{3}H(.)..(..).(.).{5}C..C.*
                   # via https://genomebiology.biomedcentral.com/articles/10.1186/s13059-017-1287-y
-                  # but reverse to match our sequences : C..C.{5}(.).(..)..(.)H.{3}.H
+                  # but reverse to match our sequences : C..C.{5}(.).(..)..(.)H.{3,4}.H
                   contact_bases = paste(str_match(aa_motif, "C..C.....(.).(..)..(.)H.{3,4}")[,2:4], collapse = "" ),
-                  contact_bases = ifelse(contact_bases=="NANANA", NA, contact_bases)
+                  contact_bases = ifelse(contact_bases=="NANANA", NA, contact_bases) # clean up NAs
                   )
 }
 
+# Identify 9aaTADs and group overlapping TADS above a given rc threshold into 'superTADs'
 locate.9aaTADs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.order){
   aa.aln <- Biostrings::readAAMultipleAlignment(aa.alignment.file, format="fasta")
   nt.aln <- Biostrings::readDNAMultipleAlignment(nt.alignment.file, format="fasta")
   
   # Find ZFs in each aa sequence, then find the gapped coordinates in the nt alignment
-  do.call(rbind, mapply(find.9aaTAD, aa=aa.aln@unmasked, 
+ do.call(rbind, mapply(find.9aaTAD, aa=aa.aln@unmasked, 
                         sequence.name = names(aa.aln@unmasked),
                         rc.threshold=0, SIMPLIFY = FALSE)) %>%
     dplyr::rename(aa_motif = hit) %>%
@@ -410,7 +412,8 @@ locate.9aaTADs.in.alignment <- function(aa.alignment.file, nt.alignment.file, ta
                                             NA),
                   end_nt_gapped = ifelse( sequence %in% names(nt.aln@unmasked), # we have the nt alignment
                                           convert.to.gapped.coordinate(end_nt_ungapped,  nt.aln@unmasked[[sequence]]),
-                                          NA))
+                                          NA)) %>%
+    dplyr::group_by(sequence)
 }
 
 locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.order){

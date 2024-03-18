@@ -430,9 +430,44 @@ write_tsv(locations.NLS %>%
                           start_nt_gapped, end_nt_gapped),
           "figure/locations.NLS.tsv")
 
+# For 9aaTADs, we want to combine overlapping 9aaTADs into a single wider region,
+# but only for those TADs that are in 5 or more species (otherwise we will collapse
+# separate interesting regions into one superTAD). Use overall coverage along the sequence
+# to separate the regions
+find.common.9aaTADs <- function(locations.9aaTAD){
+  
+  # We only want to use the high confidence 9aaTADs, and ignore the site in exon 7
+  tads.filtered <- locations.9aaTAD[locations.9aaTAD$rc_score>=80 & locations.9aaTAD$end_gapped < mouse.exons$start_aa[7],]
+  
+  # Make ranges from all of the TADs with >80% RC
+  tad.ranges <- IRanges(start = tads.filtered$start_gapped, end = tads.filtered$end_gapped, names = tads.filtered$sequence)
+  
+  # For each base in the gapped aa alignment, count overlapping TADs
+  count.overlapping.tads <- function(site){
+    site.range <- IRanges(start = site, end=site)
+    IRanges::countOverlaps(site.range, tad.ranges)
+  }
+  
+  tad.coverages <- data.frame("site" = 1:max(tads.filtered$end_gapped))
+  tad.coverages$coverage <- sapply(tad.coverages$site, count.overlapping.tads)
+  tad.coverages <- tad.coverages[tad.coverages$coverage>20,]
+  
+  # For high-coverage 9aaTADs, reduce to overlapping ranges
+  
+  tad.coverages.ranges <- IRanges(IRanges(start =  tad.coverages$site, end =  tad.coverages$site))
+  reduced.ranges<- IRanges::reduce(tad.coverages.ranges)
+  as.data.frame(reduced.ranges) %>%
+    dplyr::mutate(motif_number = row_number(),
+                  adj.motif.number = ifelse(motif_number>4, motif_number-1, motif_number),
+                  # For labels, we want D1, D2, E ..., not D, E, F ...
+                  label = case_when(motif_number==4 ~ paste0(LETTERS[adj.motif.number], 1),
+                                    motif_number==5 ~ paste0(LETTERS[adj.motif.number], 2),
+                                    .default = LETTERS[adj.motif.number] )) %>%
+    dplyr::select(-adj.motif.number)
+}
+
 # We need to combine the full set of structure locations into an overlapping set
 # to be plotted in a single row. Keep those that overlap in >=5 species
-
 find.common.overlaps <- function(locations.data){
   ranges.9aaTAD <- IRanges(start=locations.data$start_gapped, end = locations.data$end_gapped, names = locations.data$sequence)
   ranges.9aaTAD.reduce <- IRanges::reduce(ranges.9aaTAD)
@@ -443,9 +478,11 @@ find.common.overlaps <- function(locations.data){
 }
 ranges.ZF.common <- find.common.overlaps(locations.zf)
 # Only keep the high confidence 9aaTADs for the track
-ranges.9aaTAD.common <- find.common.overlaps(locations.9aaTAD[locations.9aaTAD$rc_score==100,])
-ranges.9aaTAD.common$label <- LETTERS[1:nrow(ranges.9aaTAD.common)]
+ranges.9aaTAD.common<- find.common.9aaTADs(locations.9aaTAD)
+
 ranges.NLS.common <- find.common.overlaps(locations.NLS)
+
+
 
 find.matching.range <-function(start, end, ranges){
   hit <- ranges[ranges$start<=start & ranges$end>=end,]$motif_number
@@ -458,10 +495,11 @@ locations.zf %<>%
   dplyr::mutate(motif_number = find.matching.range(start_gapped, end_gapped, ranges.ZF.common )) %>%
   dplyr::ungroup()
 
-locations.9aaTAD %<>% 
+locations.9aaTAD %<>%
   dplyr::rowwise() %>%
   dplyr::mutate(motif_number = find.matching.range(start_gapped, end_gapped, ranges.9aaTAD.common )) %>%
-  dplyr::ungroup()
+  dplyr::ungroup() %>%
+  merge(., ranges.9aaTAD.common, by = "motif_number", all.x = TRUE)
 
 locations.NLS %<>% 
   dplyr::rowwise() %>%
@@ -552,27 +590,76 @@ locations.zf %>%
   dplyr::arrange(as.integer(Sequence)) %>%
   create.xlsx(., "figure/locations.zf.contact_bases.xlsx", cols.to.fixed.size.font = 2:14)
 
+# All unique 9aaTADs
 locations.9aaTAD %>%
-  dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
-  dplyr::filter(motif_number >0) %>%
-  dplyr::mutate(motif_number = paste0("9aaTAD_", LETTERS[motif_number])) %>%
+  dplyr::select(Sequence = sequence, label, aa_motif) %>%
   # summarise unique motifs
-  dplyr::group_by(motif_number, aa_motif) %>%
+  dplyr::group_by(label, aa_motif) %>%
   dplyr::summarise(Count = n(),
-                   Sequences =case_when(Count > 6 ~ "Others",
+                   Sequences = case_when(Count > 6 ~ "Others",
                    .default = paste(Sequence, collapse = ", ")))%>%
   as.data.frame %>%
   create.xlsx(., "figure/locations.9aaTAD.unique.xlsx", cols.to.fixed.size.font = 2, cols.to.rich.text = 2)
 
-locations.9aaTAD %>%
-  dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
-  dplyr::filter(motif_number >0) %>%
-  dplyr::mutate(motif_number = paste0("9aaTAD_", LETTERS[motif_number])) %>%
-  tidyr::pivot_wider(id_cols = c(Sequence), names_from = motif_number, 
-                     values_from = aa_motif, values_fn = ~paste(.x, collapse = ", ")) %>%
+# Combined 9aaTADs per sequence
+# We want to get the 'superTAD' motif for the cases where multiple TADs overlap
+# within a sequence
+
+# find the overlapping ranges within this restricted set of 9aaTADs per sequence
+
+create.superTADs <- function(locations.9aaTAD){
+  # locations.9aaTAD.superTAD <- locations.9aaTAD %>%
+  #   # dplyr::select(Sequence = sequence, label, aa_motif) %>%
+  #   dplyr::filter(!is.na(label)) %>%
+  #   dplyr::group_by(sequence, label)
+  
+  sequences <- unique(locations.9aaTAD$sequence)
+  tad.labels <- unique(locations.9aaTAD$label)
+  combos <- na.omit(expand.grid("sequence" = sequences, "tad.label"= tad.labels))
+  
+  
+  # Get the reduced range covering the superTAD in each sequence
+  make.supertad <- function(tad.sequence, tad.label){
+    locations.superTAD <- locations.9aaTAD %>%
+      dplyr::filter(sequence == tad.sequence & label==tad.label)
+    if(nrow(locations.superTAD)==0) return()
+  
+    locations.ranges <- as.data.frame(IRanges::reduce(IRanges(start = locations.superTAD$start_gapped, 
+                                                     end = locations.superTAD$end_gapped, 
+                                                     names = sequence)))
+    
+    # Should be only one merged range
+    locations.superTAD$supertad_start_gapped <- locations.ranges$start
+    locations.superTAD$supertad_end_gapped <- locations.ranges$end
+    locations.superTAD
+  }
+  
+  locations.9aaTAD.superTAD <- do.call(rbind, mapply(make.supertad, combos$sequence, combos$tad.label, SIMPLIFY = FALSE))
+  
+  # Now find the sequence corresponding to the coordinates for each superTAD
+  
+  get.aa.sequence <- function(start, end, sequence.name){
+    as.character(combined.aa.aln@unmasked[[sequence.name]][start:end])
+  }
+  locations.9aaTAD.superTAD$superTADmotif <- mapply(get.aa.sequence, locations.9aaTAD.superTAD$supertad_start_gapped,
+                                                    locations.9aaTAD.superTAD$supertad_end_gapped,
+                                                    locations.9aaTAD.superTAD$sequence)
+  locations.9aaTAD.superTAD$sequence <- factor(locations.9aaTAD.superTAD$sequence, levels = rev(combined.taxa.name.order))
+  locations.9aaTAD.superTAD
+}
+
+locations.9aaTAD.superTAD <- create.superTADs(locations.9aaTAD)
+locations.9aaTAD.superTAD %>%
+  dplyr::ungroup() %>%
+  dplyr::select(Sequence = sequence, label, superTADmotif) %>%
+  dplyr::distinct() %>%
+  tidyr::pivot_wider(id_cols = c(Sequence), names_from = label, 
+                     values_from = superTADmotif, values_fn = ~paste(.x, collapse = ", ")) %>%
   as.data.frame %>%
-  create.xlsx(., "figure/locations.9aaTAD.xlsx", cols.to.fixed.size.font = 2:5, 
-              cols.to.rich.text = 2:5)
+  dplyr::mutate(across(A:F, ~ str_replace_all(.x, "-", ""))) %>%
+  dplyr::arrange(as.integer(Sequence)) %>%
+  create.xlsx(., "figure/locations.9aaTAD.xlsx", cols.to.fixed.size.font = 2:9, 
+              cols.to.rich.text = 2:9)
 
 locations.NLS %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
@@ -581,7 +668,6 @@ locations.NLS %>%
                      values_fn = ~paste(.x, collapse = ", ")) %>%
   as.data.frame %>%
   dplyr::arrange(as.integer(Sequence)) %>%
-  dplyr::
   create.xlsx(., "figure/locations.NLS.xlsx", cols.to.fixed.size.font = 2:4)
 
 #### Identify binding motifs of the ZFs in each species ####
