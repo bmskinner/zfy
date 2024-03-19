@@ -604,15 +604,8 @@ locations.9aaTAD %>%
 # Combined 9aaTADs per sequence
 # We want to get the 'superTAD' motif for the cases where multiple TADs overlap
 # within a sequence
-
 # find the overlapping ranges within this restricted set of 9aaTADs per sequence
-
 create.superTADs <- function(locations.9aaTAD){
-  # locations.9aaTAD.superTAD <- locations.9aaTAD %>%
-  #   # dplyr::select(Sequence = sequence, label, aa_motif) %>%
-  #   dplyr::filter(!is.na(label)) %>%
-  #   dplyr::group_by(sequence, label)
-  
   sequences <- unique(locations.9aaTAD$sequence)
   tad.labels <- unique(locations.9aaTAD$label)
   combos <- na.omit(expand.grid("sequence" = sequences, "tad.label"= tad.labels))
@@ -635,9 +628,7 @@ create.superTADs <- function(locations.9aaTAD){
   }
   
   locations.9aaTAD.superTAD <- do.call(rbind, mapply(make.supertad, combos$sequence, combos$tad.label, SIMPLIFY = FALSE))
-  
   # Now find the sequence corresponding to the coordinates for each superTAD
-  
   get.aa.sequence <- function(start, end, sequence.name){
     as.character(combined.aa.aln@unmasked[[sequence.name]][start:end])
   }
@@ -645,21 +636,75 @@ create.superTADs <- function(locations.9aaTAD){
                                                     locations.9aaTAD.superTAD$supertad_end_gapped,
                                                     locations.9aaTAD.superTAD$sequence)
   locations.9aaTAD.superTAD$sequence <- factor(locations.9aaTAD.superTAD$sequence, levels = rev(combined.taxa.name.order))
-  locations.9aaTAD.superTAD
+  # Merge the supertads into the original 9aaTAD data
+  locations.9aaTAD.mge <- merge(locations.9aaTAD, locations.9aaTAD.superTAD, 
+                                by = c("sequence", "start_nt_gapped", "end_nt_gapped",
+                                       "aa_motif", "rc_score", "start_gapped", "end_gapped",
+                                       "motif_number", "start_ungapped", "end_ungapped",
+                                       "start_nt_ungapped", "end_nt_ungapped",
+                                       "i", "start", "end", "width","label"), all.x=TRUE) %>%
+    dplyr::mutate(superTADmotif = str_replace_all(superTADmotif, "-", ""))# remove gaps
+  
+  
+  # Create superTAD output table for the high confidence 9aaTADs
+  locations.9aaTAD.mge %>%
+    dplyr::ungroup() %>%
+    dplyr::filter(rc_score > 80, !is.na(label)) %>%
+    dplyr::select(Sequence = sequence, label, superTADmotif) %>%
+    dplyr::arrange(label) %>%
+    dplyr::distinct() %>%
+    tidyr::pivot_wider(id_cols = c(Sequence), names_from = label, 
+                       values_from = superTADmotif, values_fn = ~paste(.x, collapse = ", ")) %>%
+    as.data.frame %>%
+    dplyr::arrange(as.integer(Sequence)) %>%
+    create.xlsx(., "figure/locations.9aaTAD.xlsx", cols.to.fixed.size.font = 2:9, 
+              cols.to.rich.text = 2:9)
+  
+  locations.9aaTAD.mge
 }
 
 locations.9aaTAD.superTAD <- create.superTADs(locations.9aaTAD)
-locations.9aaTAD.superTAD %>%
-  dplyr::ungroup() %>%
-  dplyr::select(Sequence = sequence, label, superTADmotif) %>%
-  dplyr::distinct() %>%
-  tidyr::pivot_wider(id_cols = c(Sequence), names_from = label, 
-                     values_from = superTADmotif, values_fn = ~paste(.x, collapse = ", ")) %>%
-  as.data.frame %>%
-  dplyr::mutate(across(A:F, ~ str_replace_all(.x, "-", ""))) %>%
-  dplyr::arrange(as.integer(Sequence)) %>%
-  create.xlsx(., "figure/locations.9aaTAD.xlsx", cols.to.fixed.size.font = 2:9, 
+
+# We want to get the corresponding 9aaTAD region for those sequences that have
+# lost the 9aaTAD (if present). Take the 9aaTAD region window and extract the 
+# amino acids
+is.9aaTAD.present <- function(locations.9aaTAD){
+  sequences <- unique(locations.9aaTAD$sequence)
+  tad.labels <- unique(locations.9aaTAD$label)
+  
+  # TODO - ensure the low rc tads are included here
+  has.na.tads <- function(s, t){
+    data <- locations.9aaTAD.superTAD[locations.9aaTAD.superTAD$sequence==s & 
+                                        locations.9aaTAD.superTAD$label==t,]
+    all(is.na(data[["rc_score"]]) | data[["rc_score"]]<80 )
+  }
+
+  combos <- na.omit(expand.grid("sequence" = sequences, "tad.label"= tad.labels)) %>%
+      # Find the common ranges
+    merge(., ranges.9aaTAD.common, by.x = c("tad.label"), by.y = c("label"))
+  
+  # Filter to only those that do not have a matching TAD
+  combos <- na.omit(combos[mapply(has.na.tads, combos$sequence, combos$tad.label, SIMPLIFY = TRUE),])
+  
+  # Find the orthologous sequence
+  combos$aa_motif <- mapply(subset.sequence, sequence.name=combos$sequence, start=combos$start, 
+                            end=combos$end, MoreArgs=list(aln=combined.aa.aln), SIMPLIFY = TRUE)
+  
+  combos %<>%
+    dplyr::ungroup() %>%
+    dplyr::select(Sequence = sequence, tad.label, aa_motif) %>%
+    dplyr::distinct() %>%
+    dplyr::arrange(tad.label) %>%
+    # dplyr::mutate(aa_motif = str_replace_all(aa_motif, "-", "")) %>%
+    tidyr::pivot_wider(id_cols = c(Sequence), names_from = tad.label, 
+                       values_from = aa_motif, values_fn = ~paste(.x, collapse = ", ")) %>%
+    as.data.frame %>%
+    dplyr::arrange(as.integer(Sequence))
+  
+  create.xlsx(combos, "figure/locations.9aaTAD.low_confidence.xlsx", cols.to.fixed.size.font = 2:9, 
               cols.to.rich.text = 2:9)
+  
+}
 
 locations.NLS %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%

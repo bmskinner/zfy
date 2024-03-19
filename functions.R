@@ -462,3 +462,8 @@ locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
                                           convert.to.gapped.coordinate(end_nt_ungapped,  nt.aln@unmasked[[sequence]]),
                                           NA))
 }
+
+# Given a Biostrings alignment, extract the sequence string at the given coordinates
+subset.sequence <- function(aln, sequence.name, start, end){
+  as.character(aln@unmasked[[sequence.name]][start:end])
+}
