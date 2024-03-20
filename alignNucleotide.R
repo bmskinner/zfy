@@ -3,7 +3,7 @@
 # The following binaries must be supplied in ./bin:
 # macse_v2.07.jar
 # muscle5.1.win64.exe / muscle5.1.linux_intelx64
-# nlstradamul.pl
+# nlstradamus.pl
 # pwm_predict/pwm_predict
 
 # Other binaries are expected on the PATH:
@@ -18,10 +18,8 @@
 # To activate conda from a shell script:
 # source activate hyphy
 
-RUN_PAML = as.logical(commandArgs(trailingOnly = T)[1])
-
+RUN_PAML <- as.logical(commandArgs(trailingOnly = T)[1])
 if(is.na(RUN_PAML)) RUN_PAML <- FALSE
-
 cat("Run PAML is", RUN_PAML, "\n")
 #### Imports #####
 
@@ -45,7 +43,8 @@ filesstrings::dir.remove("pwm")
 
 # Create missing dirs if needed
 filesstrings::create_dir("aln")
-filesstrings::create_dir("aln/outgroup")
+filesstrings::create_dir("aln/mammal")
+filesstrings::create_dir("aln/combined")
 filesstrings::create_dir("aln/exons")
 filesstrings::create_dir("aln/zfx_only")
 filesstrings::create_dir("aln/zfy_only")
@@ -63,6 +62,9 @@ filesstrings::create_dir("pwm")
 
 writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
 
+files <- list() # common file paths
+alignments <- list() # common file paths
+
 #### Read mammal NT FA files #####
 
 # Putative Zfy sequences in rodents detected with NCBI gene search:
@@ -77,8 +79,8 @@ nt.raw   <- read.sequences(fa.read)
 metadata.mammal <- read.metadata(fa.read)
 
 # Write the combined fasta to file with .fas extension
-mammal.nt.file <- "fasta/mammal.nt.fas"
-ape::write.FASTA(nt.raw, file = mammal.nt.file)
+files$mammal.nt.fas <- "fasta/mammal.nt.fas"
+ape::write.FASTA(nt.raw, file = files$mammal.nt.fas)
 
 #### Read outgroup NT FA files #####
 
@@ -95,32 +97,38 @@ metadata.combined <- rbind(metadata.mammal, metadata.outgroup)
 
 # Write the unaligned combined fasta to file with .fas extension
 combined.nt.raw <- c(outgroup.nt.raw, nt.raw) # all sequences
-combined.nt.file <- "fasta/combined.nt.fas"
-ape::write.FASTA(combined.nt.raw, file = combined.nt.file)
-
-combined.aa.file <- "fasta/combined.aa.fas"
 combined.aa.raw <- ape::trans(combined.nt.raw)
-ape::write.FASTA(combined.aa.raw, file = combined.aa.file)
+
+files$combined.nt.fas <- "fasta/combined.nt.fas"
+files$combined.aa.fas <- "fasta/combined.aa.fas"
+
+ape::write.FASTA(combined.nt.raw, file = files$combined.nt.fas)
+ape::write.FASTA(combined.aa.raw, file = files$combined.aa.fas)
 
 # Create supplementary table with all accessions and sequence info
-supplementary.accessions.table <- metadata.combined %>%
-  dplyr::rename(Accession = accession, Description = original.name,
-                Name_in_figures = common.name, Species = species, Group = group)
-write_tsv(supplementary.accessions.table, "figure/accessions.supplement.tsv")
+metadata.combined %>%
+  dplyr::rename(Accession = accession, Species = species, Group = group,
+                Name_in_figures = common.name,Description = original.name  ) %>%
+  dplyr::select(Accession,Species,Group,  Name_in_figures, Description ) %>%
+  create.xlsx(., "figure/accessions.supplement.xlsx")
+
+# write_tsv(supplementary.accessions.table, "figure/accessions.supplement.tsv")
 
 #### Run combined mammal/outgroup AA alignment ####
 
 # Use muscle to align the aa files and save out for iqtree
-combined.aa.aln.file <- "aln/outgroup/combined.aa.aln"
+files$combined.aa.aln <- "aln/combined/combined.aa.aln"
 
 # Cluster has muscle 3.8.31 on path., so specify the binary directly
-if(!file.exists("bin/muscle5.1.linux_intel64")) stop("Muscle5.1 not present in bin directory")
-system2("bin/muscle5.1.linux_intel64", paste("-align", combined.aa.file,
-                                             "-output", combined.aa.aln.file))
+muscle.path <- ifelse(installr::is.windows(), "bin/muscle5.1.win64.exe", "bin/muscle5.1.linux_intel64")
+if(!file.exists(muscle.path)) stop("Muscle5.1 not present in bin directory")
+system2(muscle.path, paste("-align",  files$combined.aa.fas,
+                           "-output", files$combined.aa.aln))
 
-combined.aa.aln <- ape::read.FASTA(combined.aa.aln.file)
+alignments$aa.combined.ape <- ape::read.FASTA(files$combined.aa.aln)
+# combined.aa.aln <- ape::read.FASTA(files$combined.aa.aln)
 # Read in Biostrings format for exon detection also
-msa.aa.aln <- Biostrings::readAAMultipleAlignment(combined.aa.aln.file, format="fasta")
+alignments$aa.combined.biostrings <- Biostrings::readAAMultipleAlignment(files$combined.aa.aln, format="fasta")
 
 #### Run mammal NT alignment guided by AA #####
 
@@ -132,47 +140,51 @@ msa.aa.aln <- Biostrings::readAAMultipleAlignment(combined.aa.aln.file, format="
 if(!file.exists("bin/macse_v2.07.jar")) stop("MACSE not present in bin directory")
 
 # Run the alignment
-nt.aln.file <- "aln/zfxy.nt.aln"
-aa.aln.file <- "aln/zfxy.aa.aln"
+files$mammal.nt.aln <- "aln/mammal/mammal.nt.aln"
+files$mammal.aa.aln <- "aln/mammal/mammal.aa.aln"
 system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
-                      "-seq", mammal.nt.file, # input
-                      "-out_NT", nt.aln.file,  # output nt alignment
-                      "-out_AA", aa.aln.file), # output aa alignment
-        stdout = paste0(nt.aln.file, ".macse.log"),  # logs
-        stderr = paste0(nt.aln.file, ".macse.err"))  # error logs
+                      "-seq",    files$mammal.nt.fas, # input
+                      "-out_NT", files$mammal.nt.aln,  # output nt alignment
+                      "-out_AA", files$mammal.aa.aln), # output aa alignment
+        stdout = paste0(files$mammal.nt.aln, ".macse.log"),  # logs
+        stderr = paste0(files$mammal.nt.aln, ".macse.err"))  # error logs
 
-ape.nt.aln <- ape::read.FASTA(nt.aln.file)
-msa.nt.aln <- Biostrings::readDNAMultipleAlignment(nt.aln.file, format="fasta")
+alignments$nt.mammal.ape <- ape::read.FASTA(files$mammal.nt.aln)
+alignments$nt.mammal.biostrings <- Biostrings::readDNAMultipleAlignment(files$mammal.nt.aln, format="fasta")
 
 # Identify the coordinates of the exon boundaries in the gapped alignments
 # Based on the mouse Zfy1 sequence
-mouse.exons <- find.exons(msa.nt.aln, msa.aa.aln)
+mouse.exons <- find.exons(alignments$nt.mammal.biostrings, alignments$aa.combined.biostrings)
 
 #### Create combined mammal/outgroup AA tree ####
 
-system2("iqtree", paste("-s ", "aln/outgroup/combined.aa.aln", 
+system2("iqtree", paste("-s ", files$combined.aa.aln, 
                         "-bb 1000", # number of bootstrap replicates
                         "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
                         "-nt AUTO"), # number of threads
-        stdout = paste0("aln/outgroup/combined.aa.iqtree.log"), 
-        stderr = paste0("aln/outgroup/combined.aa.iqtree.log"))
+        stdout = gsub(".aln$", ".iqtree.log", files$combined.aa.aln), 
+        stderr = gsub(".aln$", ".iqtree.log", files$combined.aa.aln))
+
+files$combined.aa.aln.treefile <- paste0(files$combined.aa.aln, ".treefile")
 
 
 #### Plot combined mammal/outgroup AA tree ####
 read.combined.outgroup.tree <- function(file){
   combined.outgroup.tree <- ape::read.tree(paste0(file))
   
+  rooted.file <- gsub("treefile", "rooted.treefile", file)
+  
   # Root the tree in the edge between Xenopus nodes and chicken
   xenopus.node <- ape::getMRCA(combined.outgroup.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
   combined.outgroup.tree <- phytools::reroot(combined.outgroup.tree, xenopus.node, position = 0.1)
-  ape::write.tree(combined.outgroup.tree, file = paste0("aln/outgroup/combined.aa.aln.rooted.treefile"))
+  ape::write.tree(combined.outgroup.tree, file = rooted.file)
   
   mammal.gene.groups <- split(metadata.combined$common.name, metadata.combined$group)
   combined.outgroup.tree <- groupOTU(combined.outgroup.tree, mammal.gene.groups, group_name = "group")
   combined.outgroup.tree
 }
 
-combined.outgroup.tree <- read.combined.outgroup.tree("aln/outgroup/combined.aa.aln.treefile")
+combined.outgroup.tree <- read.combined.outgroup.tree(files$combined.aa.aln.treefile)
 
 combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")+
   coord_cartesian(clip="off", xlim = c(0, 0.9), ylim= c(-2, 62))
@@ -188,22 +200,24 @@ combined.taxa.name.order <- ggtree::get_taxa_name(combined.aa.tree)
 # Expect iqtree on the PATH.
 # Note model testing is automatically performed in v1.5.4 onwards
 # Note: we can use a partition model if we specify exon coordinates
-system2("iqtree", paste("-s ", nt.aln.file, 
+system2("iqtree", paste("-s ", files$mammal.nt.aln, 
                         "-bb 1000", # number of bootstrap replicates
                         "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
                         "-nt AUTO", # number of threads
                         "-asr"), # ancestral sequence reconstruction
-        stdout = paste0(nt.aln.file, ".iqtree.log"), 
-        stderr = paste0(nt.aln.file, ".iqtree.log"))
+        stdout = gsub(".aln$", ".iqtree.log", files$mammal.nt.aln), 
+        stderr = gsub(".aln$", ".iqtree.log", files$mammal.nt.aln))
+
+files$mammal.nt.aln.treefile <- paste0(files$mammal.nt.aln, ".treefile")
 
 #### Plot mammal CDS NT tree #####
 
-nt.aln.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
+nt.aln.tree <- ape::read.tree(files$mammal.nt.aln.treefile)
 
 # Root the tree on platypus and resave
 # The root is arbitrarily placed in the platypus branch to fit neatly
 nt.aln.tree <- phytools::reroot(nt.aln.tree, which(nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
-ape::write.tree(nt.aln.tree, file = paste0(nt.aln.file, ".rooted.treefile"))
+ape::write.tree(nt.aln.tree, file = paste0(files$mammal.nt.aln, ".rooted.treefile"))
 
 # Find the nodes that are ZFY vs ZFX and add to tree
 mammal.gene.groups <- split(metadata.mammal$common.name, metadata.mammal$group)
@@ -215,7 +229,7 @@ plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off
 laurasiatheria.node <- ape::getMRCA(nt.aln.tree, c("Cat_ZFY", "Cat_ZFX"))
 plot.zfx.zfy <- rotate(plot.zfx.zfy, laurasiatheria.node)
 
-save.double.width("figure/zfx.zfy.tree.png", plot.zfx.zfy)
+save.double.width("figure/mammal.zfxy.tree.png", plot.zfx.zfy)
 
 # Get the order of taxa names for reordering other plots later
 mammal.taxa.name.order <- get_taxa_name(plot.zfx.zfy) 
@@ -225,16 +239,16 @@ mammal.taxa.name.order <- get_taxa_name(plot.zfx.zfy)
 # Drop the ZFY sequences and just look at the ZFX nodes in the tree
 tree.zfx <- ape::drop.tip(nt.aln.tree, mammal.gene.groups$ZFY)
 tree.zfx <- groupOTU(tree.zfx, mammal.gene.groups, group_name = "group")
-ape::write.tree(tree.zfx, file = paste0(nt.aln.file, ".zfx.treefile"))
+ape::write.tree(tree.zfx, file = paste0(files$mammal.nt.aln, ".zfx.treefile"))
 plot.zfx <- plot.tree(tree.zfx)
-save.double.width("figure/zfx.tree.png", plot.zfx)
+save.double.width("figure/mammal.zfx.tree.png", plot.zfx)
 
 # Keep Zfy and outgroups, drop other tips
 tree.zfy <- ape::keep.tip(nt.aln.tree, c(mammal.gene.groups$ZFY, mammal.gene.groups$Outgroup))
 tree.zfy <- groupOTU(tree.zfy, mammal.gene.groups, group_name = "group")
-ape::write.tree(tree.zfy, file = paste0(nt.aln.file, ".zfy.treefile"))
+ape::write.tree(tree.zfy, file = paste0(files$mammal.nt.aln, ".zfy.treefile"))
 plot.zfy <- plot.tree(tree.zfy)
-save.double.width("figure/zfy.tree.png", plot.zfy)
+save.double.width("figure/mammal.zfy.tree.png", plot.zfy)
 
 #### Make and plot mammal exon NT trees ####
 
@@ -242,7 +256,7 @@ save.double.width("figure/zfy.tree.png", plot.zfy)
 # papers.
 
 create.exon.plot <- function(i){
-  exon.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start[i]:mouse.exons$end[i]]
+  exon.aln <- as.matrix(alignments$nt.mammal.ape)[,mouse.exons$start[i]:mouse.exons$end[i]]
   exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
   exon.aln.file <- paste0("aln/exons/exon_", mouse.exons$exon[i], ".aln")
   
@@ -278,7 +292,7 @@ exon.1.7.plots <- lapply(1:nrow(mouse.exons),create.exon.plot)
 
 # We also want to look at all except exon 7
 
-exon.1.6.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start[1]:mouse.exons$end[6]]
+exon.1.6.aln <- as.matrix(alignments$nt.mammal.ape)[,mouse.exons$start[1]:mouse.exons$end[6]]
 exon.1.6.aln.file <- paste0("aln/exons/exon_1-6.aln")
 ape::write.FASTA(exon.1.6.aln, file = exon.1.6.aln.file)
 
@@ -309,12 +323,12 @@ exon.joint.tree <- plot.exon.1.6.tree + exon.1.7.plots[[2]] + exon.1.7.plots[[7]
 save.double.width("figure/exon.joint.tree.png", exon.joint.tree, height=120)
 #### Test selection globally in mammals ####
 
-# ape::dnds(ape.nt.aln) # errors
-seqin.aln <- seqinr::read.alignment(nt.aln.file, format = "fasta")
+# ape::dnds(alignments$nt.mammal.ape) # errors
+seqin.aln <- seqinr::read.alignment(files$mammal.nt.aln, format = "fasta")
 kaks.data <- seqinr::kaks(seqin.aln)
 
 kaks.ratio <- kaks.data$ka / kaks.data$ks
-kaks.pairwise <- dist2list(kaks.ratio, tri = F)
+kaks.pairwise <- metagMisc::dist2list(kaks.ratio, tri = F)
 kaks.pairwise$col <- factor(kaks.pairwise$col, 
                             levels = mammal.taxa.name.order)
 kaks.pairwise$row <- factor(kaks.pairwise$row, 
@@ -348,17 +362,17 @@ save.double.width("figure/dnds.png", kaks.pairwise.plot)
 # pronounced in the ZFs versus exon 2 and exon 7?
 exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset[1]:mouse.exons$end_nt_codon_offset[1], 
                     mouse.exons$start_nt_codon_offset[3]:mouse.exons$end_nt_codon_offset[6])
-exon1.3_6.aln <- as.matrix(ape.nt.aln)[,exon1.3_6.locs]
+exon1.3_6.aln <- as.matrix(alignments$nt.mammal.ape)[,exon1.3_6.locs]
 
 ape::write.FASTA(exon1.3_6.aln, file = "aln/exons/exon_1_3-6.kaks.aln")
 seqin.aln.exon.1.3_6 <- seqinr::read.alignment("aln/exons/exon_1_3-6.kaks.aln", format = "fasta")
 
-exon2.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start_nt_codon_offset[2]:(mouse.exons$end_nt_codon_offset[2])]
+exon2.aln <- as.matrix(alignments$nt.mammal.ape)[,mouse.exons$start_nt_codon_offset[2]:(mouse.exons$end_nt_codon_offset[2])]
 ape::write.FASTA(exon2.aln, file = "aln/exons/exon_2.kaks.aln")
 seqin.aln.exon.2 <- seqinr::read.alignment("aln/exons/exon_2.kaks.aln", format = "fasta")
 exon2.aln.msa <- ape::read.FASTA("aln/exons/exon_2.kaks.aln")
 
-exon.7.aln <- as.matrix(ape.nt.aln)[,(mouse.exons$start_nt_codon_offset[7]):mouse.exons$end_nt_codon_offset[7]] 
+exon.7.aln <- as.matrix(alignments$nt.mammal.ape)[,(mouse.exons$start_nt_codon_offset[7]):mouse.exons$end_nt_codon_offset[7]] 
 ape::write.FASTA(exon.7.aln, file = "aln/exons/exon_7.kaks.aln")
 seqin.aln.exon.7 <- seqinr::read.alignment("aln/exons/exon_7.kaks.aln", format = "fasta")
 
@@ -409,9 +423,9 @@ save.double.width("figure/exon.1_3-6.2.7.dnds.png", exon.kaks.plot, height=110)
 
 #### Identify the locations of the ZFs, 9aaTADs and NLS in the AA & NT MSAs ####
 
-locations.zf <- locate.zfs.in.alignment(combined.aa.aln.file, nt.aln.file, combined.taxa.name.order)
-locations.9aaTAD <- locate.9aaTADs.in.alignment(combined.aa.aln.file, nt.aln.file, combined.taxa.name.order)
-locations.NLS <- locate.NLS.in.alignment(combined.aa.aln.file, nt.aln.file, combined.taxa.name.order)
+locations.zf <- locate.zfs.in.alignment(files$combined.aa.aln, files$mammal.nt.aln, combined.taxa.name.order)
+locations.9aaTAD <- locate.9aaTADs.in.alignment(files$combined.aa.aln, files$mammal.nt.aln, combined.taxa.name.order)
+locations.NLS <- locate.NLS.in.alignment(files$combined.aa.aln, files$mammal.nt.aln, combined.taxa.name.order)
 
 # Export the locations of the  ZFs,  9aaTADs, and NLS
 write_tsv(locations.zf %>% 
@@ -508,67 +522,7 @@ locations.NLS %<>%
 
 #### Export the residues within each ZF and 9aaTAD
 
-# Create an Excel file with column filtering
-create.xlsx = function(data, file.name, cols.to.fixed.size.font, cols.to.rich.text = NULL){
-  oldOpt = options()
-  options(xlsx.date.format="yyyy-mm-dd") # change date format
-  wb = xlsx::createWorkbook(type = "xlsx")
-  sh = xlsx::createSheet(wb)
-  xlsx::addDataFrame(data, sh, row.names = F)
-  cols.to.filter = paste0("A1:", LETTERS[ncol(data)], "1")
-  xlsx::addAutoFilter(sh, cols.to.filter)
-  xlsx::createFreezePane(sh, 2, 2, 2, 2) # freeze top row and first column
-  cs <- xlsx::CellStyle(wb) + 
-    xlsx::Font(wb,heightInPoints = 10, isBold = FALSE, name="Courier New")
-  for(i in xlsx::getCells(xlsx::getRows(sh), colIndex=cols.to.fixed.size.font)){
-    xlsx::setCellStyle(i, cs)
-  }
-  
-  if(!is.null(cols.to.rich.text)) {
-   for(col in cols.to.rich.text) set.rich.text.on.vv(wb, sh, col)
 
-  }
-  xlsx::autoSizeColumn(sh, 1:ncol(data))
-  xlsx::saveWorkbook(wb, file=file.name)
-  options(oldOpt)
-}
-
-set.rich.text.on.vv <- function(wb, sh, col.index){
-  
-  normal.font.ref <-  xlsx::Font(wb, heightInPoints = 10, isBold=FALSE, name = "Courier New")$ref
-  highlight.font.ref <- xlsx::Font(wb, heightInPoints = 10, color="red", isBold=TRUE,  name = "Courier New")$ref
-  
-  for(cell in xlsx::getCells(xlsx::getRows(sh), colIndex=col.index)){
-    
-    oldval <- xlsx::getCellValue(cell)
-    vv.locs <- str_locate_all(oldval, "VV")
-    
-    if( nrow(vv.locs[[1]]) > 0 ){
-      
-      # Create a rich text string
-      new.value <- rJava::.jnew("org/apache/poi/xssf/usermodel/XSSFRichTextString",
-                                oldval )
-      
-      # Set entire cell to normal style
-      rJava::.jcall(obj=new.value, returnSig = "V",  # void return
-                    method="applyFont", normal.font.ref)
-      
-      for(r in 1:nrow(vv.locs[[1]])){
-        # Apply the new font to the correct indexes (0-indexed inclusive)
-        rJava::.jcall(obj=new.value,returnSig = "V",  # void return
-                      method="applyFont", 
-                      as.integer(vv.locs[[1]][r,1]-1), # start index
-                      as.integer(vv.locs[[1]][r,2]), # end index
-                      highlight.font.ref)
-      }
-      
-      
-      # Set the new cell value and cast to a rich text string
-      rJava::.jcall(cell, "V", "setCellValue",
-                    rJava::.jcast(new.value, "org/apache/poi/ss/usermodel/RichTextString"))
-    }
-  }
-}
 
 # Full ZF motifs
 locations.zf %>%
@@ -616,10 +570,10 @@ create.superTADs <- function(locations.9aaTAD){
     locations.superTAD <- locations.9aaTAD %>%
       dplyr::filter(sequence == tad.sequence & label==tad.label)
     if(nrow(locations.superTAD)==0) return()
-  
+
     locations.ranges <- as.data.frame(IRanges::reduce(IRanges(start = locations.superTAD$start_gapped, 
-                                                     end = locations.superTAD$end_gapped, 
-                                                     names = sequence)))
+                                                              end = locations.superTAD$end_gapped, 
+                                                              names = tad.sequence)))
     
     # Should be only one merged range
     locations.superTAD$supertad_start_gapped <- locations.ranges$start
@@ -629,12 +583,14 @@ create.superTADs <- function(locations.9aaTAD){
   
   locations.9aaTAD.superTAD <- do.call(rbind, mapply(make.supertad, combos$sequence, combos$tad.label, SIMPLIFY = FALSE))
   # Now find the sequence corresponding to the coordinates for each superTAD
-  get.aa.sequence <- function(start, end, sequence.name){
-    as.character(combined.aa.aln@unmasked[[sequence.name]][start:end])
-  }
-  locations.9aaTAD.superTAD$superTADmotif <- mapply(get.aa.sequence, locations.9aaTAD.superTAD$supertad_start_gapped,
+  # get.aa.sequence <- function(start, end, sequence.name){
+  #   as.character(alignments$aa.combined.ape@unmasked[[sequence.name]][start:end])
+  # }
+  locations.9aaTAD.superTAD$superTADmotif <- mapply(subset.sequence, 
+                                                    locations.9aaTAD.superTAD$sequence,
+                                                    locations.9aaTAD.superTAD$supertad_start_gapped,
                                                     locations.9aaTAD.superTAD$supertad_end_gapped,
-                                                    locations.9aaTAD.superTAD$sequence)
+                                                    MoreArgs = list(aln=alignments$aa.combined.biostrings))
   locations.9aaTAD.superTAD$sequence <- factor(locations.9aaTAD.superTAD$sequence, levels = rev(combined.taxa.name.order))
   # Merge the supertads into the original 9aaTAD data
   locations.9aaTAD.mge <- merge(locations.9aaTAD, locations.9aaTAD.superTAD, 
@@ -666,13 +622,13 @@ create.superTADs <- function(locations.9aaTAD){
 locations.9aaTAD.superTAD <- create.superTADs(locations.9aaTAD)
 
 # We want to get the corresponding 9aaTAD region for those sequences that have
-# lost the 9aaTAD (if present). Take the 9aaTAD region window and extract the 
-# amino acids
-is.9aaTAD.present <- function(locations.9aaTAD){
+# lost the 9aaTAD or have low confidence 9aaTADs. Take the 9aaTAD region window
+# and extract the amino acids
+export.locations.of.missing.9aTADs <- function(locations.9aaTAD){
   sequences <- unique(locations.9aaTAD$sequence)
   tad.labels <- unique(locations.9aaTAD$label)
   
-  # TODO - ensure the low rc tads are included here
+  # Check if a sequence and tad label is present
   has.na.tads <- function(s, t){
     data <- locations.9aaTAD.superTAD[locations.9aaTAD.superTAD$sequence==s & 
                                         locations.9aaTAD.superTAD$label==t,]
@@ -687,8 +643,11 @@ is.9aaTAD.present <- function(locations.9aaTAD){
   combos <- na.omit(combos[mapply(has.na.tads, combos$sequence, combos$tad.label, SIMPLIFY = TRUE),])
   
   # Find the orthologous sequence
-  combos$aa_motif <- mapply(subset.sequence, sequence.name=combos$sequence, start=combos$start, 
-                            end=combos$end, MoreArgs=list(aln=combined.aa.aln), SIMPLIFY = TRUE)
+  combos$aa_motif <- mapply(subset.sequence, 
+                            sequence.name=combos$sequence, 
+                            start=combos$start, 
+                            end=combos$end, 
+                            MoreArgs=list(aln=alignments$aa.combined.biostrings), SIMPLIFY = TRUE)
   
   combos %<>%
     dplyr::ungroup() %>%
@@ -705,6 +664,9 @@ is.9aaTAD.present <- function(locations.9aaTAD){
               cols.to.rich.text = 2:9)
   
 }
+
+export.locations.of.missing.9aTADs(locations.9aaTAD)
+
 
 locations.NLS %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
@@ -801,7 +763,7 @@ if(!file.exists( "time.tree.data.tsv")){
 
 # The treefile created earlier needs node names and branch lengths removing.
 # Set node names to the empty string, and set branch lengths to 1
-labelled.tree <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
+labelled.tree <- ape::read.tree(paste0(files$mammal.nt.aln, ".treefile"))
 labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
 labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
 ape::write.tree(labelled.tree, file = "paml/site-specific/zfxy.nt.aln.paml.treefile")
@@ -813,7 +775,7 @@ labelled.tree <- gsub(":1", "", labelled.tree)
 readr::write_file(labelled.tree, "paml/site-specific/zfxy.nt.aln.paml.treefile")
 
 # This control file tests site models With heterogeneous ω Across Sites
-paml.site.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\n",
+paml.site.file <- paste0("seqfile   = ", files$mammal.nt.aln, " * alignment file\n",
                          "treefile  = paml/site-specific/zfxy.nt.aln.paml.treefile * tree in Newick format without nodes\n", # 
                          "outfile   = paml/site-specific/site.specific.paml.out.txt\n",
                          "\n",
@@ -925,7 +887,7 @@ newick.test <- gsub("_#1", " #1", newick.test) # fg labels
 write_file(newick.test, "paml/branch-site/zfxy.nt.aln.paml.fg.treefile")
 
 # This control file tests site models With heterogeneous ω Across Sites
-paml.site.branch.file <- paste0("seqfile   = ", nt.aln.file, " * alignment file\n",
+paml.site.branch.file <- paste0("seqfile   = ", files$mammal.nt.aln, " * alignment file\n",
                                 "treefile  = paml/branch-site/zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
                                 "outfile   = paml/branch-site/site.branch.paml.out.txt\n",
                                 "\n",
@@ -976,7 +938,7 @@ if(RUN_PAML & !installr::is.windows() & !file.exists(paml.branch.site.output)){
 exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset[1]:mouse.exons$end_nt_codon_offset[1], 
                     mouse.exons$start_nt_codon_offset[3]:mouse.exons$end_nt_codon_offset[6])
 
-exon1.3_6.aln <- as.matrix(ape.nt.aln)[,exon1.3_6.locs]
+exon1.3_6.aln <- as.matrix(alignments$nt.mammal.ape)[,exon1.3_6.locs]
 # exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
 ape::write.FASTA(exon1.3_6.aln, file = "paml/exon_1_3-6/exon_1_3-6.aln")
 
@@ -1025,7 +987,7 @@ if(file.exists(exon1.3_6.output.file)){
 
 #### Create codeml files to look for selection in Muroidea across exon 2 ####
 
-exon2.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start_nt_codon_offset[2]:(mouse.exons$end_nt_codon_offset[2]-1)]
+exon2.aln <- as.matrix(alignments$nt.mammal.ape)[,mouse.exons$start_nt_codon_offset[2]:(mouse.exons$end_nt_codon_offset[2]-1)]
 # exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
 ape::write.FASTA(exon2.aln, file = "paml/exon_2/exon_2.aln")
 
@@ -1072,7 +1034,7 @@ if(file.exists(exon.2.output.file)){
 
 
 #### Create codeml files to look for selection in Muroidea across exon 7 ####
-exon7.aln <- as.matrix(ape.nt.aln)[,mouse.exons$start_nt_codon_offset[7]:mouse.exons$end_nt_codon_offset[7]]
+exon7.aln <- as.matrix(alignments$nt.mammal.ape)[,mouse.exons$start_nt_codon_offset[7]:mouse.exons$end_nt_codon_offset[7]]
 # exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
 ape::write.FASTA(exon7.aln, file = "paml/exon_7/exon_7.aln")
 
@@ -1218,41 +1180,41 @@ if(!installr::is.windows()){
 
 #### Run HyPhy GARD to test for recombination ####
 
-if(!installr::is.windows()){
-  
-  system2("hyphy", " gard --alignment aln/zfxy.nt.aln --type codon --output hyphy/mammal.gard.json")
-  
-  # Read the json file and parse results
-  hyphy.data <- jsonlite::read_json("hyphy/mammal.gard.json")
-  
-  siteBreakPointSupport <- data.frame("site" = as.numeric(names(hyphy.data$siteBreakPointSupport)),
-                                         "support" = unlist(hyphy.data$siteBreakPointSupport))
-  
-  ggplot() +
-    geom_rect(data = mouse.exons,          aes(xmin = start_aa, xmax = end_aa, ymin = 2, ymax = 3, fill = is_even))+
-    scale_fill_manual(values=c("grey", "white"))+
-    geom_rect(data = ranges.ZF.common,     aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="grey", alpha=0.5)+
-    geom_rect(data = ranges.9aaTAD.common, aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="blue", alpha=0.5)+
-    geom_rect(data = ranges.NLS.common,    aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="green", alpha=0.5)+
-    geom_vline(xintercept = 488)+
-    geom_vline(xintercept = 884)+
-    scale_x_continuous(expand = c(0,0))+
-    guides(fill = "none")+
-    # geom_point(data =siteBreakPointSupport, aes(x = site, y = log10(support) ))+
-    theme_bw()+
-    theme(axis.text.y = element_blank())
-  
-  tree.1.488 <- hyphy.data$breakpointData[[1]]$tree
-  readr::write_file(tree.1.488, file = "hyphy/tree.1.488.treefile")
-  tree.1.488 <- read.tree("hyphy/tree.1.488.treefile")
-  
-  tree.489.884 <- hyphy.data$breakpointData[[2]]$tree
-  readr::write_file(tree.489.884, file = "hyphy/tree.489.884.treefile")
-  tree.489.884 <- read.tree("hyphy/tree.489.884.treefile")
-    
-  # Trees are entirely unconvincing, leave this
-  
-}
+# if(!installr::is.windows()){
+#   
+#   system2("hyphy", " gard --alignment aln/zfxy.nt.aln --type codon --output hyphy/mammal.gard.json")
+#   
+#   # Read the json file and parse results
+#   hyphy.data <- jsonlite::read_json("hyphy/mammal.gard.json")
+#   
+#   siteBreakPointSupport <- data.frame("site" = as.numeric(names(hyphy.data$siteBreakPointSupport)),
+#                                          "support" = unlist(hyphy.data$siteBreakPointSupport))
+#   
+#   ggplot() +
+#     geom_rect(data = mouse.exons,          aes(xmin = start_aa, xmax = end_aa, ymin = 2, ymax = 3, fill = is_even))+
+#     scale_fill_manual(values=c("grey", "white"))+
+#     geom_rect(data = ranges.ZF.common,     aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="grey", alpha=0.5)+
+#     geom_rect(data = ranges.9aaTAD.common, aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="blue", alpha=0.5)+
+#     geom_rect(data = ranges.NLS.common,    aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="green", alpha=0.5)+
+#     geom_vline(xintercept = 488)+
+#     geom_vline(xintercept = 884)+
+#     scale_x_continuous(expand = c(0,0))+
+#     guides(fill = "none")+
+#     # geom_point(data =siteBreakPointSupport, aes(x = site, y = log10(support) ))+
+#     theme_bw()+
+#     theme(axis.text.y = element_blank())
+#   
+#   tree.1.488 <- hyphy.data$breakpointData[[1]]$tree
+#   readr::write_file(tree.1.488, file = "hyphy/tree.1.488.treefile")
+#   tree.1.488 <- read.tree("hyphy/tree.1.488.treefile")
+#   
+#   tree.489.884 <- hyphy.data$breakpointData[[2]]$tree
+#   readr::write_file(tree.489.884, file = "hyphy/tree.489.884.treefile")
+#   tree.489.884 <- read.tree("hyphy/tree.489.884.treefile")
+#     
+#   # Trees are entirely unconvincing, leave this
+#   
+# }
 
 
 #### Plot codeml branch-site model output  ####
@@ -1277,13 +1239,13 @@ if(file.exists(paml.branch.site.output)){
 #### Ancestral sequence reconstruction #####
 
 # Read the ancestral reconstruction
-ancestral.nt.seqs <- read.table(paste0(nt.aln.file, ".state") ,header=TRUE)
+ancestral.nt.seqs <- read.table(paste0(files$mammal.nt.aln, ".state") ,header=TRUE)
 
 # We care about the eutherian common ancestor and the rodent ancestor
 # Find these nodes
 
 # Read the tree back to keep full node names
-nt.aln.tree.nodes <- ape::read.tree(paste0(nt.aln.file, ".treefile"))
+nt.aln.tree.nodes <- ape::read.tree(paste0(files$mammal.nt.aln, ".treefile"))
 nt.aln.tree.nodes <- ape::root(nt.aln.tree.nodes, "Platypus_ZFX")
 
 ggtree(nt.aln.tree.nodes) + 
@@ -1306,12 +1268,12 @@ rodent.anc.nt <- ancestral.nt.seqs %>%
 rodent.anc.nt <- ape::as.DNAbin(rodent.anc.nt$State)
 
 # Bind together as a matrix
-rodent.plus.anc.nt.aln <- rbind(as.matrix(ape.nt.aln), rodent.anc.nt)
+rodent.plus.anc.nt.aln <- rbind(as.matrix(alignments$nt.mammal.ape), rodent.anc.nt)
 
 # Convert back to list and add names
 rodent.ancestor.label <- "Muroidea ancestral Zfy"
 rodent.plus.anc.nt.aln <- as.list.DNAbin(rodent.plus.anc.nt.aln)
-names(rodent.plus.anc.nt.aln) <- c(names(ape.nt.aln), rodent.ancestor.label)
+names(rodent.plus.anc.nt.aln) <- c(names(alignments$nt.mammal.ape), rodent.ancestor.label)
 
 # Plot the MSA
 
@@ -1394,12 +1356,12 @@ calculate.conservation <-function(aa.aln, outgroup.name){
                   smoothed5 = slider::slide_dbl(fraction, mean, .before=2, .after = 2))
 }
 
-combined.aa.aln <- readAAMultipleAlignment(combined.aa.aln.file, format = "fasta")
+# combined.aa.aln <- readAAMultipleAlignment(files$combined.aa.aln, format = "fasta")
 
 # Use Xenopus ZFX.S as the comparison group
-msa.aa.aln.tidy.frog.conservation    <- calculate.conservation(combined.aa.aln,"Xenopus_ZFX.S" )
-msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(combined.aa.aln,"Chicken_ZFX" )
-msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(combined.aa.aln,"Opossum_ZFX" )
+msa.aa.aln.tidy.frog.conservation    <- calculate.conservation(alignments$aa.combined.biostrings,"Xenopus_ZFX.S" )
+msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(alignments$aa.combined.biostrings,"Chicken_ZFX" )
+msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(alignments$aa.combined.biostrings,"Opossum_ZFX" )
 
 # Combine the structural conservation plot with the aa tree
 # This should show all the 9aaTADs
@@ -1445,8 +1407,8 @@ save.double.width("figure/aa.structure.confident.png", aa.structure.confident.pl
 
 #### Plot the conservation of hydrophobicity across mammal/outgroup AA MSA ####
 
-msa.aa.aln.tidy.hydrophobicity <- do.call(rbind, mapply(calc.hydrophobicity, aa=combined.aa.aln@unmasked, 
-                                                sequence.name = names(combined.aa.aln@unmasked), 
+msa.aa.aln.hydrophobicity <- do.call(rbind, mapply(calc.hydrophobicity, aa=alignments$aa.combined.biostrings@unmasked, 
+                                                sequence.name = names(alignments$aa.combined.biostrings@unmasked), 
                                                 window.size = 9,
                                                 SIMPLIFY = FALSE))  %>%
   dplyr::mutate(sequence = factor(sequence, levels = rev(combined.taxa.name.order))) # sort reverse to match tree
@@ -1454,7 +1416,7 @@ msa.aa.aln.tidy.hydrophobicity <- do.call(rbind, mapply(calc.hydrophobicity, aa=
 n.taxa <- length(combined.taxa.name.order) + 1.5
 
 hydrophobicity.plot <- ggplot()+
-  geom_tile(data=msa.aa.aln.tidy.hydrophobicity,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
+  geom_tile(data=msa.aa.aln.hydrophobicity,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
   scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
   labs(fill="Hydrophobicity (9 site average)")
 hydrophobicity.plot <- annotate.structure.plot(hydrophobicity.plot, n.taxa)
@@ -1462,15 +1424,15 @@ save.double.width("figure/hydrophobicity.convervation.tree.png", hydrophobicity.
 
 #### Plot conservation of charge across mammal/outgroup AA MSA ####
 
-msa.aa.aln.tidy.charge <- do.call(rbind, mapply(calc.charge, aa=combined.aa.aln@unmasked, 
-                                                sequence.name = names(combined.aa.aln@unmasked), 
+msa.aa.aln.charge <- do.call(rbind, mapply(calc.charge, aa=alignments$aa.combined.biostrings@unmasked, 
+                                           sequence.name = names(alignments$aa.combined.biostrings@unmasked), 
                                                 window.size = 9,
                                                 SIMPLIFY = FALSE))  %>%
   dplyr::mutate(sequence = factor(sequence, levels = rev(combined.taxa.name.order))) # sort reverse to match tree
 
 charge.plot <- ggplot()+
   # Draw the charges per sequence
-  geom_tile(data=msa.aa.aln.tidy.charge,  aes(x = position_gapped, y = sequence, fill=charge_smoothed))+
+  geom_tile(data=msa.aa.aln.charge,  aes(x = position_gapped, y = sequence, fill=charge_smoothed))+
   scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = 1, limits = c(-1, 1))+
   labs(fill="Charge (9-window smooth)")
 charge.plot <- annotate.structure.plot(charge.plot, n.taxa)
@@ -1482,9 +1444,10 @@ structure.plot <- (aa.structure.plot) / (hydrophobicity.plot) / (charge.plot) + 
 save.double.width("figure/structure.plot.png", structure.plot, height = 230)
 
 #### What are the hydrophobic patches in exons 3 and 5 that are not 9aaTADs?
-
-exon3.patch <- msa.aa.aln.tidy.hydrophobicity %>%
-  dplyr::filter(position_gapped>mouse.exons$start_aa[3]+42 & position_gapped<mouse.exons$end_aa[3]-2)
+exon3.patch.start <- mouse.exons$start_aa[3]+32
+exon3.patch.end   <- mouse.exons$end_aa[3]-5
+exon3.patch <- msa.aa.aln.hydrophobicity %>%
+  dplyr::filter(position_gapped>exon3.patch.start & position_gapped<exon3.patch.end)
 
 exon3.hydro.plot <- ggplot()+
   # Draw the charges per sequence
@@ -1493,20 +1456,23 @@ exon3.hydro.plot <- ggplot()+
   labs(fill="Hydrophobicity (9 site average)")
 
 # Get the region from the msa
-exon3.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  function(i) list("Sequence" = i, "exon_3_285-305"= as.character(msa.aa.aln@unmasked[[i]][285:305])))) %>%
+
+exon3.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  function(i) list("Sequence" = i, "exon_3_274-287"= as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
   as.data.frame %>%
   dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
   dplyr::arrange(as.integer(Sequence))
 
-exon5.patch <- msa.aa.aln.tidy.hydrophobicity %>%
-  dplyr::filter(position_gapped>mouse.exons$start_aa[5]+38 & position_gapped<mouse.exons$end_aa[5]+3)
+exon5.patch.start <- mouse.exons$start_aa[5]+39
+exon5.patch.end   <- mouse.exons$end_aa[5]+1
+exon5.patch <- msa.aa.aln.hydrophobicity %>%
+  dplyr::filter(position_gapped>exon5.patch.start & position_gapped<exon5.patch.end)
 exon5.hydro.plot <- ggplot()+
   # Draw the charges per sequence
   geom_tile(data=exon5.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
   scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
   labs(fill="Hydrophobicity (9 site average)")
 
-exon5.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  function(i) list("Sequence" = i, "exon_5_399-418"= as.character(msa.aa.aln@unmasked[[i]][399:418])))) %>%
+exon5.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  function(i) list("Sequence" = i, "exon_5_386-403"= as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
   as.data.frame %>%
   dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
   dplyr::arrange(as.integer(Sequence))
@@ -1515,15 +1481,16 @@ exon.patch.table <- merge(exon3.patch.table, exon5.patch.table, by=c("Sequence")
   create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:3)
 
 # Get consensus strings for the two patches
-paste(s2c(consensusString(msa.aa.aln))[285:305], collapse = "")
-paste(s2c(consensusString(msa.aa.aln))[399:418], collapse = "")
+cat("Exon 3 patch consensus: ", paste(s2c(consensusString(alignments$aa.combined.biostrings))[exon3.patch.start:exon3.patch.end], collapse = ""), "\n")
+cat("Exon 5 patch consensus: ", paste(s2c(consensusString(alignments$aa.combined.biostrings))[exon5.patch.start:exon5.patch.end], collapse = ""), "\n")
+
 
 #### ####
 
 
 # testing of side-by-side plots
 # p <- ggtree(combined.outgroup.tree) + geom_tiplab(size=3, aes(col = group), align=F)
- # msaplot(p, combined.aa.aln.file, offset=0.4, width=2)+theme(legend.position = "none")
+ # msaplot(p, files$combined.aa.aln, offset=0.4, width=2)+theme(legend.position = "none")
 
 # p %>% aplot::insert_right(msa.combined.aa.plot)
 
@@ -1533,3 +1500,4 @@ paste(s2c(consensusString(msa.aa.aln))[399:418], collapse = "")
 # ggmsa::treeMSA_plot(ggtree(combined.outgroup.tree)+geom_tiplab(size=3, aes(col = group)), msa.outgroup.aln.tidy, color = "Chemistry_AA",
 #                     border=NA, font=NULL)
 #  
+cat("Done!\n")

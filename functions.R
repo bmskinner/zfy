@@ -32,8 +32,9 @@ load.packages <- function(){
   
   sapply(cran.packages, install.cran)
   
-  github.packages <- c('YuLab-SMU/ggtree' # since ggtree cannot install in Bioconductor 3.15 on cluster
-                        )#"vragh/seqvisr", "vmikk/metagMisc"
+  github.packages <- c('YuLab-SMU/ggtree', # since ggtree cannot install in Bioconductor 3.15 on cluster
+                       "vmikk/metagMisc"  # for converting distance matrices to data frames
+                        )#"vragh/seqvisr"
   sapply(github.packages, install.github)
   
   bioconductor.packages <- c("msa", "ggmsa", "treeio")
@@ -464,6 +465,76 @@ locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
 }
 
 # Given a Biostrings alignment, extract the sequence string at the given coordinates
+# aln - msa in Biostrings format
+# sequence.name - the name of the sequence from the alignment to extact
+# start, end - coordinates in the gapped alignment
 subset.sequence <- function(aln, sequence.name, start, end){
   as.character(aln@unmasked[[sequence.name]][start:end])
 }
+
+# Create an Excel file with column filtering
+create.xlsx = function(data, file.name, cols.to.fixed.size.font = NULL, cols.to.rich.text = NULL){
+  
+  # Set rich text formatting and highlight VV motifs in the given column index
+  set.rich.text.on.vv <- function(wb, sh, col.index){
+    
+    normal.font.ref <-  xlsx::Font(wb, heightInPoints = 10, isBold=FALSE, name = "Courier New")$ref
+    highlight.font.ref <- xlsx::Font(wb, heightInPoints = 10, color="red", isBold=TRUE,  name = "Courier New")$ref
+    
+    for(cell in xlsx::getCells(xlsx::getRows(sh), colIndex=col.index)){
+      
+      oldval <- xlsx::getCellValue(cell)
+      vv.locs <- str_locate_all(oldval, "VV")
+      
+      if( nrow(vv.locs[[1]]) > 0 ){
+        
+        # Create a rich text string
+        new.value <- rJava::.jnew("org/apache/poi/xssf/usermodel/XSSFRichTextString",
+                                  oldval )
+        
+        # Set entire cell to normal style
+        rJava::.jcall(obj=new.value, returnSig = "V",  # void return
+                      method="applyFont", normal.font.ref)
+        
+        for(r in 1:nrow(vv.locs[[1]])){
+          # Apply the new font to the correct indexes (0-indexed inclusive)
+          rJava::.jcall(obj=new.value,returnSig = "V",  # void return
+                        method="applyFont", 
+                        as.integer(vv.locs[[1]][r,1]-1), # start index
+                        as.integer(vv.locs[[1]][r,2]), # end index
+                        highlight.font.ref)
+        }
+        
+        
+        # Set the new cell value and cast to a rich text string
+        rJava::.jcall(cell, "V", "setCellValue",
+                      rJava::.jcast(new.value, "org/apache/poi/ss/usermodel/RichTextString"))
+      }
+    }
+  }
+  
+  oldOpt = options()
+  options(xlsx.date.format="yyyy-mm-dd") # change date format
+  wb = xlsx::createWorkbook(type = "xlsx")
+  sh = xlsx::createSheet(wb)
+  xlsx::addDataFrame(data, sh, row.names = F)
+  # cols.to.filter = paste0("A1:", LETTERS[ncol(data)], "1")
+  # xlsx::addAutoFilter(sh, cols.to.filter)
+  xlsx::createFreezePane(sh, 2, 2, 2, 2) # freeze top row and first column
+  cs <- xlsx::CellStyle(wb) + 
+    xlsx::Font(wb,heightInPoints = 10, isBold = FALSE, name="Courier New")
+  if(!is.null(cols.to.fixed.size.font)){
+    for(i in xlsx::getCells(xlsx::getRows(sh), colIndex=cols.to.fixed.size.font)){
+      xlsx::setCellStyle(i, cs)
+    }
+  }
+  
+  if(!is.null(cols.to.rich.text)) {
+    for(col in cols.to.rich.text) set.rich.text.on.vv(wb, sh, col)
+    
+  }
+  xlsx::autoSizeColumn(sh, 1:ncol(data))
+  xlsx::saveWorkbook(wb, file=file.name)
+  options(oldOpt)
+}
+
