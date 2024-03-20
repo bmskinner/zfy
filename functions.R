@@ -276,7 +276,7 @@ add.conservation.track <- function(ranges,  y.start, y.end, ...){
                               xmax=position+0.45, 
                               ymin=y.start, 
                               ymax=y.end, 
-                              fill=smoothed9))
+                              fill=smoothed5))
 }
 
 # Add an exon track to a plot
@@ -286,6 +286,8 @@ add.exon.track <- function(y.start, y.end, ...){
   geom_rect_pattern(data = mouse.exons, aes(xmin = start_aa, xmax = end_aa, 
                                             ymin = y.start, ymax = y.end,
                                             pattern = exon==2, fill=exon), 
+                    pattern_xoffset = 0.04, # so the stripes don't obscure labels
+                    pattern_yoffset = 0.02, 
                     pattern_angle = 45, 
                     pattern_density = 0.5, # equal stripe widths
                     pattern_spacing = 0.05, # enough space for text label
@@ -307,7 +309,7 @@ annotate.structure.plot <- function(plot, n.taxa){
     # Draw the conservation with Xenopus, chicken and opossum
     new_scale_fill()+
     scale_fill_viridis_c(limits = c(0, 1))+
-    labs(fill="Conservation (9 site average)")+
+    labs(fill="Conservation (5 site average)")+
     add.conservation.track(msa.aa.aln.tidy.frog.conservation,    n.taxa,   n.taxa+2)+
     add.conservation.track(msa.aa.aln.tidy.chicken.conservation, n.taxa+3, n.taxa+5)+
     add.conservation.track(msa.aa.aln.tidy.opossum.conservation, n.taxa+6, n.taxa+8)+
@@ -378,7 +380,7 @@ locate.zfs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
     dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(nt.aln@unmasked), # we have the nt alignment
                                             convert.to.gapped.coordinate(start_nt_ungapped,  nt.aln@unmasked[[sequence]]),
                                             NA),
-                  end_nt_gapped = ifelse( sequence %in% names(msa.nt.aln@unmasked), # we have the nt alignment
+                  end_nt_gapped = ifelse( sequence %in% names(nt.aln@unmasked), # we have the nt alignment
                                           convert.to.gapped.coordinate(end_nt_ungapped,  nt.aln@unmasked[[sequence]]),
                                           NA)) %>%
     # Add the AA sequence covered by the ZF and motifs

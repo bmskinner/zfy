@@ -1093,30 +1093,20 @@ hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree
 hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
 ape::write.tree(hyphy.tree, file = "hyphy/mammal.nt.aln.hyphy.treefile")
 
+# create an sh file to submit these
 # HyPhy should be installed in a conda environment
 # This script should be invoked within the conda environment
+hyphy.sh.data <- paste0("#!/bin/bash\n",
+                        "source activate hyphy\n",
+                        "hyphy relax --alignment paml/exon_1_3-6/exon_1_3-6.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_1_3-6.relax.json\n",
+                        "hyphy relax --alignment paml/exon_2/exon_2.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_2.relax.json\n",
+                        "hyphy relax --alignment paml/exon_2/exon_7.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_7.relax.json\n",
+                        "hyphy relax --alignment aln/zfxy.nt.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/mammal.relax.json\n"
+)
+write_file(hyphy.sh.data, "hyphy.sh")
+
 if(!installr::is.windows()){
-  
-  # hyphy relax --alignment ../aln/zfxy.nt.aln --tree mammal.nt.aln.hyphy.treefile --reference "Reference" --test "Test" --output mammal.relax.json
-  
-  # Test relaxation of selection across the entire sequence in Muroidea
-  system2("hyphy", " relax --alignment aln/zfxy.nt.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/mammal.relax.json")
-  
-  # also run separately on the 3 exon partitions
-  system2("hyphy", " relax --alignment paml/exon_1_3-6/exon_1_3-6.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_1_3-6.relax.json")
-  system2("hyphy", " relax --alignment paml/exon_2/exon_2.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_2.relax.json")
-  system2("hyphy", " relax --alignment paml/exon_7/exon_7.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_7.relax.json")
-  
-  # create an sh file to submit these manually
-  hyphy.sh.data <- paste0("#!/bin/bash\n",
-                          "source activate hyphy\n",
-                          "hyphy relax --alignment paml/exon_1_3-6/exon_1_3-6.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_1_3-6.relax.json\n",
-                          "hyphy relax --alignment paml/exon_2/exon_2.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_2.relax.json\n",
-                          "hyphy relax --alignment paml/exon_2/exon_7.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_7.relax.json\n",
-                          "hyphy relax --alignment aln/zfxy.nt.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/mammal.relax.json\n"
-  )
-  write_file(hyphy.sh.data, "hyphy.sh")
-  
+  system2("bash", "hyphy.sh")
   
   create.relax.k.tree <- function(json.file){
     # Read the json file and parse results
@@ -1344,13 +1334,16 @@ calculate.conservation <-function(aa.aln, outgroup.name){
   species.to.calc <- combined.taxa.name.order[1:outgroup.level-1]
   
   ggmsa::tidy_msa(aa.aln) %>%
-    merge( ref.aa.aln, by = c("position")) %>%
+    merge(ref.aa.aln, by = c("position")) %>%
     dplyr::filter(ref_char!="-", 
                   name %in% species.to.calc) %>%
     dplyr::mutate(matchesRef = character==ref_char) %>%
     dplyr::group_by(position, matchesRef) %>%
-    dplyr::summarise(n = n(), fraction = n/length(species.to.calc)) %>%
-    dplyr::filter(matchesRef) %>%
+    dplyr::summarise(fraction = n()/length(species.to.calc)) %>%
+    tidyr::pivot_wider(names_from = matchesRef, values_from = fraction, values_fill=0) %>%
+    dplyr::rename(fraction = `TRUE`) %>%
+    dplyr::select(-`FALSE`) %>%
+    dplyr::ungroup() %>%
     # Perform smoothing over aa moving windows
     dplyr::mutate(smoothed9 = slider::slide_dbl(fraction, mean, .before=4, .after = 4),
                   smoothed5 = slider::slide_dbl(fraction, mean, .before=2, .after = 2))
@@ -1434,7 +1427,7 @@ charge.plot <- ggplot()+
   # Draw the charges per sequence
   geom_tile(data=msa.aa.aln.charge,  aes(x = position_gapped, y = sequence, fill=charge_smoothed))+
   scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = 1, limits = c(-1, 1))+
-  labs(fill="Charge (9-window smooth)")
+  labs(fill="Charge (9 site average)")
 charge.plot <- annotate.structure.plot(charge.plot, n.taxa)
 save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 120)
 
