@@ -381,9 +381,9 @@ create.pairwise.kaks.data <- function(seqinr.aln){
   kaks.ratio <- kaks.data$ka / kaks.data$ks
   kaks.pairwise <- dist2list(kaks.ratio, tri = F)
   kaks.pairwise$col <- factor(kaks.pairwise$col, 
-                                       levels = mammal.taxa.name.order)
+                              levels = mammal.taxa.name.order)
   kaks.pairwise$row <- factor(kaks.pairwise$row, 
-                                       levels = mammal.taxa.name.order)
+                              levels = mammal.taxa.name.order)
   
   kaks.pairwise %>% 
     dplyr::rowwise() %>%
@@ -444,85 +444,53 @@ write_tsv(locations.NLS %>%
                           start_nt_gapped, end_nt_gapped),
           "figure/locations.NLS.tsv")
 
-# For 9aaTADs, we want to combine overlapping 9aaTADs into a single wider region,
-# but only for those TADs that are in 5 or more species (otherwise we will collapse
-# separate interesting regions into one superTAD). Use overall coverage along the sequence
-# to separate the regions
-find.common.9aaTADs <- function(locations.9aaTAD){
-  
-  # We only want to use the high confidence 9aaTADs, and ignore the site in exon 7
-  tads.filtered <- locations.9aaTAD[locations.9aaTAD$rc_score>=80 & locations.9aaTAD$end_gapped < mouse.exons$start_aa[7],]
-  
-  # Make ranges from all of the TADs with >80% RC
-  tad.ranges <- IRanges(start = tads.filtered$start_gapped, end = tads.filtered$end_gapped, names = tads.filtered$sequence)
-  
-  # For each base in the gapped aa alignment, count overlapping TADs
-  count.overlapping.tads <- function(site){
-    site.range <- IRanges(start = site, end=site)
-    IRanges::countOverlaps(site.range, tad.ranges)
-  }
-  
-  tad.coverages <- data.frame("site" = 1:max(tads.filtered$end_gapped))
-  tad.coverages$coverage <- sapply(tad.coverages$site, count.overlapping.tads)
-  tad.coverages <- tad.coverages[tad.coverages$coverage>20,]
-  
-  # For high-coverage 9aaTADs, reduce to overlapping ranges
-  
-  tad.coverages.ranges <- IRanges(IRanges(start =  tad.coverages$site, end =  tad.coverages$site))
-  reduced.ranges<- IRanges::reduce(tad.coverages.ranges)
-  as.data.frame(reduced.ranges) %>%
-    dplyr::mutate(motif_number = row_number(),
-                  adj.motif.number = ifelse(motif_number>4, motif_number-1, motif_number),
-                  # For labels, we want D1, D2, E ..., not D, E, F ...
-                  label = case_when(motif_number==4 ~ paste0(LETTERS[adj.motif.number], 1),
-                                    motif_number==5 ~ paste0(LETTERS[adj.motif.number], 2),
-                                    .default = LETTERS[adj.motif.number] )) %>%
-    dplyr::select(-adj.motif.number)
-}
-
 # We need to combine the full set of structure locations into an overlapping set
 # to be plotted in a single row. Keep those that overlap in >=5 species
 find.common.overlaps <- function(locations.data){
   ranges.9aaTAD <- IRanges(start=locations.data$start_gapped, end = locations.data$end_gapped, names = locations.data$sequence)
   ranges.9aaTAD.reduce <- IRanges::reduce(ranges.9aaTAD)
-
+  
   n.sequences.in.range <- sapply(1:length(ranges.9aaTAD.reduce), function(i) length(subsetByOverlaps(ranges.9aaTAD, ranges.9aaTAD.reduce[i,])))
   as.data.frame(ranges.9aaTAD.reduce[n.sequences.in.range>4,]) %>%
     dplyr::mutate(motif_number = row_number())
 }
-ranges.ZF.common <- find.common.overlaps(locations.zf)
-# Only keep the high confidence 9aaTADs for the track
-ranges.9aaTAD.common<- find.common.9aaTADs(locations.9aaTAD)
 
+ranges.ZF.common <- find.common.overlaps(locations.zf)
 ranges.NLS.common <- find.common.overlaps(locations.NLS)
 
+# Only keep the high confidence 9aaTADs for the track
+ranges.9aaTAD.common <- find.common.9aaTADs(locations.9aaTAD, 
+                                            rc.threshold = 80,
+                                            coverage.threshold = 21)
 
 
-find.matching.range <-function(start, end, ranges){
-  hit <- ranges[ranges$start<=start & ranges$end>=end,]$motif_number
+
+
+
+find.matching.range <-function(start.col, end.col, start, end, ranges){
+  hit <- ranges[ranges[[start.col]]<=start & ranges[[end.col]]>=end,]$motif_number
   if(length(hit)==0) 0 else hit
 }
 
 # Annotate the individual ZFs, 9aaTADs and NLS with which consensus motif they belong to (0 if none)
 locations.zf %<>% 
   dplyr::rowwise() %>%
-  dplyr::mutate(motif_number = find.matching.range(start_gapped, end_gapped, ranges.ZF.common )) %>%
+  dplyr::mutate(motif_number = find.matching.range("start", "end", start_gapped, end_gapped, ranges.ZF.common )) %>%
   dplyr::ungroup()
 
 locations.9aaTAD %<>%
   dplyr::rowwise() %>%
-  dplyr::mutate(motif_number = find.matching.range(start_gapped, end_gapped, ranges.9aaTAD.common )) %>%
+  dplyr::mutate(motif_number = find.matching.range("superTAD.start", "superTAD.end", 
+                                                   start_gapped, end_gapped, ranges.9aaTAD.common )) %>%
   dplyr::ungroup() %>%
   merge(., ranges.9aaTAD.common, by = "motif_number", all.x = TRUE)
 
 locations.NLS %<>% 
   dplyr::rowwise() %>%
-  dplyr::mutate(motif_number = find.matching.range(start_gapped, end_gapped, ranges.NLS.common )) %>%
+  dplyr::mutate(motif_number = find.matching.range("start", "end", start_gapped, end_gapped, ranges.NLS.common )) %>%
   dplyr::ungroup()
 
-#### Export the residues within each ZF and 9aaTAD
-
-
+#### Export the residues within each ZF and NLS ####
 
 # Full ZF motifs
 locations.zf %>%
@@ -544,130 +512,6 @@ locations.zf %>%
   dplyr::arrange(as.integer(Sequence)) %>%
   create.xlsx(., "figure/locations.zf.contact_bases.xlsx", cols.to.fixed.size.font = 2:14)
 
-# All unique 9aaTADs
-locations.9aaTAD %>%
-  dplyr::select(Sequence = sequence, label, aa_motif) %>%
-  # summarise unique motifs
-  dplyr::group_by(label, aa_motif) %>%
-  dplyr::summarise(Count = n(),
-                   Sequences = case_when(Count > 6 ~ "Others",
-                   .default = paste(Sequence, collapse = ", ")))%>%
-  as.data.frame %>%
-  create.xlsx(., "figure/locations.9aaTAD.unique.xlsx", cols.to.fixed.size.font = 2, cols.to.rich.text = 2)
-
-# Combined 9aaTADs per sequence
-# We want to get the 'superTAD' motif for the cases where multiple TADs overlap
-# within a sequence
-# find the overlapping ranges within this restricted set of 9aaTADs per sequence
-create.superTADs <- function(locations.9aaTAD){
-  sequences <- unique(locations.9aaTAD$sequence)
-  tad.labels <- unique(locations.9aaTAD$label)
-  combos <- na.omit(expand.grid("sequence" = sequences, "tad.label"= tad.labels))
-  
-  
-  # Get the reduced range covering the superTAD in each sequence
-  make.supertad <- function(tad.sequence, tad.label){
-    locations.superTAD <- locations.9aaTAD %>%
-      dplyr::filter(sequence == tad.sequence & label==tad.label)
-    if(nrow(locations.superTAD)==0) return()
-
-    locations.ranges <- as.data.frame(IRanges::reduce(IRanges(start = locations.superTAD$start_gapped, 
-                                                              end = locations.superTAD$end_gapped, 
-                                                              names = tad.sequence)))
-    
-    # Should be only one merged range
-    locations.superTAD$supertad_start_gapped <- locations.ranges$start
-    locations.superTAD$supertad_end_gapped <- locations.ranges$end
-    locations.superTAD
-  }
-  
-  locations.9aaTAD.superTAD <- do.call(rbind, mapply(make.supertad, combos$sequence, combos$tad.label, SIMPLIFY = FALSE))
-  # Now find the sequence corresponding to the coordinates for each superTAD
-  # get.aa.sequence <- function(start, end, sequence.name){
-  #   as.character(alignments$aa.combined.ape@unmasked[[sequence.name]][start:end])
-  # }
-  locations.9aaTAD.superTAD$superTADmotif <- mapply(subset.sequence, 
-                                                    locations.9aaTAD.superTAD$sequence,
-                                                    locations.9aaTAD.superTAD$supertad_start_gapped,
-                                                    locations.9aaTAD.superTAD$supertad_end_gapped,
-                                                    MoreArgs = list(aln=alignments$aa.combined.biostrings))
-  locations.9aaTAD.superTAD$sequence <- factor(locations.9aaTAD.superTAD$sequence, levels = rev(combined.taxa.name.order))
-  # Merge the supertads into the original 9aaTAD data
-  locations.9aaTAD.mge <- merge(locations.9aaTAD, locations.9aaTAD.superTAD, 
-                                by = c("sequence", "start_nt_gapped", "end_nt_gapped",
-                                       "aa_motif", "rc_score", "start_gapped", "end_gapped",
-                                       "motif_number", "start_ungapped", "end_ungapped",
-                                       "start_nt_ungapped", "end_nt_ungapped",
-                                       "i", "start", "end", "width","label"), all.x=TRUE) %>%
-    dplyr::mutate(superTADmotif = str_replace_all(superTADmotif, "-", ""))# remove gaps
-  
-  
-  # Create superTAD output table for the high confidence 9aaTADs
-  locations.9aaTAD.mge %>%
-    dplyr::ungroup() %>%
-    dplyr::filter(rc_score > 80, !is.na(label)) %>%
-    dplyr::select(Sequence = sequence, label, superTADmotif) %>%
-    dplyr::arrange(label) %>%
-    dplyr::distinct() %>%
-    tidyr::pivot_wider(id_cols = c(Sequence), names_from = label, 
-                       values_from = superTADmotif, values_fn = ~paste(.x, collapse = ", ")) %>%
-    as.data.frame %>%
-    dplyr::arrange(as.integer(Sequence)) %>%
-    create.xlsx(., "figure/locations.9aaTAD.xlsx", cols.to.fixed.size.font = 2:9, 
-              cols.to.rich.text = 2:9)
-  
-  locations.9aaTAD.mge
-}
-
-locations.9aaTAD.superTAD <- create.superTADs(locations.9aaTAD)
-
-# We want to get the corresponding 9aaTAD region for those sequences that have
-# lost the 9aaTAD or have low confidence 9aaTADs. Take the 9aaTAD region window
-# and extract the amino acids
-export.locations.of.missing.9aTADs <- function(locations.9aaTAD){
-  sequences <- unique(locations.9aaTAD$sequence)
-  tad.labels <- unique(locations.9aaTAD$label)
-  
-  # Check if a sequence and tad label is present
-  has.na.tads <- function(s, t){
-    data <- locations.9aaTAD.superTAD[locations.9aaTAD.superTAD$sequence==s & 
-                                        locations.9aaTAD.superTAD$label==t,]
-    all(is.na(data[["rc_score"]]) | data[["rc_score"]]<80 )
-  }
-
-  combos <- na.omit(expand.grid("sequence" = sequences, "tad.label"= tad.labels)) %>%
-      # Find the common ranges
-    merge(., ranges.9aaTAD.common, by.x = c("tad.label"), by.y = c("label"))
-  
-  # Filter to only those that do not have a matching TAD
-  combos <- na.omit(combos[mapply(has.na.tads, combos$sequence, combos$tad.label, SIMPLIFY = TRUE),])
-  
-  # Find the orthologous sequence
-  combos$aa_motif <- mapply(subset.sequence, 
-                            sequence.name=combos$sequence, 
-                            start=combos$start, 
-                            end=combos$end, 
-                            MoreArgs=list(aln=alignments$aa.combined.biostrings), SIMPLIFY = TRUE)
-  
-  combos %<>%
-    dplyr::ungroup() %>%
-    dplyr::select(Sequence = sequence, tad.label, aa_motif) %>%
-    dplyr::distinct() %>%
-    dplyr::arrange(tad.label) %>%
-    # dplyr::mutate(aa_motif = str_replace_all(aa_motif, "-", "")) %>%
-    tidyr::pivot_wider(id_cols = c(Sequence), names_from = tad.label, 
-                       values_from = aa_motif, values_fn = ~paste(.x, collapse = ", ")) %>%
-    as.data.frame %>%
-    dplyr::arrange(as.integer(Sequence))
-  
-  create.xlsx(combos, "figure/locations.9aaTAD.low_confidence.xlsx", cols.to.fixed.size.font = 2:9, 
-              cols.to.rich.text = 2:9)
-  
-}
-
-export.locations.of.missing.9aTADs(locations.9aaTAD)
-
-
 locations.NLS %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
   dplyr::mutate(motif_number = paste0("NLS_", motif_number)) %>%
@@ -676,6 +520,159 @@ locations.NLS %>%
   as.data.frame %>%
   dplyr::arrange(as.integer(Sequence)) %>%
   create.xlsx(., "figure/locations.NLS.xlsx", cols.to.fixed.size.font = 2:4)
+
+#### Export the residues within each 9aaTAD ####
+
+# All unique 9aaTADs identified
+locations.9aaTAD %>%
+  dplyr::select(Sequence = sequence, label, aa_motif) %>%
+  # summarise unique motifs
+  dplyr::group_by(label, aa_motif) %>%
+  dplyr::summarise(Count = n(),
+                   Sequences = case_when(Count > 6 ~ "Others",
+                                         .default = paste(Sequence, collapse = ", ")))%>%
+  as.data.frame %>%
+  create.xlsx(., "figure/locations.9aaTAD.unique.xlsx", cols.to.fixed.size.font = 2, cols.to.rich.text = 2)
+
+
+# For each high-confidence 9aaTAD region:
+# Extract the aa_motif if available, whatever the rc score
+# If there is no detected 9aaTAD, extract the superTAD region sequence
+extract.superTAD.motifs <- function(locations.9aaTAD){
+  
+  # Look at all superTAD locations in all sequences
+  sequences <- unique(locations.9aaTAD$sequence)
+  tad.labels <- na.omit(unique(locations.9aaTAD$label))
+  combos <- expand.grid("sequence" = sequences, "tad.label"= tad.labels)
+  combos <- merge(combos, ranges.9aaTAD.common, by.x = "tad.label", by.y = "label",
+                  all.x = TRUE)
+  
+  # Combine the superTAD locations for each row
+  locations.superTAD <- merge(combos, locations.9aaTAD, 
+                              by.x = c("sequence", "tad.label", "superTAD.start",
+                                       "superTAD.end","superTAD.width", "motif_number"),
+                              by.y = c("sequence", "label", "superTAD.start",
+                                       "superTAD.end", "superTAD.width", "motif_number"), all.x = TRUE) %>%
+    # Reduce overlapping TAD ranges for each sequence
+    dplyr::group_by(sequence, tad.label) %>%
+    dplyr::mutate(tad.start = min(start_gapped),
+                  tad.end = max(end_gapped),
+                  tad.start = ifelse(is.na(tad.start), superTAD.start, tad.start),
+                  tad.end = ifelse(is.na(tad.end), superTAD.end, tad.end)) %>%
+    # EXtract the sequence for the tad range from the aa alignment
+    dplyr::rowwise() %>%
+    dplyr::mutate(tad.sequence = subset.sequence(alignments$aa.combined.biostrings,
+                                                 sequence,
+                                                 tad.start,
+                                                 tad.end)) %>%
+    # Drop unneeded columns
+    dplyr::select(Sequence = sequence, tad.label, rc_score, tad.sequence) %>%
+    dplyr::ungroup() %>%
+    dplyr::group_by(Sequence, tad.label) %>%
+    dplyr::arrange(Sequence, tad.label, desc(rc_score)) %>%
+    dplyr::slice_head(n=1) %>% # if there are multiple rc score per supertad, take only the highest
+    dplyr::distinct() %>%
+    
+    # Pivot to each 9aaTAD as a separate column
+    tidyr::pivot_wider(id_cols = c(Sequence), names_from = tad.label, 
+                       values_from = c(tad.sequence, rc_score), values_fn = ~paste(.x, collapse = ", "),
+                       names_glue = "9aaTAD_{tad.label}_{.value}") %>%
+    as.data.frame %>%
+    dplyr::mutate(across(`9aaTAD_A_rc_score`:`9aaTAD_F_rc_score`, as.numeric)) %>%
+    dplyr::rename_with(.fn = function(x) gsub("_tad.sequence", "", x)) %>%
+    dplyr::arrange(as.integer(Sequence))
+  
+  # Create a custom xlsx colouring background of cells by rc score
+  # Set rich text formatting and highlight VV motifs in the given column index
+  set.rich.text.on.vv <- function(wb, sh, col.index){
+    
+    normal.font.ref <-  xlsx::Font(wb, heightInPoints = 10, isBold=FALSE, name = "Courier New")$ref
+    highlight.font.ref <- xlsx::Font(wb, heightInPoints = 10, color="red", isBold=TRUE,  name = "Courier New")$ref
+    
+    for(cell in xlsx::getCells(xlsx::getRows(sh), colIndex=col.index)){
+      
+      oldval <- xlsx::getCellValue(cell)
+      vv.locs <- str_locate_all(oldval, "VV")
+      
+      if( nrow(vv.locs[[1]]) > 0 ){
+        
+        # Create a rich text string
+        new.value <- rJava::.jnew("org/apache/poi/xssf/usermodel/XSSFRichTextString",
+                                  oldval )
+        
+        # Set entire cell to normal style
+        rJava::.jcall(obj=new.value, returnSig = "V",  # void return
+                      method="applyFont", normal.font.ref)
+        
+        for(r in 1:nrow(vv.locs[[1]])){
+          # Apply the new font to the correct indexes (0-indexed inclusive)
+          rJava::.jcall(obj=new.value,returnSig = "V",  # void return
+                        method="applyFont", 
+                        as.integer(vv.locs[[1]][r,1]-1), # start index
+                        as.integer(vv.locs[[1]][r,2]), # end index
+                        highlight.font.ref)
+        }
+        
+        # Set the new cell value and cast to a rich text string
+        rJava::.jcall(cell, "V", "setCellValue",
+                      rJava::.jcast(new.value, "org/apache/poi/ss/usermodel/RichTextString"))
+      }
+    }
+  }
+  
+  wb = xlsx::createWorkbook(type = "xlsx")
+  sh = xlsx::createSheet(wb)
+  xlsx::addDataFrame(locations.superTAD[,1:8], sh, row.names = F)
+  xlsx::createFreezePane(sh, 2, 2, 2, 2) # freeze top row and first column
+  
+  fixed.style <- xlsx::CellStyle(wb) + 
+    xlsx::Font(wb, heightInPoints = 10, isBold = FALSE, name="Courier New")
+  
+  fixed.style.low.rc <- xlsx::CellStyle(wb) + 
+    xlsx::Font(wb, heightInPoints = 10, isBold = FALSE, name="Courier New")+
+    xlsx::Fill(backgroundColor = "orange",
+               foregroundColor = "orange")
+  
+  fixed.style.missing <- xlsx::CellStyle(wb) + 
+    xlsx::Font(wb, heightInPoints = 10, isBold = FALSE, name="Courier New")+
+    xlsx::Fill(backgroundColor = "salmon",
+               foregroundColor = "salmon")
+  
+  
+    rows <- getRows(sh) 
+    for(i in 2:length(xlsx::getRows(sh))){
+      cells <- getCells(rows[i]) 
+      cell.names <- names(cells)
+      for(col in 2:8){
+        cell.name <- cell.names[col]
+        cell.ref <- cells[[cell.name]]
+        rc.val <-  locations.superTAD[i-1, col+7]
+        
+        if( is.na(rc.val)){
+          xlsx::setCellStyle(cell.ref, fixed.style.missing)
+        } else {
+           if(rc.val < 80){
+             xlsx::setCellStyle(cell.ref, fixed.style.low.rc)
+           } else {
+             xlsx::setCellStyle(cell.ref, fixed.style)
+           }
+        }
+      }
+    }
+
+    for(col in 2:8) set.rich.text.on.vv(wb, sh, col)
+    
+    
+    xlsx::autoSizeColumn(sh, 1:ncol(locations.superTAD))
+    xlsx::saveWorkbook(wb, file="figure/locations.9aaTAD.xlsx")
+
+  
+  # 
+  # create.xlsx(locations.superTAD, "figure/locations.9aaTAD.xlsx", cols.to.fixed.size.font = 2:9, 
+  #             cols.to.rich.text = 2:9)
+}
+
+locations.9aaTAD.superTAD <- extract.superTAD.motifs(locations.9aaTAD)
 
 #### Identify binding motifs of the ZFs in each species ####
 
@@ -701,8 +698,8 @@ read.pwm <- function(f){
   p <- seqLogo::makePWM(pwm)
   consensus <- seqLogo::consensus(p)
   data.frame("species"= header$V1,
-       "zf" = header$V2,
-       "consensus" = consensus)
+             "zf" = header$V2,
+             "consensus" = consensus)
 }
 
 pwm.predictions <- do.call(rbind, lapply(pwm.files, read.pwm)) %>%
@@ -944,24 +941,24 @@ ape::write.FASTA(exon1.3_6.aln, file = "paml/exon_1_3-6/exon_1_3-6.aln")
 
 # This control file tests branch site models With heterogeneous ω Across Sites for exons 1 and 3-6
 paml.exon1.3_6.file <- paste0("seqfile     = exon_1_3-6.aln  * alignment file\n",
-                                "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
-                                "outfile   = exon_1_3-6.paml.out.txt\n",
-                                "\n",
-                                "noisy     = 3 * on screen logging\n",
-                                "verbose   = 1 * detailed output in file\n",
-                                "\n",
-                                "seqtype   = 1 * codon data\n",
-                                "ndata     = 1 * one gene alignment\n",
-                                "icode     = 0 * universal genetic code\n",
-                                "cleandata = 0 * keep sites with ambiguity data\n",
-                                "\n",
-                                "model     = 2 * 2 ω values across branches\n",
-                                "NSsites   = 2 * Model M2a\n",
-                                "CodonFreq = 7 * use mutation selection model\n",
-                                "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
-                                "clock     = 0 * assume no clock\n",
-                                "fix_omega = 0 * enables option to estimate omega\n",
-                                "omega     = 0.5 * initial omega value\n")
+                              "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
+                              "outfile   = exon_1_3-6.paml.out.txt\n",
+                              "\n",
+                              "noisy     = 3 * on screen logging\n",
+                              "verbose   = 1 * detailed output in file\n",
+                              "\n",
+                              "seqtype   = 1 * codon data\n",
+                              "ndata     = 1 * one gene alignment\n",
+                              "icode     = 0 * universal genetic code\n",
+                              "cleandata = 0 * keep sites with ambiguity data\n",
+                              "\n",
+                              "model     = 2 * 2 ω values across branches\n",
+                              "NSsites   = 2 * Model M2a\n",
+                              "CodonFreq = 7 * use mutation selection model\n",
+                              "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                              "clock     = 0 * assume no clock\n",
+                              "fix_omega = 0 * enables option to estimate omega\n",
+                              "omega     = 0.5 * initial omega value\n")
 write_file(paml.exon1.3_6.file, "paml/exon_1_3-6/exon_1_3-6.paml.ctl")
 
 
@@ -993,24 +990,24 @@ ape::write.FASTA(exon2.aln, file = "paml/exon_2/exon_2.aln")
 
 # This control file tests branch site models With heterogeneous ω Across Sites for exons 1 and 3-6
 paml.exon2.file <- paste0("seqfile   = exon_2.aln  * alignment file\n",
-                              "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
-                              "outfile   = exon_2.paml.out.txt\n",
-                              "\n",
-                              "noisy     = 3 * on screen logging\n",
-                              "verbose   = 1 * detailed output in file\n",
-                              "\n",
-                              "seqtype   = 1 * codon data\n",
-                              "ndata     = 1 * one gene alignment\n",
-                              "icode     = 0 * universal genetic code\n",
-                              "cleandata = 0 * keep sites with ambiguity data\n",
-                              "\n",
-                              "model     = 2 * 2 ω values across branches\n",
-                              "NSsites   = 2 * Model M2a\n",
-                              "CodonFreq = 7 * use mutation selection model\n",
-                              "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
-                              "clock     = 0 * assume no clock\n",
-                              "fix_omega = 0 * enables option to estimate omega\n",
-                              "omega     = 0.5 * initial omega value\n")
+                          "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
+                          "outfile   = exon_2.paml.out.txt\n",
+                          "\n",
+                          "noisy     = 3 * on screen logging\n",
+                          "verbose   = 1 * detailed output in file\n",
+                          "\n",
+                          "seqtype   = 1 * codon data\n",
+                          "ndata     = 1 * one gene alignment\n",
+                          "icode     = 0 * universal genetic code\n",
+                          "cleandata = 0 * keep sites with ambiguity data\n",
+                          "\n",
+                          "model     = 2 * 2 ω values across branches\n",
+                          "NSsites   = 2 * Model M2a\n",
+                          "CodonFreq = 7 * use mutation selection model\n",
+                          "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                          "clock     = 0 * assume no clock\n",
+                          "fix_omega = 0 * enables option to estimate omega\n",
+                          "omega     = 0.5 * initial omega value\n")
 write_file(paml.exon2.file, "paml/exon_2/exon_2.paml.ctl")
 
 exon.2.output.file <- "paml/exon_2/exon_2.positive.sites.txt"
@@ -1040,24 +1037,24 @@ ape::write.FASTA(exon7.aln, file = "paml/exon_7/exon_7.aln")
 
 # This control file tests branch site models With heterogeneous ω Across Sites for exons 1 and 3-6
 paml.exon7.file <- paste0("seqfile   = exon_7.aln  * alignment file\n",
-                              "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
-                              "outfile   = exon_7.paml.out.txt\n",
-                              "\n",
-                              "noisy     = 3 * on screen logging\n",
-                              "verbose   = 1 * detailed output in file\n",
-                              "\n",
-                              "seqtype   = 1 * codon data\n",
-                              "ndata     = 1 * one gene alignment\n",
-                              "icode     = 0 * universal genetic code\n",
-                              "cleandata = 0 * keep sites with ambiguity data\n",
-                              "\n",
-                              "model     = 2 * 2 ω values across branches\n",
-                              "NSsites   = 2 * Model M2a\n",
-                              "CodonFreq = 7 * use mutation selection model\n",
-                              "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
-                              "clock     = 0 * assume no clock\n",
-                              "fix_omega = 0 * enables option to estimate omega\n",
-                              "omega     = 0.5 * initial omega value\n")
+                          "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
+                          "outfile   = exon_7.paml.out.txt\n",
+                          "\n",
+                          "noisy     = 3 * on screen logging\n",
+                          "verbose   = 1 * detailed output in file\n",
+                          "\n",
+                          "seqtype   = 1 * codon data\n",
+                          "ndata     = 1 * one gene alignment\n",
+                          "icode     = 0 * universal genetic code\n",
+                          "cleandata = 0 * keep sites with ambiguity data\n",
+                          "\n",
+                          "model     = 2 * 2 ω values across branches\n",
+                          "NSsites   = 2 * Model M2a\n",
+                          "CodonFreq = 7 * use mutation selection model\n",
+                          "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                          "clock     = 0 * assume no clock\n",
+                          "fix_omega = 0 * enables option to estimate omega\n",
+                          "omega     = 0.5 * initial omega value\n")
 write_file(paml.exon7.file, "paml/exon_7/exon_7.paml.ctl")
 
 exon.7.output.file <- "paml/exon_7/exon_7.positive.sites.txt"
@@ -1100,7 +1097,7 @@ hyphy.sh.data <- paste0("#!/bin/bash\n",
                         "source activate hyphy\n",
                         "hyphy relax --alignment paml/exon_1_3-6/exon_1_3-6.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_1_3-6.relax.json\n",
                         "hyphy relax --alignment paml/exon_2/exon_2.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_2.relax.json\n",
-                        "hyphy relax --alignment paml/exon_2/exon_7.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_7.relax.json\n",
+                        "hyphy relax --alignment paml/exon_7/exon_7.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_7.relax.json\n",
                         "hyphy relax --alignment aln/zfxy.nt.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/mammal.relax.json\n"
 )
 write_file(hyphy.sh.data, "hyphy.sh")
@@ -1274,7 +1271,7 @@ rodent.tip.labels <- tidytree::offspring( as_tibble(nt.aln.tree.nodes), .node = 
 rodent.plus.anc.nt.aln.tidy <- tidy_msa(rodent.plus.anc.nt.aln) %>%
   dplyr::filter(name %in% c(rodent.ancestor.label, rodent.tip.labels$label))
 rodent.plus.anc.nt.aln.tidy$name <- factor(rodent.plus.anc.nt.aln.tidy$name, 
-                               levels = rev( c(mammal.taxa.name.order, rodent.ancestor.label))) # sort reverse to match tree
+                                           levels = rev( c(mammal.taxa.name.order, rodent.ancestor.label))) # sort reverse to match tree
 
 # Filter the zf locations and correct y locations
 rodent.plus.anc.zf <- locations.zf %>%
@@ -1364,14 +1361,14 @@ aa.structure.plot <- ggplot()+
                                          y=sequence),
             fill="grey", alpha=0.5)+
   geom_tile(data = locations.9aaTAD,     aes(x=(start_gapped+end_gapped)/2,
-                                         width = (end_gapped-start_gapped),
-                                         y=sequence,
-                                         fill=round(rc_score)),
+                                             width = (end_gapped-start_gapped),
+                                             y=sequence,
+                                             fill=round(rc_score)),
             alpha=0.9)+
   paletteer::scale_fill_paletteer_c("grDevices::Blues 3", "9aaTAD RC score (%)", direction = -1, limits = c(50, 100)) +
   geom_tile(data = locations.NLS,     aes(x=(start_gapped+end_gapped)/2,
-                                         width = (end_gapped-start_gapped),
-                                         y=sequence),
+                                          width = (end_gapped-start_gapped),
+                                          y=sequence),
             fill="green", alpha=0.5)
 aa.structure.plot <- annotate.structure.plot(aa.structure.plot, length(combined.taxa.name.order) + 1.5)
 
@@ -1384,9 +1381,9 @@ aa.structure.confident.plot <- ggplot()+
                                          y=sequence),
             fill="grey", alpha=0.5)+
   geom_tile(data = locations.9aaTAD[locations.9aaTAD$rc_score>80,],     aes(x=(start_gapped+end_gapped)/2,
-                                             width = (end_gapped-start_gapped),
-                                             y=sequence,
-                                             fill=round(rc_score)),
+                                                                            width = (end_gapped-start_gapped),
+                                                                            y=sequence,
+                                                                            fill=round(rc_score)),
             alpha=0.9)+
   paletteer::scale_fill_paletteer_c("grDevices::Blues 3", "9aaTAD RC score (%)", direction = -1, limits = c(50, 100)) +
   geom_tile(data = locations.NLS,     aes(x=(start_gapped+end_gapped)/2,
@@ -1401,9 +1398,9 @@ save.double.width("figure/aa.structure.confident.png", aa.structure.confident.pl
 #### Plot the conservation of hydrophobicity across mammal/outgroup AA MSA ####
 
 msa.aa.aln.hydrophobicity <- do.call(rbind, mapply(calc.hydrophobicity, aa=alignments$aa.combined.biostrings@unmasked, 
-                                                sequence.name = names(alignments$aa.combined.biostrings@unmasked), 
-                                                window.size = 9,
-                                                SIMPLIFY = FALSE))  %>%
+                                                   sequence.name = names(alignments$aa.combined.biostrings@unmasked), 
+                                                   window.size = 9,
+                                                   SIMPLIFY = FALSE))  %>%
   dplyr::mutate(sequence = factor(sequence, levels = rev(combined.taxa.name.order))) # sort reverse to match tree
 
 n.taxa <- length(combined.taxa.name.order) + 1.5
@@ -1419,8 +1416,8 @@ save.double.width("figure/hydrophobicity.convervation.tree.png", hydrophobicity.
 
 msa.aa.aln.charge <- do.call(rbind, mapply(calc.charge, aa=alignments$aa.combined.biostrings@unmasked, 
                                            sequence.name = names(alignments$aa.combined.biostrings@unmasked), 
-                                                window.size = 9,
-                                                SIMPLIFY = FALSE))  %>%
+                                           window.size = 9,
+                                           SIMPLIFY = FALSE))  %>%
   dplyr::mutate(sequence = factor(sequence, levels = rev(combined.taxa.name.order))) # sort reverse to match tree
 
 charge.plot <- ggplot()+
@@ -1483,7 +1480,7 @@ cat("Exon 5 patch consensus: ", paste(s2c(consensusString(alignments$aa.combined
 
 # testing of side-by-side plots
 # p <- ggtree(combined.outgroup.tree) + geom_tiplab(size=3, aes(col = group), align=F)
- # msaplot(p, files$combined.aa.aln, offset=0.4, width=2)+theme(legend.position = "none")
+# msaplot(p, files$combined.aa.aln, offset=0.4, width=2)+theme(legend.position = "none")
 
 # p %>% aplot::insert_right(msa.combined.aa.plot)
 

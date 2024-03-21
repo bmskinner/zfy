@@ -529,8 +529,6 @@ create.xlsx = function(data, file.name, cols.to.fixed.size.font = NULL, cols.to.
   wb = xlsx::createWorkbook(type = "xlsx")
   sh = xlsx::createSheet(wb)
   xlsx::addDataFrame(data, sh, row.names = F)
-  # cols.to.filter = paste0("A1:", LETTERS[ncol(data)], "1")
-  # xlsx::addAutoFilter(sh, cols.to.filter)
   xlsx::createFreezePane(sh, 2, 2, 2, 2) # freeze top row and first column
   cs <- xlsx::CellStyle(wb) + 
     xlsx::Font(wb,heightInPoints = 10, isBold = FALSE, name="Courier New")

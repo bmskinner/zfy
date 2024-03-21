@@ -23,13 +23,19 @@
 # RC11	any [C]	 	 	 : 2 - 8
 # RC12   	any [PG]	 : 2 - 7	 	
 
-# aa - the amino acid sequence. May have gaps if part of a multiple sequence alignment
-# sequence.name - the name of the sequence
-# rc.threshold - threshold for percent of refinement criteria matching
-# 
-# Returns - a tibble with 9aaTADs, their coordinates in the sequence, the
+#' Find 9aaTADs in an amino acid sequence
+#'
+#' @param aa the amino acid sequence (character or Biostrings alignment). May 
+#' have gaps if part of a multiple sequence alignment
+#' @param sequence.name  the name of the sequence
+#' @param rc.threshold threshold for percent of refinement criteria matching
+#'
+#' @return a tibble with 9aaTADs, their coordinates in the sequence, the
 # sequence name, and the rc score (as a %). If the input contains gaps ("-"),
 # the coordinates will be with respect to the gapped alignment.
+#' @export
+#'
+#' @examples
 find.9aaTAD <- function(aa, sequence.name, rc.threshold){
   if(!require(dplyr)) stop("dplyr is required")
   if(!require(seqinr)) stop("seqinr is required")
@@ -122,3 +128,58 @@ find.9aaTAD <- function(aa, sequence.name, rc.threshold){
     dplyr::ungroup() %>%
     dplyr::arrange(start_ungapped)
 }
+
+
+#' Combine overlapping 9aaTADs into 'superTAD' regions
+#' 
+#' For 9aaTADs, we want to combine overlapping 9aaTADs into a single wider region,
+#' but only for those TADs that are in 5 or more species (otherwise we will collapse
+#' separate interesting regions into one superTAD). Use overall coverage along the sequence
+#' to separate the regions
+#'
+#' @param locations.9aaTAD tibble output from find.9aaTAD
+#' @param rc.threshold 9aaTADs must have an RC score equal to or highher than 
+#' this to be combined
+#' @param coverage.threshold site must be in this many sequences or more to be
+#' included
+#' 
+#' @return data frame containing the locations of the superTADs at the desired
+#' refinement criteria threshold
+#' @export
+#'
+#' @examples
+find.common.9aaTADs <- function(locations.9aaTAD, rc.threshold = 80, coverage.threshold = 21){
+  
+  # We only want to use the high confidence 9aaTADs, and ignore the site in exon 7
+  tads.filtered <- locations.9aaTAD[locations.9aaTAD$rc_score>=rc.threshold & locations.9aaTAD$end_gapped < mouse.exons$start_aa[7],]
+  
+  # Make ranges from all of the TADs with >80% RC
+  tad.ranges <- IRanges(start = tads.filtered$start_gapped, end = tads.filtered$end_gapped, names = tads.filtered$sequence)
+  
+  # For each base in the gapped aa alignment, count overlapping TADs
+  count.overlapping.tads <- function(site){
+    site.range <- IRanges(start = site, end=site)
+    IRanges::countOverlaps(site.range, tad.ranges)
+  }
+  
+  tad.coverages <- data.frame("site" = 1:max(tads.filtered$end_gapped))
+  tad.coverages$coverage <- sapply(tad.coverages$site, count.overlapping.tads)
+  tad.coverages <- tad.coverages[tad.coverages$coverage>=coverage.threshold,]
+  
+  # For high-coverage 9aaTADs, reduce to overlapping ranges
+  tad.coverages.ranges <- IRanges(IRanges(start =  tad.coverages$site, end =  tad.coverages$site))
+  reduced.ranges<- IRanges::reduce(tad.coverages.ranges)
+  as.data.frame(reduced.ranges) %>%
+    dplyr::mutate(motif_number = row_number(),
+                  adj.motif.number = ifelse(motif_number>4, motif_number-1, motif_number),
+                  # For labels, we want D1, D2, E ..., not D, E, F ...
+                  label = case_when(motif_number==4 ~ paste0(LETTERS[adj.motif.number], 1),
+                                    motif_number==5 ~ paste0(LETTERS[adj.motif.number], 2),
+                                    .default = LETTERS[adj.motif.number] )) %>%
+    dplyr::select(-adj.motif.number) %>%
+    dplyr::rename(superTAD.start = start, 
+                  superTAD.end = end, 
+                  superTAD.width = width)
+}
+
+
