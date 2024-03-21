@@ -63,7 +63,7 @@ filesstrings::create_dir("pwm")
 writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
 
 files <- list() # common file paths
-alignments <- list() # common file paths
+alignments <- list()
 
 #### Read mammal NT FA files #####
 
@@ -111,8 +111,6 @@ metadata.combined %>%
                 Name_in_figures = common.name,Description = original.name  ) %>%
   dplyr::select(Accession,Species,Group,  Name_in_figures, Description ) %>%
   create.xlsx(., "figure/accessions.supplement.xlsx")
-
-# write_tsv(supplementary.accessions.table, "figure/accessions.supplement.tsv")
 
 #### Run combined mammal/outgroup AA alignment ####
 
@@ -480,7 +478,7 @@ locations.zf %<>%
 
 locations.9aaTAD %<>%
   dplyr::rowwise() %>%
-  dplyr::mutate(motif_number = find.matching.range("superTAD.start", "superTAD.end", 
+  dplyr::mutate(motif_number = find.matching.range("start", "end", 
                                                    start_gapped, end_gapped, ranges.9aaTAD.common )) %>%
   dplyr::ungroup() %>%
   merge(., ranges.9aaTAD.common, by = "motif_number", all.x = TRUE)
@@ -549,16 +547,16 @@ extract.superTAD.motifs <- function(locations.9aaTAD){
   
   # Combine the superTAD locations for each row
   locations.superTAD <- merge(combos, locations.9aaTAD, 
-                              by.x = c("sequence", "tad.label", "superTAD.start",
-                                       "superTAD.end","superTAD.width", "motif_number"),
-                              by.y = c("sequence", "label", "superTAD.start",
-                                       "superTAD.end", "superTAD.width", "motif_number"), all.x = TRUE) %>%
+                              by.x = c("sequence", "tad.label", "start",
+                                       "end","width", "motif_number"),
+                              by.y = c("sequence", "label", "start",
+                                       "end", "width", "motif_number"), all.x = TRUE) %>%
     # Reduce overlapping TAD ranges for each sequence
     dplyr::group_by(sequence, tad.label) %>%
     dplyr::mutate(tad.start = min(start_gapped),
                   tad.end = max(end_gapped),
-                  tad.start = ifelse(is.na(tad.start), superTAD.start, tad.start),
-                  tad.end = ifelse(is.na(tad.end), superTAD.end, tad.end)) %>%
+                  tad.start = ifelse(is.na(tad.start), start, tad.start),
+                  tad.end = ifelse(is.na(tad.end), end, tad.end)) %>%
     # EXtract the sequence for the tad range from the aa alignment
     dplyr::rowwise() %>%
     dplyr::mutate(tad.sequence = subset.sequence(alignments$aa.combined.biostrings,
@@ -665,14 +663,9 @@ extract.superTAD.motifs <- function(locations.9aaTAD){
     
     xlsx::autoSizeColumn(sh, 1:ncol(locations.superTAD))
     xlsx::saveWorkbook(wb, file="figure/locations.9aaTAD.xlsx")
-
-  
-  # 
-  # create.xlsx(locations.superTAD, "figure/locations.9aaTAD.xlsx", cols.to.fixed.size.font = 2:9, 
-  #             cols.to.rich.text = 2:9)
 }
 
-locations.9aaTAD.superTAD <- extract.superTAD.motifs(locations.9aaTAD)
+extract.superTAD.motifs(locations.9aaTAD)
 
 #### Identify binding motifs of the ZFs in each species ####
 
@@ -749,7 +742,7 @@ if(!file.exists( "time.tree.data.tsv")){
   pairwise.times <- read_tsv("time.tree.data.tsv")
 }
 
-#### Run codeml site model to check for site-specific selection ####
+#### Prepare codeml site model to check for site-specific selection ####
 
 # Adapted from Beginner's Guide on the Use of PAML to Detect Positive Selection
 # https://academic.oup.com/mbe/article/40/4/msad041/7140562 for details
@@ -793,76 +786,7 @@ paml.site.file <- paste0("seqfile   = ", files$mammal.nt.aln, " * alignment file
                          "omega     = 0.5 * initial omega value\n")
 write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
 
-if(RUN_PAML & !installr::is.windows()){
-  # Run codeml
-  old.wd <- getwd()
-  setwd("paml/site-specific")
-  system2("codeml", "zfy.site-specific.paml.ctl",
-          stdout = "zfy.site-specific.paml.log", 
-          stderr = "zfy.site-specific.paml.log")
-  
-  # Extract lnl
-  system2("cat", "zfy.out.txt | grep --before-context=5 'lnL' | grep -e 'lnL' -e 'Model'| paste -d ' '  - - > zfy.out.lnl.txt")
-  
-  setwd(old.wd)
-  
-  # Process the output file to find log likelihood values to calculate LRT
-  # (likelihood ratio test): twice the difference in log-likelihood ℓ between the
-  # null and alternative hypotheses, 2Δℓ = 2(ℓ1 − ℓ0), where ℓ0 is the
-  # log-likelihood score for the null model, whereas ℓ1 is the log-likelihood
-  # under the alternative model.
-  
-  # ℓ is in the output file at lines starting lnL
-  # Grep the lnL and previous 5 lines (which has model name).
-  # Get just the lnL and model lines from these 5
-  # Paste alternate lines together with a space
-  # cat zfy.out.txt | grep --before-context=5 'lnL' | grep -e 'lnL' -e 'Model'| paste -d " "  - -
-  # Note that there are other lines with 'model' in the file so we still need the first grep
-  
-  # e.g. values from testing
-  # Model 0: one-ratio lnL(ntime: 95  np:160): -20797.229748      +0.000000
-  # Model 1: NearlyNeutral (2 categories) lnL(ntime: 95  np:161): -20712.485759      +0.000000
-  # Model 2: PositiveSelection (3 categories) lnL(ntime: 95  np:163): -20712.488036      +0.000000
-  # Model 7: beta (10 categories) lnL(ntime: 95  np:161): -20614.279484      +0.000000
-  # Model 8: Model 8: beta&w>1 (11 categories) lnL(ntime: 95  np:163): -20614.287541      +0.000000
-  
-  # Calculate the liklihood ratio test for two models
-  # lnl - the log likelihoods
-  # np - the number of free parameters
-  # This calculates the LRT and tests it against the chi-distribution where the
-  # degrees of freedom are the difference in the number of free parameters between
-  # the models. 
-  calc.LRT <- function(lnl0, lnl1, np0, np1){
-    lrt <- 2 * (lnl1-lnl0)
-    df <- abs(np1-np0)
-    crit.value =  qchisq(p=0.05, df=df, lower.tail = FALSE)
-    list("crit.value" = crit.value,
-         "p.value" = pchisq(lrt, df, lower.tail = FALSE),
-         "lrt" = lrt)
-  }
-  
-  # M0 vs. M1a (one-ratio vs. nearly neutral)
-  
-  # This is a test for variability of selective pressure among amino acid sites
-  # rather than a test of positive selection. M1a fits the data much better than
-  # M0,indicating that the selective pressure reflected by ω
-  # varies hugely among sites.
-  m0m1a <- calc.LRT(-20797.229748, -20712.485759, 160, 161)
-  
-  # Compared with M1a, M2a adds a class of sites under positive selection with ω2
-  # > 1 (in proportion p2). This does not improve the fit of the model
-  # significantly
-  m1am2a <- calc.LRT(-20712.485759, -20712.488036, 161, 163) # (nearly neutral vs. positive selection)
-  
-  # Additional test for positive selection by comparing M7 (beta, null model)
-  # against M8 (beta&ω, alternative model).
-  m7m8 <- calc.LRT(-20614.279484, -20614.287541, 161, 163) # (positive selection vs null model)
-  # No evidence for sites under positive selection 
-}
-
-
-
-#### Run codeml branch-site model to look for selection specifically in Muroidea ####
+#### Prepare codeml branch-site model to look for selection specifically in Muroidea ####
 
 # To look at the rodent clade, we need a rooted tree
 
@@ -883,10 +807,10 @@ newick.test <- gsub(":1", "", newick.test) # branch lengths we set to 1
 newick.test <- gsub("_#1", " #1", newick.test) # fg labels
 write_file(newick.test, "paml/branch-site/zfxy.nt.aln.paml.fg.treefile")
 
-# This control file tests site models With heterogeneous ω Across Sites
-paml.site.branch.file <- paste0("seqfile   = ", files$mammal.nt.aln, " * alignment file\n",
+# This control file tests site models With heterogeneous ω across Sites
+paml.branch.site.file <- paste0("seqfile   = ", files$mammal.nt.aln, " * alignment file\n",
                                 "treefile  = paml/branch-site/zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
-                                "outfile   = paml/branch-site/site.branch.paml.out.txt\n",
+                                "outfile   = paml/branch-site/branch-site.paml.out.txt\n",
                                 "\n",
                                 "noisy     = 3 * on screen logging\n",
                                 "verbose   = 1 * detailed output in file\n",
@@ -903,29 +827,19 @@ paml.site.branch.file <- paste0("seqfile   = ", files$mammal.nt.aln, " * alignme
                                 "clock     = 0 * assume no clock\n",
                                 "fix_omega = 0 * enables option to estimate omega\n",
                                 "omega     = 0.5 * initial omega value\n")
-write_file(paml.site.branch.file, "paml/branch-site/zfy.site-branch.paml.ctl")
+write_file(paml.branch.site.file, "paml/branch-site/zfy.branch-site.paml.ctl")
 
+# Add a script to submit these jobs to the cluster
+paml.shell.script <- paste0("#!/bin/bash\n\n",
+                            "cd paml/site-specific\n",
+                            "qsubme codeml zfy.site-specific.paml.ctl\n",
+                            "cd ../branch-site\n",
+                            "qsubme codeml zfy.branch-site.paml.ctl\n"
+                            
+)
+write_file(paml.shell.script, "run_paml.sh")
 
-paml.branch.site.output <- "paml/branch-site/zfy.site-branch.positive.sites.txt"
-if(RUN_PAML & !installr::is.windows() & !file.exists(paml.branch.site.output)){
-  
-  old.wd <- getwd()
-  setwd("paml/branch-site")
-  # Run codeml
-  system2("codeml", "zfy.branch-site.paml.ctl",
-          stdout = "zfy.branch-site.paml.log", 
-          stderr = "zfy.branch-site.paml.log")
-  
-  system2("cat", 'branch-site.paml.out.txt | grep "^ \\{2,5\\} [0-9]\\{1,3\\} [A-Z\\-]" > zfy.branch-site.positive.sites.txt' )
-  setwd(old.wd)
-  
-  
-  # Bayes Empirical Bayes (BEB) analysis (Yang, Wong & Nielsen 2005. Mol. Biol. Evol. 22:1107-1118)
-  # Extract sites under positive selection
-  # cat paml/site-branch/site.branch.paml.out.txt | grep "^ \{2,5\} [0-9]\{1,3\} [A-Z\-]" > zfy.site-branch.positive.sites.txt
-  
-  #system2("cat", 'paml/site-branch/site.branch.paml.out.txt | grep "^ \{2,5\} [0-9]\{1,3\} [A-Z\-]" > paml/site-branch/zfy.site-branch.positive.sites.txt' )
-}
+paml.branch.site.output <- "paml/branch-site/zfy.branch-site.positive.sites.txt"
 
 #### Create codeml files to look for selection in Muroidea across exon 1,3-6 ####
 
@@ -1204,25 +1118,6 @@ if(!installr::is.windows()){
 # }
 
 
-#### Plot codeml branch-site model output  ####
-
-if(file.exists(paml.branch.site.output)){
-  # Read the positive sites file 
-  positive.sites <- read_table(paml.branch.site.output, col_names = c("site", "aa", "p"))
-  positive.sites$p <- as.numeric(gsub("\\*+", "", positive.sites$p))
-  
-  positive.sites.y <- max(locations.zf$i) + 1.5
-  
-  positive.sites.plot <- ggplot()+
-    geom_rect(data = locations.zf,     aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-    geom_rect(data = locations.9aaTAD, aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
-    geom_rect(data = locations.NLS,    aes(xmin=start_gapped, xmax=end_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
-    geom_rect(data = positive.sites,   aes(xmin=site-0.5, xmax=site+0.5, ymin=positive.sites.y, ymax=positive.sites.y+2, fill=p))+
-    labs(x = "Site", fill = "p(ω>1)")+
-    scale_fill_viridis_c()+
-    theme_bw()
-  save.double.width("figure/positive.sites.png", positive.sites.plot, height = 85)
-}
 #### Ancestral sequence reconstruction #####
 
 # Read the ancestral reconstruction
@@ -1433,7 +1328,7 @@ save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 1
 structure.plot <- (aa.structure.plot) / (hydrophobicity.plot) / (charge.plot) + plot_layout(ncol = 1)
 save.double.width("figure/structure.plot.png", structure.plot, height = 230)
 
-#### What are the hydrophobic patches in exons 3 and 5 that are not 9aaTADs?
+#### What are the hydrophobic patches in exons 3 and 5 that are not 9aaTADs? ####
 exon3.patch.start <- mouse.exons$start_aa[3]+32
 exon3.patch.end   <- mouse.exons$end_aa[3]-5
 exon3.patch <- msa.aa.aln.hydrophobicity %>%
@@ -1490,4 +1385,5 @@ cat("Exon 5 patch consensus: ", paste(s2c(consensusString(alignments$aa.combined
 # ggmsa::treeMSA_plot(ggtree(combined.outgroup.tree)+geom_tiplab(size=3, aes(col = group)), msa.outgroup.aln.tidy, color = "Chemistry_AA",
 #                     border=NA, font=NULL)
 #  
+system2("tar", "czf aln.tar.gz aln")
 cat("Done!\n")

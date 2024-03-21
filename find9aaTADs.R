@@ -176,10 +176,7 @@ find.common.9aaTADs <- function(locations.9aaTAD, rc.threshold = 80, coverage.th
                   label = case_when(motif_number==4 ~ paste0(LETTERS[adj.motif.number], 1),
                                     motif_number==5 ~ paste0(LETTERS[adj.motif.number], 2),
                                     .default = LETTERS[adj.motif.number] )) %>%
-    dplyr::select(-adj.motif.number) %>%
-    dplyr::rename(superTAD.start = start, 
-                  superTAD.end = end, 
-                  superTAD.width = width)
+    dplyr::select(-adj.motif.number) 
 }
 
 
