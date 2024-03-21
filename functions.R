@@ -135,19 +135,28 @@ find.exons <- function(biostrings.nt.alignment, biostrings.aa.alignment){
   
   # Note that the aa and nt positions are not from equivalent alignments!
   # NT is from mammals, AA is from mammals + outgroups
-  data.frame("exon"     = mouse.exons$exon,
+  data <- data.frame("exon"     = mouse.exons$exon,
              "start"    = sapply(start.nt, convert.to.gapped.coordinate, mouse.zfy1.nt),
              "end"      = sapply(end.nt,   convert.to.gapped.coordinate, mouse.zfy1.nt),
              "start_aa" = sapply(start.aa, convert.to.gapped.coordinate, mouse.zfy1.aa),
              "end_aa"   = sapply(end.aa,   convert.to.gapped.coordinate, mouse.zfy1.aa),
              "is_even"  = sapply(mouse.exons$exon, function(i) as.numeric(i)%%2==0))%>%
-    dplyr::mutate(length_nt = end - start,
-                  # fix the offsets to get ORF
+    dplyr::mutate(length_nt = end - start + 1,
+                  length_aa = end.aa - start.aa + 1,
+                  # fix the offsets to get ORF of each exon
                   start_nt_codon_offset = case_when(exon==1 ~ start, # hardcode the codon offsets for subsetting
                                                     exon>=2 ~ start-1),
                   end_nt_codon_offset   = case_when(exon<7 ~ end-1,
                                                     exon==7 ~ end),
-                  corrected_offset_length = (end_nt_codon_offset - start_nt_codon_offset)%%3) # check divisible by 3 
+                  corrected_offset_length = (end_nt_codon_offset - start_nt_codon_offset +1)%%3) %>%
+    dplyr::rowwise() %>%
+    dplyr::mutate(exon_orf = subset.sequence(biostrings.nt.alignment, "Mouse_Zfy1", start_nt_codon_offset, end_nt_codon_offset),
+                  exon_orf_length = nchar(exon_orf),
+                  exon_orf_triplet = exon_orf_length/3) # check divisible by 3
+  
+  
+  data
+  
 }
 
 plot.tree <- function(tree.data, ...){

@@ -987,7 +987,7 @@ if(file.exists(exon1.3_6.output.file)){
 
 #### Create codeml files to look for selection in Muroidea across exon 2 ####
 
-exon2.aln <- as.matrix(alignments$nt.mammal.ape)[,mouse.exons$start_nt_codon_offset[2]:(mouse.exons$end_nt_codon_offset[2]-1)]
+exon2.aln <- as.matrix(alignments$nt.mammal.ape)[,mouse.exons$start_nt_codon_offset[2]:(mouse.exons$end_nt_codon_offset[2])]
 # exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
 ape::write.FASTA(exon2.aln, file = "paml/exon_2/exon_2.aln")
 
