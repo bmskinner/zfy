@@ -62,61 +62,59 @@ filesstrings::create_dir("pwm")
 
 writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
 
-files <- list() # common file paths
 alignments <- list()
 
-#### Read mammal NT FA files #####
+#### Read NT FA files #####
 
-# Putative Zfy sequences in rodents detected with NCBI gene search:
-# rodent[orgn:__txid9989] AND zinc finger X-chromosomal protein-like 
+prepare.fas.files <- function(){
+  
+  # Putative Zfy sequences in rodents detected with NCBI gene search:
+  # rodent[orgn:__txid9989] AND zinc finger X-chromosomal protein-like 
+  
+  # Read all unaligned sequence files with .fa extension
+  fa.files <- list.files(path = "fasta/nt", pattern = "*.fa$", 
+                         include.dirs = T, full.names = T)
+  
+  fa.read  <- lapply(fa.files, read.fasta)
+  nt.raw   <- read.sequences(fa.read)
+  metadata.mammal <<- read.metadata(fa.read)
+  
+  # Write the combined fasta to file with .fas extension
+  ape::write.FASTA(nt.raw, file = files$mammal.nt.fas)
+  
+  
+  # Read outgroup NT FA files
+  # Read all unaligned sequence files with .fa extension
+  outgroup.nt.files <- list.files(path = "fasta/aa", pattern = "*.fa$", 
+                                  include.dirs = T, full.names = T)
+  
+  outgroup.fa.read  <- lapply(outgroup.nt.files, read.fasta)
+  outgroup.nt.raw   <- read.sequences(outgroup.fa.read)
+  metadata.outgroup <<-  read.metadata(outgroup.fa.read)
+  
+  # Combine the outgroups with the mammals
+  metadata.combined <<- rbind(metadata.mammal, metadata.outgroup)
+  
+  # Write the unaligned combined fasta to file with .fas extension
+  combined.nt.raw <- c(outgroup.nt.raw, nt.raw) # all sequences
+  combined.aa.raw <- ape::trans(combined.nt.raw)
+  
+  ape::write.FASTA(combined.nt.raw, file = files$combined.nt.fas)
+  ape::write.FASTA(combined.aa.raw, file = files$combined.aa.fas)
+  
+  # Create supplementary table with all accessions and sequence info
+  metadata.combined %>%
+    dplyr::rename(Accession = accession, Species = species, Group = group,
+                  Name_in_figures = common.name,Description = original.name  ) %>%
+    dplyr::select(Accession,Species,Group,  Name_in_figures, Description ) %>%
+    create.xlsx(., "figure/accessions.supplement.xlsx")
+}
 
-# Read all unaligned sequence files with .fa extension
-fa.files <- list.files(path = "fasta/nt", pattern = "*.fa$", 
-                       include.dirs = T, full.names = T)
-
-fa.read  <- lapply(fa.files, read.fasta)
-nt.raw   <- read.sequences(fa.read)
-metadata.mammal <- read.metadata(fa.read)
-
-# Write the combined fasta to file with .fas extension
-files$mammal.nt.fas <- "fasta/mammal.nt.fas"
-ape::write.FASTA(nt.raw, file = files$mammal.nt.fas)
-
-#### Read outgroup NT FA files #####
-
-# Read all unaligned sequence files with .fa extension
-outgroup.nt.files <- list.files(path = "fasta/aa", pattern = "*.fa$", 
-                                include.dirs = T, full.names = T)
-
-outgroup.fa.read  <- lapply(outgroup.nt.files, read.fasta)
-outgroup.nt.raw   <- read.sequences(outgroup.fa.read)
-metadata.outgroup <-  read.metadata(outgroup.fa.read)
-
-# Combine the outgroups with the mammals
-metadata.combined <- rbind(metadata.mammal, metadata.outgroup)
-
-# Write the unaligned combined fasta to file with .fas extension
-combined.nt.raw <- c(outgroup.nt.raw, nt.raw) # all sequences
-combined.aa.raw <- ape::trans(combined.nt.raw)
-
-files$combined.nt.fas <- "fasta/combined.nt.fas"
-files$combined.aa.fas <- "fasta/combined.aa.fas"
-
-ape::write.FASTA(combined.nt.raw, file = files$combined.nt.fas)
-ape::write.FASTA(combined.aa.raw, file = files$combined.aa.fas)
-
-# Create supplementary table with all accessions and sequence info
-metadata.combined %>%
-  dplyr::rename(Accession = accession, Species = species, Group = group,
-                Name_in_figures = common.name,Description = original.name  ) %>%
-  dplyr::select(Accession,Species,Group,  Name_in_figures, Description ) %>%
-  create.xlsx(., "figure/accessions.supplement.xlsx")
+prepare.fas.files()
 
 #### Run combined mammal/outgroup AA alignment ####
 
 # Use muscle to align the aa files and save out for iqtree
-files$combined.aa.aln <- "aln/combined/combined.aa.aln"
-
 # Cluster has muscle 3.8.31 on path., so specify the binary directly
 muscle.path <- ifelse(installr::is.windows(), "bin/muscle5.1.win64.exe", "bin/muscle5.1.linux_intel64")
 if(!file.exists(muscle.path)) stop("Muscle5.1 not present in bin directory")
@@ -138,8 +136,6 @@ alignments$aa.combined.biostrings <- Biostrings::readAAMultipleAlignment(files$c
 if(!file.exists("bin/macse_v2.07.jar")) stop("MACSE not present in bin directory")
 
 # Run the alignment
-files$mammal.nt.aln <- "aln/mammal/mammal.nt.aln"
-files$mammal.aa.aln <- "aln/mammal/mammal.aa.aln"
 system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
                       "-seq",    files$mammal.nt.fas, # input
                       "-out_NT", files$mammal.nt.aln,  # output nt alignment
@@ -162,9 +158,6 @@ system2("iqtree", paste("-s ", files$combined.aa.aln,
                         "-nt AUTO"), # number of threads
         stdout = gsub(".aln$", ".iqtree.log", files$combined.aa.aln), 
         stderr = gsub(".aln$", ".iqtree.log", files$combined.aa.aln))
-
-files$combined.aa.aln.treefile <- paste0(files$combined.aa.aln, ".treefile")
-
 
 #### Plot combined mammal/outgroup AA tree ####
 read.combined.outgroup.tree <- function(file){
@@ -205,8 +198,6 @@ system2("iqtree", paste("-s ", files$mammal.nt.aln,
                         "-asr"), # ancestral sequence reconstruction
         stdout = gsub(".aln$", ".iqtree.log", files$mammal.nt.aln), 
         stderr = gsub(".aln$", ".iqtree.log", files$mammal.nt.aln))
-
-files$mammal.nt.aln.treefile <- paste0(files$mammal.nt.aln, ".treefile")
 
 #### Plot mammal CDS NT tree #####
 
@@ -1018,7 +1009,7 @@ hyphy.sh.data <- paste0("#!/bin/bash\n",
                         "hyphy relax --alignment paml/exon_1_3-6/exon_1_3-6.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_1_3-6.relax.json\n",
                         "hyphy relax --alignment paml/exon_2/exon_2.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_2.relax.json\n",
                         "hyphy relax --alignment paml/exon_7/exon_7.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_7.relax.json\n",
-                        "hyphy relax --alignment aln/zfxy.nt.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/mammal.relax.json\n"
+                        "hyphy relax --alignment  ", files$mammal.nt.aln, " --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/mammal.relax.json\n"
 )
 write_file(hyphy.sh.data, "hyphy.sh")
 
@@ -1087,6 +1078,7 @@ if(!installr::is.windows()){
 
 #### Run HyPhy GARD to test for recombination ####
 
+# Output was entirely unconvincing - drop this from the analysis
 # if(!installr::is.windows()){
 #   
 #   system2("hyphy", " gard --alignment aln/zfxy.nt.aln --type codon --output hyphy/mammal.gard.json")
@@ -1331,6 +1323,7 @@ save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 1
 
 #### Combine all structure plots ####
 
+# To test spacing and balance
 structure.plot <- (aa.structure.plot) / (hydrophobicity.plot) / (charge.plot) + plot_layout(ncol = 1)
 save.double.width("figure/structure.plot.png", structure.plot, height = 230)
 

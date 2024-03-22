@@ -1,8 +1,16 @@
 # Run GENECONV to test for gene conversion
 # GENECONV is expected on the path
 source("functions.R")
-load.packages()
 
+filesstrings::dir.remove("aln/zfx_only")
+filesstrings::dir.remove("aln/zfy_only")
+filesstrings::create_dir("aln/zfx_only")
+filesstrings::create_dir("aln/zfy_only")
+
+alignments <- list()
+alignments$nt.mammal.ape <- ape::read.FASTA(files$mammal.nt.aln)
+
+#### Read the aligned FASTA files and metadata, export ZFX and ZFY separately ####
 fa.files <- list.files(path = "fasta/nt", pattern = "*.fa$", 
                        include.dirs = T, full.names = T)
 
@@ -13,7 +21,7 @@ metadata.mammal <- read.metadata(fa.read)
 # compare the ancestral ZFXs and ZFYs at each node To do this, create a separate
 # tree for each of ZFX and ZFY, confirm that they have equivalent branches, then
 # add the ancestral reconstruction to the geneconv config file.
-nt.aln.file <- "aln/zfxy.nt.aln"
+nt.aln.file <- "aln/mammal/mammal.nt.aln"
 msa.nt.aln <- Biostrings::readDNAMultipleAlignment(nt.aln.file, format="fasta")
 ape.nt.aln <- ape::read.FASTA(nt.aln.file)
 
@@ -27,21 +35,111 @@ zfy.nt.aln <- msa.nt.aln@unmasked[names(msa.nt.aln@unmasked) %in% c(metadata.mam
                                                                     metadata.mammal$common.name[metadata.mammal$group=="Outgroup"])]
 Biostrings::writeXStringSet(zfy.nt.aln,  file = "aln/zfy_only/zfy.aln", format = "fasta")
 
-# Align the sequences with IQTREE
+#### Create independent trees for ZFX and ZFY sequences ####
+
+# We can specify the true phylogeny of the sequences for ancestral reconstruction
+zfx.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
+                        "(", # Eutheria
+                        "(Southern_two-toed_sloth_ZFX, African_bush_elephant_ZFX)Atlantogenata, ", # Atlantogenata  
+                        "(", # Boreoeutheria
+                          "(",  # Euarchonoglires
+                            "( ", # Simiiformes
+                              "Common_marmoset_ZFX,", # New world monkeys
+                              "(", # Catarrhini (Old world monkeys & apes)
+                                "(", #Cercopithecidae (Old world monkeys)
+                                  "Golden_snub-nosed_monkey_ZFX,",   #Colobinae
+                                  "(Olive_baboon_ZFX, Macaque_ZFX)Cercopithecinae", # Cercopithecinae
+                                ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
+                                "(", # Hominidae
+                                  "Gorilla_ZFX, (Chimpanzee_ZFX, Human_ZFX)Hominini",
+                                ")Hominidae",  # /Hominidae
+                              ")Catarrhini", # /Catarrhini
+                            ")Simiiformes,",  # /Simiiformes
+                            "(", # Rodentia
+                              "(Gray_squirrel_Zfx,(Arctic_ground_squirrel_Zfx, Alpine_marmot_ZFX)Xerinae)Sciuridae,", # Sciuridae 
+                              "(Beaver_Zfx, (", # Muroidea
+                                "(North_American_deer_mouse_Zfx, Desert_hamster_Zfx)Cricetidae,", # Cricetidae 
+                                "(Mongolian_gerbil_Zfx, (Rat_Zfx, (Mouse_Zfx, African_Grass_Rat_Zfx)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
+                              ")Eumuroida)Muroidea", # /Muroidea
+                            ")Rodentia", # /Rodentia
+                          ")Euarchonoglires,", # /Euarchonoglires
+                          "(", # Laurasiatheria
+                            "(",  # Carnivora
+                              "Cat_ZFX, (Dog_ZFX, (Stoat_ZFX, Polar_bear_ZFX)Arctoidea)Caniformia",
+                            ")Carnivora,",  # /Carnivora
+                            "(",  # Euungulata 
+                              "Horse_ZFX, (Pig_ZFX, (White_tailed_deer_ZFX, (Cattle_ZFX, Goat_ZFX)Bovidae)Pecora)Artiodactyla",
+                            ")Euungulata", # /Euungulata 
+                          ")Laurasiatheria", # /Laurasiatheria
+                        ")Boreoeutheria", # /Boreoeutheria
+                        ")Eutheria", # /Eutheria
+                        ")Theria)Mammalia;") # /Outgroups
+
+write_file(zfx.phylogeny, "aln/zfx_only/zfx.nt.species.nwk")
+
+zfy.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
+                        "(", # Eutheria
+                        "(Southern_two-toed_sloth_ZFY, African_bush_elephant_ZFY)Atlantogenata, ", # Afrotheria & Xenarthra
+                        "(", # Boreoeutheria
+                        "(",  # Euarchonoglires
+                        "( ", # Simiiformes
+                        "Common_marmoset_ZFY,", # New world monkeys
+                        "(", # Catarrhini (Old world monkeys & apes)
+                        "(", #Cercopithecidae (Old world monkeys)
+                        "Golden_snub-nosed_monkey_ZFY,",   #Colobinae
+                        "(Olive_baboon_ZFY, Macaque_ZFY)Cercopithecinae", # Cercopithecinae
+                        ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
+                        "(", # Hominidae
+                        "Gorilla_ZFY, (Chimpanzee_ZFY, Human_ZFY)Hominini",
+                        ")Hominidae",  # /Hominidae
+                        ")Catarrhini", # /Catarrhini
+                        ")Simiiformes,",  # /Simiiformes
+                        "(", # Rodentia
+                        "(Gray_squirrel_Zfy,(Arctic_ground_squirrel_Zfx-like_putative-Zfy, Alpine_marmot_ZFY)Xerinae)Sciuridae,", # Sciuridae 
+                        "(Beaver_Zfx-like_putative-Zfy, (", # Muroidea
+                        "(North_American_deer_mouse_Zfx-like_putative-Zfy, Desert_hamster_Zfx-like_putative-Zfy)Cricetidae,", # Cricetidae 
+                        "(Mongolian_gerbil_Zfx-like_putative-Zfy, (Rat_Zfy2, ((Mouse_Zfy1, Mouse_Zfy2), (African_Grass_Rat_ZFY2-like_1, African_Grass_Rat_ZFY2-like_2))Mus-Arvicanthis)Murinae)Muridae", # Muridae 
+                        ")Eumuroida)Muroidea", # /Muroidea
+                        ")Rodentia", # /Rodentia
+                        ")Euarchonoglires,", # /Euarchonoglires
+                        "(", # Laurasiatheria
+                        "(",  # Carnivora
+                        "Cat_ZFY, (Dog_ZFY, (Stoat_ZFY, Polar_bear_ZFY)Arctoidea)Caniformia",
+                        ")Carnivora,",  # /Carnivora
+                        "(",  # Euungulata 
+                        "Horse_ZFY, (Pig_ZFY, (White_tailed_deer_ZFY, (Cattle_ZFY, Goat_ZFY)Bovidae)Pecora)Artiodactyla",
+                        ")Euungulata", # /Euungulata 
+                        ")Laurasiatheria", # /Laurasiatheria
+                        ")Boreoeutheria", # /Boreoeutheria
+                        ")Eutheria", # /Eutheria
+                        ")Theria)Mammalia;") # /Outgroups
+
+write_file(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
+
+# Run the ancestral reconstructions
 system2("iqtree", paste("-s ", "aln/zfx_only/zfx.aln", 
-                        "-bb 1000", # number of bootstrap replicates
-                        "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+                        # "-bb 1000 -alrt 1000", # bootstrapping
                         "-nt AUTO", # number of threads
-                        "-asr")) # ancestral sequence reconstruction
-system2("iqtree", paste("-s ", "aln/zfy_only/zfy.aln", 
-                        "-bb 1000", # number of bootstrap replicates
-                        "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
-                        "-nt AUTO", # number of threads
+                        "-te aln/zfx_only/zfx.nt.species.nwk", # user tree guide
                         "-asr")) # ancestral sequence reconstruction
 
-# Read the ZFX and ZFY trees
+system2("iqtree", paste("-s ", "aln/zfy_only/zfy.aln", 
+                        # "-bb 1000 -alrt 1000", # bootstrapping
+                        "-nt AUTO", # number of threads
+                        "-te aln/zfy_only/zfy.nt.species.nwk", # user tree guide
+                        "-asr")) # ancestral sequence reconstruction
+
+#### Remove duplicate species nodes from the trees  ####
+
+# For a ~species tree, we only need one sequence per species. Either can be dropped,
+# since they give the same branching order
+
+# Read the ML ZFX and ZFY trees 
 zfx.nt.aln.tree <- ape::read.tree("aln/zfx_only/zfx.aln.treefile")
 zfy.nt.aln.tree <- ape::read.tree("aln/zfy_only/zfy.aln.treefile")
+
+# zfx.nt.aln.tree <- ape::read.tree(text = zfx.phylogeny)
+# zfy.nt.aln.tree <- ape::read.tree(text = zfy.phylogeny)
 
 # Drop the second ZFYs in mouse and rat
 zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2") 
@@ -55,25 +153,34 @@ zfy.nt.aln.tree <- phytools::reroot(zfy.nt.aln.tree, which(zfy.nt.aln.tree$tip.l
 zfx.nt.aln.tree$tip.label <- str_replace(zfx.nt.aln.tree$tip.label, "_Z[F|f][X|x].*", "")
 zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", "")
 
-# Export comparison of the trees
+
+#### Plot ZFX / ZFY tree comparisons  ####
+
+# Export comparison of the ML trees
 png(filename = "figure/zfx.zfy.nt.ancestral.treediff.png")
 treespace::plotTreeDiff(zfx.nt.aln.tree, zfy.nt.aln.tree, treesFacing=TRUE)
 dev.off()
 
 # Plot the two trees with node labels
-zfx.nt.aln.tree.plot <- plot.tree(zfx.nt.aln.tree)
-zfy.nt.aln.tree.plot <- plot.tree(zfy.nt.aln.tree)
-zfx.zfy.aln.tree.plot <- zfx.nt.aln.tree.plot + zfy.nt.aln.tree.plot + patchwork::plot_annotation(tag_levels = list(c("ZFX", "ZFY")))
-save.double.width("figure/zfx.zfy.ancestral.comparison.tree.png", zfx.zfy.aln.tree.plot)
+zfx.nt.aln.tree.plot <- plot.tree(zfx.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
+zfy.nt.aln.tree.plot <- plot.tree(zfy.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
+# zfx.zfy.aln.tree.plot <- zfx.nt.aln.tree.plot + zfy.nt.aln.tree.plot + patchwork::plot_annotation(tag_levels = list(c("ZFX", "ZFY")))
+save.double.width("figure/ancestral.zfx.png", zfx.nt.aln.tree.plot)
+save.double.width("figure/ancestral.zfy.png", zfy.nt.aln.tree.plot)
+
+#### Find matching nodes in the two trees and get ancestral reconstructions ####
+
+# Nodes with the same branching order will be viable for comparison of ancestral
+# reconstructions
 
 # Find the matching nodes
 zfy.zfx.common.nodes <- ape::comparePhylo(zfx.nt.aln.tree, zfy.nt.aln.tree)$NODES %>%
   tidyr::separate_wider_delim(cols = zfx.nt.aln.tree, delim = " ", names = c("ZFX_node", "zfx_nnodes") ) %>%
   tidyr::separate_wider_delim(cols = zfy.nt.aln.tree, delim = " ", names = c("ZFY_node", "zfy_nnodes") ) %>%
   # Remove booststrap values from node names
-  dplyr::mutate(ZFX_node = str_replace(ZFX_node, "\\/.*", ""),
-                ZFY_node = str_replace(ZFY_node, "\\/.*", "")) %>% 
-  dplyr::filter(ZFX_node!="Root" & ZFX_node!="") 
+  dplyr::mutate(ZFX_node = str_replace(ZFX_node, "\\/\\d.*", ""),
+                ZFY_node = str_replace(ZFY_node, "\\/\\d.*", "")) %>% 
+  dplyr::filter(ZFX_node!="Mammalia" & ZFX_node!="Root" & ZFX_node!="") 
 
 # Read the ancestral states for the nodes
 ancestral.zfx.seqs <- read.table("aln/zfx_only/zfx.aln.state", header=TRUE)
@@ -100,12 +207,13 @@ anc.node.seqs <- paste0(c(zfy.zfx.common.nodes$anc.zfx, zfy.zfx.common.nodes$anc
 write_file(anc.node.seqs, "aln/ancestral.zfx.zfy.nodes.fa")
 
 # Combine with existing ZFX/Y sequence file
-ape::write.dna(ape.nt.aln, "aln/ancestral.zfx.zfy.nodes.fa", format="fasta", 
+ape::write.dna(alignments$nt.mammal.ape, "aln/ancestral.zfx.zfy.nodes.fa", format="fasta", 
                append = TRUE, colsep = "", nbcol=-1)
+
+#### Run geneconv with the ancestral nodes and real sequences ####
 
 # Write geneconv configuration file specifying which sequences are in the same
 # group
-
 node.string.names <- zfy.zfx.common.nodes %>% 
   dplyr::mutate(GroupString= paste0("-group ZFX_", ZFX_node, "_ZFY_",ZFY_node, " ZFX_", ZFX_node, " ZFY_",ZFY_node ))
 node.string <- paste(node.string.names$GroupString, collapse = "\n")
@@ -154,6 +262,13 @@ system2("geneconv", paste("aln/ancestral.zfx.zfy.nodes.fa",
         stdout = "aln/ancestral.zfx.zfy.nodes.geneconv.log", 
         stderr = "aln/ancestral.zfx.zfy.nodes.geneconv.log")
 
+#### Read geneconv output and plot potential gene conversion fragments ####
+
+
+get.offspring.of.node <- \(i){ 
+  tips <- offspring(zfx.nt.aln.tree, length(zfx.nt.aln.tree$tip.label)+i, type="tips")
+  paste(zfx.nt.aln.tree$tip.label[tips], collapse = ", ")
+}
 
 # Read the geneconv output file
 aln.geneconv.data <- read_table("aln/anc.zfx.zfy.geneconv.frags", comment = "#", 
@@ -166,12 +281,17 @@ aln.geneconv.data <- read_table("aln/anc.zfx.zfy.geneconv.frags", comment = "#",
                                  Type == "PO" ~ "Pairwise outer",
                                  Type == "PI" ~ "Pairwise inner",)) %>%
   dplyr::filter(Type == "Pairwise inner" | Type == "Pairwise outer") %>%
-  dplyr::mutate(y = row_number())
-
-# What are the species descending from each node?
-# zfy.zfx.common.nodes
-# zfx.nt.aln.tree
-# offspring(zfx.nt.aln.tree, zfy.zfx.common.nodes$ZFX_node[1])
+  dplyr::mutate(
+    # y = row_number(),
+                # Get just the ZFX node names for ancestral nodes
+                SingleSpecies = ifelse(str_detect(Species, ";"), str_extract(Species, "^[^;]+"), Species),
+                SingleSpecies = str_replace(SingleSpecies, "ZFX_", ""),
+                isNode = str_detect(Species, "ZFX"),
+                nodeType = ifelse(isNode, "Ancestral node", "Species")) %>%
+  # What are the species descending from each of the ancestral nodes? Make labels clearer
+  dplyr::rowwise() %>%
+  dplyr::group_by(SingleSpecies) %>%
+  dplyr::mutate(label = cur_group_id()) # same y axis value for each species
 
 
 
@@ -188,22 +308,16 @@ aln.geneconv.data <- read_table("aln/anc.zfx.zfy.geneconv.frags", comment = "#",
 # PO: Pairwise outer-sequence
 
 # We only really care about pairwise inner
-# Plot the geneconv fragements in the ancestral nodes
+# Plot the geneconv fragments in the ancestral nodes
 
 aln.geneconv.plot <- ggplot(aln.geneconv.data)+
-  # geom_rect(data=mouse.exons, aes( xmin = start-0.5, xmax = end+0.5, ymin=0, ymax=0.08, fill=exon), alpha=0.5)+
-  # geom_text(data=mouse.exons, aes(x=(start+end)/2,y = 0.075, label = exon), size = 3)+
-  # geom_rect(data = locations.zf, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="grey", alpha=0.5)+
-  # geom_rect(data = locations.9aaTAD, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
-  # geom_rect(data = locations.NLS, aes(xmin=start_nt, xmax=end_nt, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)+
-  geom_segment(aes(x=begin, y = y, col=Species, xend = end, yend = y), linewidth = 2)+
-  # coord_cartesian(xlim = c(1, 2600))+
-  # scale_fill_manual(values = c("grey", "white", "grey", "white", "grey", "white", "grey"))+
-  # scale_y_continuous(labels = rev(taxa.name.order), breaks = 1:length(taxa.name.order))+
-  # geom_text(aes(x=(begin+end)/2,y = KA_pvalue+0.002, label = Pair), size = 2)+
-  labs(x = "Position", y = "Bonferroni corrected p-value")+
-  guides(fill = "none")+
+  geom_segment(aes(x=begin, y = SingleSpecies, xend = end, yend = SingleSpecies), linewidth = 2)+
+  labs(x = "Position", y = "Species")+
+  scale_y_discrete(labels = function(x) str_wrap( str_replace_all(x, "_", " "), width = 30))+
+  coord_cartesian(xlim = c(0, 2610))+
+  facet_wrap(~nodeType, scale="free", ncol = 1)+
   theme_bw()+
   theme(axis.title = element_blank())
 
 save.double.width("figure/aln.ancestral.zfxy_geneconv.png", aln.geneconv.plot)
+

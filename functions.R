@@ -43,6 +43,22 @@ load.packages <- function(){
 }
 load.packages() # load on source
 
+# Set common file paths
+set.file.paths <-function(){
+  files <- list() # common file paths
+  files$mammal.nt.fas <- "fasta/mammal.nt.fas"
+  files$combined.nt.fas <- "fasta/combined.nt.fas"
+  files$combined.aa.fas <- "fasta/combined.aa.fas"
+  files$combined.aa.aln <- "aln/combined/combined.aa.aln"
+  files$mammal.nt.aln <- "aln/mammal/mammal.nt.aln"
+  files$mammal.aa.aln <- "aln/mammal/mammal.aa.aln"
+  files$mammal.nt.aln.treefile <- paste0(files$mammal.nt.aln, ".treefile")
+  files$combined.aa.aln.treefile <- paste0(files$combined.aa.aln, ".treefile")
+  files
+}
+
+files <- set.file.paths()
+
 # Read the given FASTA file and extract metadata
 # Returns as a list containing FA sequence and metadata dataframe
 # The FASTA file headers have common names manually added in [] brackets
@@ -165,7 +181,7 @@ plot.tree <- function(tree.data, ...){
   # Numbers in parentheses are SH-aLRT support (%) / ultrafast bootstrap support (%)
   node.label.values <- data.frame("label" = tree.data$node.label) %>%
     tidyr::separate_wider_delim(label, delim = "/", names = c("name","SHaLRT", "UFBoot"),
-                                too_few = "align_end") %>%
+                                too_few = "align_end", too_many = "merge") %>%
     dplyr::mutate(UFBoot = as.numeric(UFBoot),
                   SHaLRT = as.numeric(SHaLRT),
                   isSupportedUFBoot = UFBoot>=95 & !is.na(UFBoot),
