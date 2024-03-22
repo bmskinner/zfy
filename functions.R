@@ -156,9 +156,14 @@ find.exons <- function(biostrings.nt.alignment, biostrings.aa.alignment){
              "end"      = sapply(end.nt,   convert.to.gapped.coordinate, mouse.zfy1.nt),
              "start_aa" = sapply(start.aa, convert.to.gapped.coordinate, mouse.zfy1.aa),
              "end_aa"   = sapply(end.aa,   convert.to.gapped.coordinate, mouse.zfy1.aa),
-             "is_even"  = sapply(mouse.exons$exon, function(i) as.numeric(i)%%2==0))%>%
-    dplyr::mutate(length_nt = end - start + 1,
-                  length_aa = end.aa - start.aa + 1,
+             "is_even"  = sapply(mouse.exons$exon, function(i) as.numeric(i)%%2==0)) %>%
+    dplyr::mutate(
+                  # Correct for gaps in the alignment affecting exon boundaries
+                  # Extend the next exon to start at the end of the current
+                  start = ifelse(lag(end)+1!=start & !is.na(lag(end)), lag(end)+1, start),
+      
+                  length_nt = end - start + 1,
+                  length_aa = end_aa - start_aa + 1,
                   # fix the offsets to get ORF of each exon
                   start_nt_codon_offset = case_when(exon==1 ~ start, # hardcode the codon offsets for subsetting
                                                     exon>=2 ~ start-1),
@@ -285,15 +290,16 @@ printMultipleAlignment <- function(alignment, names=NULL, names.length=NA, chunk
 }
 
 # Add a rectangle track to a plot
-add.track <- function(ranges, y.start, y.end, ...){
+add.track <- function(ranges, y.start, y.end, start_col = "start", end_col = "end", ...){
   geom_rect(data=ranges, 
-            aes(xmin = start, xmax = end, ymin = y.start, ymax=y.end),
+            aes(xmin = .data[[start_col]], xmax = .data[[end_col]], ymin = y.start, ymax=y.end),
             ...)
 }
 # Add a rectangle track labels to a plot
-add.track.labels <- function(ranges, y.start, y.end, ...){
+add.track.labels <- function(ranges, y.start, y.end, start_col = "start", end_col = "end", label_col ="label", ...){
   geom_text(data=ranges,
-            aes(x =(start+end)/2, y=(y.start+y.end)/2, label=label), size=1.8, col="white")
+            aes(x =(.data[[start_col]]+.data[[end_col]])/2, y=(y.start+y.end)/2, 
+                label=.data[[label_col]]), size=1.8, ...)
 }
 # Add a conservation track to a plot
 add.conservation.track <- function(ranges,  y.start, y.end, ...){
@@ -305,10 +311,10 @@ add.conservation.track <- function(ranges,  y.start, y.end, ...){
 }
 
 # Add an exon track to a plot
-add.exon.track <- function(y.start, y.end, ...){
+add.exon.track <- function(y.start, y.end, start_col = "start_aa", end_col = "end_aa", ...){
   # The second exon is alternatively spliced, so mark it with a striped fill
   # via ggpattern::geom_rect_pattern
-  geom_rect_pattern(data = mouse.exons, aes(xmin = start_aa, xmax = end_aa, 
+  geom_rect_pattern(data = mouse.exons, aes(xmin = .data[[start_col]], xmax = .data[[end_col]], 
                                             ymin = y.start, ymax = y.end,
                                             pattern = exon==2, fill=exon), 
                     pattern_xoffset = 0.04, # so the stripes don't obscure labels
@@ -320,9 +326,9 @@ add.exon.track <- function(y.start, y.end, ...){
                      ...)
 }
 # Add exon labels track to a plot
-add.exon.labels <- function(y.start, y.end, ...){
+add.exon.labels <- function(y.start, y.end, start_col = "start_aa", end_col = "end_aa", ...){
   geom_text(data=mouse.exons,
-            aes(x =(start_aa+end_aa)/2, y=(y.start+y.end)/2, label=exon), size=1.8, col="black")
+            aes(x =(.data[[start_col]]+.data[[end_col]])/2, y=(y.start+y.end)/2, label=exon), size=1.8, col="black")
 }
 
 # Annotate Zfy structures to a plot
@@ -343,7 +349,7 @@ annotate.structure.plot <- function(plot, n.taxa){
     add.track(ranges.ZF.common,     n.taxa+9, n.taxa+11, fill="lightgrey")+
     add.track(ranges.NLS.common,    n.taxa+9, n.taxa+11, fill="green", alpha = 0.5)+
     add.track(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, fill="#00366C",  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
-    add.track.labels(ranges.9aaTAD.common, n.taxa+9, n.taxa+11)+   # Label the 9aaTADs
+    add.track.labels(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, col="white")+   # Label the 9aaTADs
     
     new_scale_fill()+
     scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+

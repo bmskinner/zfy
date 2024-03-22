@@ -311,10 +311,29 @@ aln.geneconv.data <- read_table("aln/anc.zfx.zfy.geneconv.frags", comment = "#",
 # Plot the geneconv fragments in the ancestral nodes
 
 aln.geneconv.plot <- ggplot(aln.geneconv.data)+
-  geom_segment(aes(x=begin, y = SingleSpecies, xend = end, yend = SingleSpecies), linewidth = 2)+
+  
   labs(x = "Position", y = "Species")+
+  scale_x_continuous(expand = c(0, 0), breaks = seq(0, 2800, 200))+
   scale_y_discrete(labels = function(x) str_wrap( str_replace_all(x, "_", " "), width = 30))+
-  coord_cartesian(xlim = c(0, 2610))+
+  
+  # Draw the structures
+  add.track(ranges.ZF.common,     -Inf, Inf, start_col = "start_nt", end_col = "end_nt", fill="lightgrey")+
+  add.track(ranges.NLS.common,    -Inf, Inf,  start_col = "start_nt", end_col = "end_nt",fill="green", alpha = 0.5)+
+  add.track(ranges.9aaTAD.common,  -Inf, Inf,   start_col = "start_nt", end_col = "end_nt",fill="#00366C",  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
+  add.track.labels(ranges.9aaTAD.common,  0.5, 1, start_col = "start_nt", end_col = "end_nt", col="white")+   # Label the 9aaTADs
+  add.track.labels(ranges.ZF.common,  0.5, 1, start_col = "start_nt", end_col = "end_nt",
+                   label_col = "motif_number", col="black")+   # Label the ZFs
+  
+  new_scale_fill()+
+  scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
+  scale_pattern_color_manual(values=c("white", "white"))+
+  scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
+  guides(fill = "none", pattern="none")+
+  add.exon.track(-0.5, 0.5, start_col = "start", end_col = "end", col = "black")+
+  add.exon.labels(-0.5, 0.5, start_col = "start", end_col = "end")+
+  
+  geom_segment(aes(x=begin, y = SingleSpecies, xend = end, yend = SingleSpecies), linewidth = 2)+
+  coord_cartesian(xlim = c(0, max(mouse.exons$end)))+
   facet_wrap(~nodeType, scale="free", ncol = 1)+
   theme_bw()+
   theme(axis.title = element_blank())

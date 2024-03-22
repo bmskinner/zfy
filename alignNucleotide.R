@@ -435,7 +435,7 @@ write_tsv(locations.NLS %>%
 
 # We need to combine the full set of structure locations into an overlapping set
 # to be plotted in a single row. Keep those that overlap in >=5 species
-find.common.overlaps <- function(locations.data){
+find.common.aa.overlaps <- function(locations.data){
   ranges.9aaTAD <- IRanges(start=locations.data$start_gapped, end = locations.data$end_gapped, names = locations.data$sequence)
   ranges.9aaTAD.reduce <- IRanges::reduce(ranges.9aaTAD)
   
@@ -444,13 +444,30 @@ find.common.overlaps <- function(locations.data){
     dplyr::mutate(motif_number = row_number())
 }
 
-ranges.ZF.common <- find.common.overlaps(locations.zf)
-ranges.NLS.common <- find.common.overlaps(locations.NLS)
+find.common.nt.overlaps <- function(locations.data){
+  locations.data %<>%
+    dplyr::filter(!is.na(start_nt_gapped) & !is.na(end_nt_gapped))
+  
+  ranges.9aaTAD <- IRanges(start=locations.data$start_nt_gapped, end = locations.data$end_nt_gapped, names = locations.data$sequence)
+  ranges.9aaTAD.reduce <- IRanges::reduce(ranges.9aaTAD)
+  
+  n.sequences.in.range <- sapply(1:length(ranges.9aaTAD.reduce), \(i) length(subsetByOverlaps(ranges.9aaTAD, ranges.9aaTAD.reduce[i,])))
+  as.data.frame(ranges.9aaTAD.reduce[n.sequences.in.range>4,]) %>%
+    dplyr::mutate(motif_number = row_number()) %>%
+    dplyr::rename(start_nt = start, end_nt = end, width_nt = width)
+}
+
+ranges.ZF.common <- merge(find.common.aa.overlaps(locations.zf), find.common.nt.overlaps(locations.zf), by = "motif_number")
+ranges.NLS.common <- merge(find.common.aa.overlaps(locations.NLS), find.common.nt.overlaps(locations.NLS), by = "motif_number")
 
 # Only keep the high confidence 9aaTADs for the track
-ranges.9aaTAD.common <- find.common.9aaTADs(locations.9aaTAD, 
-                                            rc.threshold = 80,
-                                            coverage.threshold = 21)
+ranges.9aaTAD.common <-  merge(find.common.aa.9aaTADs(locations.9aaTAD, 
+                                                      rc.threshold = 80,
+                                                      coverage.threshold = 21),
+                               find.common.nt.9aaTADs(locations.9aaTAD, 
+                                                      rc.threshold = 80,
+                                                      coverage.threshold = 21), 
+                               by = c("motif_number", "label"), all.x = T)
 
 
 

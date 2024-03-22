@@ -148,7 +148,7 @@ find.9aaTAD <- function(aa, sequence.name, rc.threshold){
 #' @export
 #'
 #' @examples
-find.common.9aaTADs <- function(locations.9aaTAD, rc.threshold = 80, coverage.threshold = 21){
+find.common.aa.9aaTADs <- function(locations.9aaTAD, rc.threshold = 80, coverage.threshold = 21){
   
   # We only want to use the high confidence 9aaTADs, and ignore the site in exon 7
   tads.filtered <- locations.9aaTAD[locations.9aaTAD$rc_score>=rc.threshold & locations.9aaTAD$end_gapped < mouse.exons$start_aa[7],]
@@ -177,6 +177,41 @@ find.common.9aaTADs <- function(locations.9aaTAD, rc.threshold = 80, coverage.th
                                     motif_number==5 ~ paste0(LETTERS[adj.motif.number], 2),
                                     .default = LETTERS[adj.motif.number] )) %>%
     dplyr::select(-adj.motif.number) 
+}
+
+find.common.nt.9aaTADs <- function(locations.9aaTAD, rc.threshold = 80, coverage.threshold = 21){
+  
+  locations.9aaTAD %<>%
+    dplyr::filter(!is.na(start_nt_gapped) & !is.na(end_nt_gapped))
+  
+  # We only want to use the high confidence 9aaTADs, and ignore the site in exon 7
+  tads.filtered <- locations.9aaTAD[locations.9aaTAD$rc_score>=rc.threshold & locations.9aaTAD$end_nt_gapped < mouse.exons$start[7],]
+  
+  # Make ranges from all of the TADs with >80% RC
+  tad.ranges <- IRanges(start = tads.filtered$start_nt_gapped, end = tads.filtered$end_nt_gapped, names = tads.filtered$sequence)
+  
+  # For each base in the gapped aa alignment, count overlapping TADs
+  count.overlapping.tads <- function(site){
+    site.range <- IRanges(start = site, end=site)
+    IRanges::countOverlaps(site.range, tad.ranges)
+  }
+  
+  tad.coverages <- data.frame("site" = 1:max(tads.filtered$end_nt_gapped))
+  tad.coverages$coverage <- sapply(tad.coverages$site, count.overlapping.tads)
+  tad.coverages <- tad.coverages[tad.coverages$coverage>=coverage.threshold,]
+  
+  # For high-coverage 9aaTADs, reduce to overlapping ranges
+  tad.coverages.ranges <- IRanges(IRanges(start =  tad.coverages$site, end =  tad.coverages$site))
+  reduced.ranges<- IRanges::reduce(tad.coverages.ranges)
+  as.data.frame(reduced.ranges) %>%
+    dplyr::mutate(motif_number = row_number(),
+                  adj.motif.number = ifelse(motif_number>4, motif_number-1, motif_number),
+                  # For labels, we want D1, D2, E ..., not D, E, F ...
+                  label = case_when(motif_number==4 ~ paste0(LETTERS[adj.motif.number], 1),
+                                    motif_number==5 ~ paste0(LETTERS[adj.motif.number], 2),
+                                    .default = LETTERS[adj.motif.number] )) %>%
+    dplyr::select(-adj.motif.number)  %>%
+    dplyr::rename(start_nt = start, end_nt = end, width_nt = width)
 }
 
 
