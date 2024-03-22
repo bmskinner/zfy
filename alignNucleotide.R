@@ -765,9 +765,9 @@ labelled.tree <- gsub(":1", "", labelled.tree)
 readr::write_file(labelled.tree, "paml/site-specific/zfxy.nt.aln.paml.treefile")
 
 # This control file tests site models With heterogeneous ω Across Sites
-paml.site.file <- paste0("seqfile   = ", files$mammal.nt.aln, " * alignment file\n",
-                         "treefile  = paml/site-specific/zfxy.nt.aln.paml.treefile * tree in Newick format without nodes\n", # 
-                         "outfile   = paml/site-specific/site.specific.paml.out.txt\n",
+paml.site.file <- paste0("seqfile   = ../../", files$mammal.nt.aln, " * alignment file\n",
+                         "treefile  = zfxy.nt.aln.paml.treefile * tree in Newick format without nodes\n", # 
+                         "outfile   = site.specific.paml.out.txt\n",
                          "\n",
                          "noisy     = 3 * on screen logging\n",
                          "verbose   = 1 * detailed output in file\n",
@@ -808,9 +808,9 @@ newick.test <- gsub("_#1", " #1", newick.test) # fg labels
 write_file(newick.test, "paml/branch-site/zfxy.nt.aln.paml.fg.treefile")
 
 # This control file tests site models With heterogeneous ω across Sites
-paml.branch.site.file <- paste0("seqfile   = ", files$mammal.nt.aln, " * alignment file\n",
-                                "treefile  = paml/branch-site/zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
-                                "outfile   = paml/branch-site/branch-site.paml.out.txt\n",
+paml.branch.site.file <- paste0("seqfile   = ../../", files$mammal.nt.aln, " * alignment file\n",
+                                "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
+                                "outfile   = branch-site.paml.out.txt\n",
                                 "\n",
                                 "noisy     = 3 * on screen logging\n",
                                 "verbose   = 1 * detailed output in file\n",
@@ -830,10 +830,16 @@ paml.branch.site.file <- paste0("seqfile   = ", files$mammal.nt.aln, " * alignme
 write_file(paml.branch.site.file, "paml/branch-site/zfy.branch-site.paml.ctl")
 
 # Add a script to submit these jobs to the cluster
+# Run the commands manually
 paml.shell.script <- paste0("#!/bin/bash\n\n",
+                            "# qsubme is an alias to submit the job to the cluster\n",
+                            "shopt -s expand_aliases\n",
+                            "source ~/.bashrc\n\n",
                             "cd paml/site-specific\n",
-                            "qsubme codeml zfy.site-specific.paml.ctl\n",
+                            "# codeml zfy.site-specific.paml.ctl\n",
+                            "qsubme codeml zfy.site-specific.paml.ctl\n\n",
                             "cd ../branch-site\n",
+                            "# codeml zfy.branch-site.paml.ctl\n",
                             "qsubme codeml zfy.branch-site.paml.ctl\n"
                             
 )
