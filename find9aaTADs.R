@@ -83,25 +83,25 @@ find.9aaTAD <- function(aa, sequence.name, rc.threshold){
     s <- s2c(s) # make character vector from string
     
     # Test each substring against criteria
-    rc1 <- function(s) sum(s[c(2, 4, 5)] %in% s2c("ILVFWMAY"))>=1
-    rc2 <- function(s) sum(s[c(6, 8)] %in% s2c("ILVFWMAY"))>=1
-    rc3 <- function(s) sum(s[c(4, 5, 6)] %in% s2c("DENQST"))>=1
-    rc4 <- function(s) {count <- sum(s[1:9] %in% s2c("DENQSTKRH")); count>=2 & count<=4}
-    rc5 <- function(s) {count <- sum(s[1:9] %in% s2c("ILVFWMAYGPST")); count>=5 & count<=7}
-    rc6 <- function(s) { 
+    rc1 <- \(s) sum(s[c(2, 4, 5)] %in% s2c("ILVFWMAY"))>=1
+    rc2 <- \(s) sum(s[c(6, 8)] %in% s2c("ILVFWMAY"))>=1
+    rc3 <- \(s) sum(s[c(4, 5, 6)] %in% s2c("DENQST"))>=1
+    rc4 <- \(s) {count <- sum(s[1:9] %in% s2c("DENQSTKRH")); count>=2 & count<=4}
+    rc5 <- \(s) {count <- sum(s[1:9] %in% s2c("ILVFWMAYGPST")); count>=5 & count<=7}
+    rc6 <- \(s) { 
       m <- s[1:9] %in% s2c("ILVFWMAYGP");
-      !any( sapply(3:8, function(i) { all(m[i-2], m[i-1], m[i], m[i+1]) })) &
-        !any( sapply(2:7, function(i) { all(m[i-1], m[i], m[i+1], m[i+2]) }))
+      !any( sapply(3:8, \(i) { all(m[i-2], m[i-1], m[i], m[i+1]) })) &
+        !any( sapply(2:7, \(i) { all(m[i-1], m[i], m[i+1], m[i+2]) }))
     }
-    rc7 <- function(s) { 
+    rc7 <- \(s) { 
       m <- s[1:9] %in% s2c("DENQST");
-      !any(sapply(2:8, function(i) all(m[i-1], m[i], m[i+1])))
+      !any(sapply(2:8, \(i) all(m[i-1], m[i], m[i+1])))
     }
-    rc8  <- function(s) sum(s[1:9] %in% s2c("KRH"))<=1
-    rc9  <- function(s) sum(s[1:6] %in% s2c("QNKRH"))<=1
-    rc10 <- function(s) sum(s[8:9] %in% s2c("QNKRH"))<=1
-    rc11 <- function(s) sum(s[2:8] %in% s2c("C"))>=0
-    rc12 <- function(s) sum(s[2:7] %in% s2c("PG"))>=0
+    rc8  <- \(s) sum(s[1:9] %in% s2c("KRH"))<=1
+    rc9  <- \(s) sum(s[1:6] %in% s2c("QNKRH"))<=1
+    rc10 <- \(s) sum(s[8:9] %in% s2c("QNKRH"))<=1
+    rc11 <- \(s) sum(s[2:8] %in% s2c("C"))>=0
+    rc12 <- \(s) sum(s[2:7] %in% s2c("PG"))>=0
     
     
     (rc1(s) + rc2(s) + rc3(s) + rc4(s) + rc5(s) + rc6(s) + rc7(s) + 

@@ -448,7 +448,7 @@ find.common.overlaps <- function(locations.data){
   ranges.9aaTAD <- IRanges(start=locations.data$start_gapped, end = locations.data$end_gapped, names = locations.data$sequence)
   ranges.9aaTAD.reduce <- IRanges::reduce(ranges.9aaTAD)
   
-  n.sequences.in.range <- sapply(1:length(ranges.9aaTAD.reduce), function(i) length(subsetByOverlaps(ranges.9aaTAD, ranges.9aaTAD.reduce[i,])))
+  n.sequences.in.range <- sapply(1:length(ranges.9aaTAD.reduce), \(i) length(subsetByOverlaps(ranges.9aaTAD, ranges.9aaTAD.reduce[i,])))
   as.data.frame(ranges.9aaTAD.reduce[n.sequences.in.range>4,]) %>%
     dplyr::mutate(motif_number = row_number())
 }
@@ -709,8 +709,8 @@ write_tsv(pwm.predictions, "figure/zf_targets.tsv")
 #### Fetch divergence times to highlight the rapid evolution in the rodents ####
 
 # Get the NCBI taxon ids for each species
-taxon.data <- lapply(metadata.mammal$species, function(x) httr::GET( paste0("http://timetree.temple.edu/api/taxon/",curl::curl_escape(x)))  ) 
-taxon.ids <- sapply(lapply(taxon.data, httr::content), function(x) x$taxon_id)
+taxon.data <- lapply(metadata.mammal$species, \(x) httr::GET( paste0("http://timetree.temple.edu/api/taxon/",curl::curl_escape(x)))  ) 
+taxon.ids <- sapply(lapply(taxon.data, httr::content), \(x) x$taxon_id)
 metadata.mammal$taxon_id <- taxon.ids
 
 # Find the pairwise distances between each species
@@ -1034,7 +1034,7 @@ if(!installr::is.windows()){
     # Coloration of tree by k based on https://observablehq.com/@spond/plotting-relax-k-values-on-branches-of-the-tree
     
     # Make a dataframe with the k values and node numbers
-    k.vals <- data.frame("k" = sapply(hyphy.data$`branch attributes`[["0"]], function(x) x$`k (general descriptive)`))
+    k.vals <- data.frame("k" = sapply(hyphy.data$`branch attributes`[["0"]], \(x) x$`k (general descriptive)`))
     k.vals$NodeLab <- rownames(k.vals)
     k.vals$node <- sapply(k.vals$NodeLab,  treeio::nodeid, tree = hyphy.input.tree)
     # Rescale values above 1 to the range 1-2 so we get a clean diverging scale
@@ -1044,11 +1044,11 @@ if(!installr::is.windows()){
     k.vals[nrow(k.vals)+1,] <- list(0, "", length(hyphy.input.tree$tip.label)+1, 1)
     
     # Get the branch lengths from the HyPhy output
-    k.vals$branch.length <-  sapply(k.vals$NodeLab, function(x) ifelse(x=="", 0, hyphy.data$`branch attributes`[["0"]][[x]]$`MG94xREV with separate rates for branch sets`))
+    k.vals$branch.length <-  sapply(k.vals$NodeLab, \(x) ifelse(x=="", 0, hyphy.data$`branch attributes`[["0"]][[x]]$`MG94xREV with separate rates for branch sets`))
     
     # Reorder the branches to match the node/tip order of the tree
     # Ordering in hyphy.input.tree$edge[,2] (the destination node, lengths are for incoming branches)
-    branch.lengths <- unlist(sapply(hyphy.input.tree$edge[,2], function(x)  k.vals[k.vals$node==x,"branch.length"]))
+    branch.lengths <- unlist(sapply(hyphy.input.tree$edge[,2], \(x)  k.vals[k.vals$node==x,"branch.length"]))
     hyphy.input.tree$edge.length <- branch.lengths
     
     p <- ggtree(hyphy.input.tree) + geom_tiplab()
@@ -1348,7 +1348,7 @@ exon3.hydro.plot <- ggplot()+
 
 # Get the region from the msa
 
-exon3.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  function(i) list("Sequence" = i, "exon_3_274-287"= as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
+exon3.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  \(i) list("Sequence" = i, "exon_3_274-287"= as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
   as.data.frame %>%
   dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
   dplyr::arrange(as.integer(Sequence))
@@ -1363,7 +1363,7 @@ exon5.hydro.plot <- ggplot()+
   scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
   labs(fill="Hydrophobicity (9 site average)")
 
-exon5.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  function(i) list("Sequence" = i, "exon_5_386-403"= as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
+exon5.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  \(i) list("Sequence" = i, "exon_5_386-403"= as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
   as.data.frame %>%
   dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
   dplyr::arrange(as.integer(Sequence))
