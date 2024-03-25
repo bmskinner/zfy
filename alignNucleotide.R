@@ -991,14 +991,14 @@ ancestral.nt.seqs <- read.table(paste0(files$mammal.nt.aln, ".state") ,header=TR
 nt.aln.tree.nodes <- ape::read.tree(paste0(files$mammal.nt.aln, ".treefile"))
 nt.aln.tree.nodes <- ape::root(nt.aln.tree.nodes, "Platypus_ZFX")
 
-ggtree(nt.aln.tree.nodes) + 
-  geom_tree() +
-  geom_tiplab(size=2)+
-  geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")+
-  geom_treescale(fontsize =2, y = -1)+
-  coord_cartesian(clip="off")+
-  theme_tree() +
-  theme(legend.position = "none")
+# ggtree(nt.aln.tree.nodes) + 
+#   geom_tree() +
+#   geom_tiplab(size=2)+
+#   geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")+
+#   geom_treescale(fontsize =2, y = -1)+
+#   coord_cartesian(clip="off")+
+#   theme_tree() +
+#   theme(legend.position = "none")
 
 # Node number returned includes number of tip labels; subtract to get node
 rodent.node <- ape::getMRCA(nt.aln.tree.nodes, c("Mouse_Zfy1", "Desert_hamster_Zfx-like_putative-Zfy")) - length(nt.aln.tree.nodes$tip.label)
