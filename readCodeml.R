@@ -138,4 +138,3 @@ positive.sites.plot <-  positive.sites.plot+
         panel.grid = element_blank())
 
 save.double.width("figure/positive.sites.png", positive.sites.plot, height = 85)
-
