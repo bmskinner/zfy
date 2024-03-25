@@ -220,6 +220,7 @@ make.outgroup.mini.tree <-function(combined.outgroup.tree, text.labels){
   combined.outgroup.tree.mini$tip.label <- rep("", length(combined.outgroup.tree.mini$tip.label))
   result <- ggtree(combined.outgroup.tree.mini, aes(color=group)) + 
     geom_tiplab(align=TRUE, linetype='dashed', linesize=.3) + # use tiplab to get lines
+    scale_color_manual(values = c("#4f4f4f", "#85af1f", "#911faf"))+
     coord_cartesian(ylim = c(1, max.y))
   
   curr.y <- length(combined.outgroup.tree.mini$tip.label) + 2.5
@@ -299,7 +300,7 @@ add.track <- function(ranges, y.start, y.end, start_col = "start", end_col = "en
 add.track.labels <- function(ranges, y.start, y.end, start_col = "start", end_col = "end", label_col ="label", ...){
   geom_text(data=ranges,
             aes(x =(.data[[start_col]]+.data[[end_col]])/2, y=(y.start+y.end)/2, 
-                label=.data[[label_col]]), size=1.8, ...)
+                label=.data[[label_col]]), size=1.5, ...)
 }
 # Add a conservation track to a plot
 add.conservation.track <- function(ranges,  y.start, y.end, ...){
@@ -338,16 +339,17 @@ annotate.structure.plot <- function(plot, n.taxa){
   
   plot <- plot+
     # Draw the conservation with Xenopus, chicken and opossum
-    new_scale_fill()+
-    scale_fill_viridis_c(limits = c(0, 1))+
+    new_scale_fill()+ 
+    scale_fill_paletteer_c("grDevices::Cividis", direction = 1, limits = c(0, 1))+
+    # scale_fill_paletteer_c("ggthemes::Classic Gray", direction = -1, limits = c(0, 1))+
     labs(fill="Conservation (5 site average)")+
     add.conservation.track(msa.aa.aln.tidy.frog.conservation,    n.taxa,   n.taxa+2)+
     add.conservation.track(msa.aa.aln.tidy.chicken.conservation, n.taxa+3, n.taxa+5)+
     add.conservation.track(msa.aa.aln.tidy.opossum.conservation, n.taxa+6, n.taxa+8)+
     
     # Draw the structures
-    add.track(ranges.ZF.common,     n.taxa+9, n.taxa+11, fill="lightgrey")+
-    add.track(ranges.NLS.common,    n.taxa+9, n.taxa+11, fill="green", alpha = 0.5)+
+    add.track(ranges.ZF.common,     n.taxa+9, n.taxa+11, fill="grey")+
+    add.track(ranges.NLS.common,    n.taxa+9, n.taxa+11, fill="#2de200", alpha = 0.5)+
     add.track(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, fill="#00366C",  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
     add.track.labels(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, col="white")+   # Label the 9aaTADs
     

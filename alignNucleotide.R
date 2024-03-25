@@ -1207,11 +1207,12 @@ save.double.width(filename = "figure/hydrophobic.patch.exon.3.png", exon3.hydro.
 exon3.patch.table <- do.call(rbind, 
                              lapply(metadata.combined$common.name,  
                                     \(i) list("Sequence" = i, 
-                                              paste0("exon_3_",exon3.patch.start,"-", 
-                                                     exon3.patch.end) = as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
+                                              as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
   as.data.frame %>%
   dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
-  dplyr::arrange(as.integer(Sequence))
+  dplyr::arrange(as.integer(Sequence)) 
+colnames(exon3.patch.table) <- c("Sequence", paste0("exon_3_",exon3.patch.start,"-", 
+                       exon3.patch.end))
 
 exon5.patch.start <- mouse.exons$start_aa[5]+39
 exon5.patch.end   <- mouse.exons$end_aa[5]+1
@@ -1224,11 +1225,13 @@ exon5.hydro.plot <- ggplot()+
 save.double.width(filename = "figure/hydrophobic.patch.exon.5.png", exon5.hydro.plot)
 
 exon5.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  
-                                           \(i) list("Sequence" = i, paste0("exon_5_",exon5.patch.start,"-", 
-                                                                            exon5.patch.end) = as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
+                                           \(i) list("Sequence" = i,
+                                                     as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
   as.data.frame %>%
   dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
   dplyr::arrange(as.integer(Sequence))
+colnames(exon5.patch.table)<-c("Sequence", paste0("exon_5_",exon5.patch.start,"-", 
+                                                  exon5.patch.end))
 
 exon.patch.table <- merge(exon3.patch.table, exon5.patch.table, by=c("Sequence")) %>%
   create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:3)
