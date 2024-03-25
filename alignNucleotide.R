@@ -121,7 +121,7 @@ if(!file.exists(muscle.path)) stop("Muscle5.1 not present in bin directory")
 system2(muscle.path, paste("-align",  files$combined.aa.fas,
                            "-output", files$combined.aa.aln))
 
-alignments$aa.combined.ape <- ape::read.FASTA(files$combined.aa.aln)
+alignments$aa.combined.ape <- ape::read.FASTA(files$combined.aa.aln, type="AA")
 # combined.aa.aln <- ape::read.FASTA(files$combined.aa.aln)
 # Read in Biostrings format for exon detection also
 alignments$aa.combined.biostrings <- Biostrings::readAAMultipleAlignment(files$combined.aa.aln, format="fasta")
@@ -1351,14 +1351,18 @@ exon3.patch <- msa.aa.aln.hydrophobicity %>%
   dplyr::filter(position_gapped>exon3.patch.start & position_gapped<exon3.patch.end)
 
 exon3.hydro.plot <- ggplot()+
-  # Draw the charges per sequence
   geom_tile(data=exon3.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
   scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
   labs(fill="Hydrophobicity (9 site average)")
+save.double.width(filename = "figure/hydrophobic.patch.exon.3.png", exon3.hydro.plot)
 
 # Get the region from the msa
 
-exon3.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  \(i) list("Sequence" = i, "exon_3_274-287"= as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
+exon3.patch.table <- do.call(rbind, 
+                             lapply(metadata.combined$common.name,  
+                                    \(i) list("Sequence" = i, 
+                                              paste0("exon_3_",exon3.patch.start,"-", 
+                                                     exon3.patch.end) = as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
   as.data.frame %>%
   dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
   dplyr::arrange(as.integer(Sequence))
@@ -1368,12 +1372,14 @@ exon5.patch.end   <- mouse.exons$end_aa[5]+1
 exon5.patch <- msa.aa.aln.hydrophobicity %>%
   dplyr::filter(position_gapped>exon5.patch.start & position_gapped<exon5.patch.end)
 exon5.hydro.plot <- ggplot()+
-  # Draw the charges per sequence
   geom_tile(data=exon5.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
   scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
   labs(fill="Hydrophobicity (9 site average)")
+save.double.width(filename = "figure/hydrophobic.patch.exon.5.png", exon5.hydro.plot)
 
-exon5.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  \(i) list("Sequence" = i, "exon_5_386-403"= as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
+exon5.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  
+                                           \(i) list("Sequence" = i, paste0("exon_5_",exon5.patch.start,"-", 
+                                                                            exon5.patch.end) = as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
   as.data.frame %>%
   dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
   dplyr::arrange(as.integer(Sequence))
@@ -1382,24 +1388,23 @@ exon.patch.table <- merge(exon3.patch.table, exon5.patch.table, by=c("Sequence")
   create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:3)
 
 # Get consensus strings for the two patches
-cat("Exon 3 patch consensus: ", paste(s2c(consensusString(alignments$aa.combined.biostrings))[exon3.patch.start:exon3.patch.end], collapse = ""), "\n")
-cat("Exon 5 patch consensus: ", paste(s2c(consensusString(alignments$aa.combined.biostrings))[exon5.patch.start:exon5.patch.end], collapse = ""), "\n")
+# Note Biostrings::consensusString will fail if there are non-standard / ambiguity characters
+try({
+  # Get the consensus matrix and find the most frequent value per site
+  exon.3.patch.consensus <- paste(unlist(apply(consensusMatrix(alignments$aa.combined.biostrings)[,exon3.patch.start:exon3.patch.end], 
+                                         2, 
+                                         \(x) names(which(x==max(x))))), 
+                            collapse = "")
+  
+  exon.5.patch.consensus <- paste(unlist(apply(consensusMatrix(alignments$aa.combined.biostrings)[,exon5.patch.start:exon5.patch.end], 
+                                               2, 
+                                               \(x) names(which(x==max(x))))), 
+                                  collapse = "")
 
+  cat("Exon 3 patch consensus: ", exon.3.patch.consensus, "\n")
+  cat("Exon 5 patch consensus: ", exon.5.patch.consensus, "\n")
+})
 
-#### ####
-
-
-# testing of side-by-side plots
-# p <- ggtree(combined.outgroup.tree) + geom_tiplab(size=3, aes(col = group), align=F)
-# msaplot(p, files$combined.aa.aln, offset=0.4, width=2)+theme(legend.position = "none")
-
-# p %>% aplot::insert_right(msa.combined.aa.plot)
-
-
-
-
-# ggmsa::treeMSA_plot(ggtree(combined.outgroup.tree)+geom_tiplab(size=3, aes(col = group)), msa.outgroup.aln.tidy, color = "Chemistry_AA",
-#                     border=NA, font=NULL)
-#  
+#### Tar the outputs ####
 system2("tar", "czf aln.tar.gz aln")
 cat("Done!\n")
