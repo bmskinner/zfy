@@ -14,16 +14,6 @@ cat("Packages loaded\n")
 filesstrings::create_dir("figure")
 prepare.fas.files()
 
-read.alignments <- function(){
-  alignments <- list()
-  alignments$aa.combined.ape <- ape::read.FASTA(files$combined.aa.aln, type="AA")
-  # Read in Biostrings format for exon detection also
-  alignments$aa.combined.biostrings <- Biostrings::readAAMultipleAlignment(files$combined.aa.aln, format="fasta")
-  alignments$nt.mammal.ape <- ape::read.FASTA(files$mammal.nt.aln)
-  alignments$nt.mammal.biostrings <- Biostrings::readDNAMultipleAlignment(files$mammal.nt.aln, format="fasta")
-  alignments
-}
-
 alignments <- read.alignments()
 
 # Identify the coordinates of the exon boundaries in the gapped alignments

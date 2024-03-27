@@ -108,6 +108,16 @@ prepare.fas.files <- function(){
     create.xlsx(., "figure/accessions.supplement.xlsx")
 }
 
+read.alignments <- function(){
+  alignments <- list()
+  alignments$aa.combined.ape <- ape::read.FASTA(files$combined.aa.aln, type="AA")
+  # Read in Biostrings format for exon detection also
+  alignments$aa.combined.biostrings <- Biostrings::readAAMultipleAlignment(files$combined.aa.aln, format="fasta")
+  alignments$nt.mammal.ape <- ape::read.FASTA(files$mammal.nt.aln)
+  alignments$nt.mammal.biostrings <- Biostrings::readDNAMultipleAlignment(files$mammal.nt.aln, format="fasta")
+  alignments
+}
+
 # Read the given FASTA file and extract metadata
 # Returns as a list containing FA sequence and metadata dataframe
 # The FASTA file headers have common names manually added in [] brackets
@@ -482,10 +492,10 @@ locate.zfs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
   nt.aln <- Biostrings::readDNAMultipleAlignment(nt.alignment.file, format="fasta")
   
   # Run the prediction from pwm_predict
-  system2("hmmsearch", "--domtblout pwm/combined.aa.hmm.dom.txt  bin/pwm_predict/zf_C2H2.ls.hmm fasta/combined.aa.fas")
+  system2("hmmsearch", "--domtblout aln/pwm/combined.aa.hmm.dom.txt  bin/pwm_predict/zf_C2H2.ls.hmm fasta/combined.aa.fas")
   
   # Parse the resulting table
-  zf.data <- read_table("pwm/combined.aa.hmm.dom.txt", comment = "#",
+  zf.data <- read_table("aln/pwm/combined.aa.hmm.dom.txt", comment = "#",
              col_names = FALSE)
   zf.data <- zf.data[,c(1, 20, 21)]
   colnames(zf.data) <- c("sequence", "start_ungapped", "end_ungapped")

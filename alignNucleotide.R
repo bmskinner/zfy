@@ -42,6 +42,7 @@ filesstrings::create_dir("aln")
 filesstrings::create_dir("aln/mammal")
 filesstrings::create_dir("aln/combined")
 filesstrings::create_dir("aln/exons")
+filesstrings::create_dir("aln/pwm")
 filesstrings::create_dir("aln/zfx_only")
 filesstrings::create_dir("aln/zfy_only")
 filesstrings::create_dir("bin")
@@ -54,7 +55,6 @@ filesstrings::create_dir("paml/branch-site")
 filesstrings::create_dir("paml/exon_1_3-6")
 filesstrings::create_dir("paml/exon_2")
 filesstrings::create_dir("paml/exon_7")
-filesstrings::create_dir("pwm")
 
 writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
 
@@ -152,6 +152,16 @@ system2("iqtree", paste("-s ", exon.1.6.aln.file,
         stdout = paste0(exon.1.6.aln.file, ".iqtree.log"),
         stderr = paste0(exon.1.6.aln.file, ".iqtree.log"))
 
+#### Identify binding motifs of the ZFs in each species ####
+old.wd <- getwd()
+setwd("./bin/pwm_predict")
+system2("./pwm_predict", "-l 20 ../../fasta/combined.aa.fas") # ensure all ZFs linked
+setwd(old.wd)
+filesstrings::move_files(files = c("fasta/combined.aa.pwm"),
+                         destinations = c("aln/pwm"),
+                         overwrite = TRUE)
+# Remove header and split the output PWMs to separate files
+system2("cat", "aln/pwm/combined.aa.pwm | grep -v ';' | split -l 5 - aln/pwm/zf_")
 #### Fetch divergence times to highlight the rapid evolution in the rodents ####
 
 # Get the NCBI taxon ids for each species
@@ -248,6 +258,15 @@ write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
 
 # To look at the rodent clade, we need a rooted tree
 
+nt.aln.tree <- ape::read.tree(files$mammal.nt.aln.treefile)
+# Root the tree on platypus and resave
+# The root is arbitrarily placed in the platypus branch to fit neatly
+nt.aln.tree <- phytools::reroot(nt.aln.tree, which(nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+ape::write.tree(nt.aln.tree, file = paste0(files$mammal.nt.aln, ".rooted.treefile"))
+
+# Find the nodes that are ZFY vs ZFX and add to tree
+mammal.gene.groups <- split(metadata.mammal$common.name, metadata.mammal$group)
+nt.aln.tree <- tidytree::groupOTU(nt.aln.tree, mammal.gene.groups, group_name = "group")
 # Find the MRCA of the rodents with rapid ZFY evolution
 rodent.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Desert_hamster_Zfx-like_putative-Zfy"))
 
