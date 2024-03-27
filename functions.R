@@ -54,10 +54,59 @@ set.file.paths <-function(){
   files$mammal.aa.aln <- "aln/mammal/mammal.aa.aln"
   files$mammal.nt.aln.treefile <- paste0(files$mammal.nt.aln, ".treefile")
   files$combined.aa.aln.treefile <- paste0(files$combined.aa.aln, ".treefile")
+  files$paml.branch.site.output <- "paml/branch-site/zfy.branch-site.positive.sites.txt"
   files
 }
 
 files <- set.file.paths()
+
+prepare.fas.files <- function(){
+  
+  # Putative Zfy sequences in rodents detected with NCBI gene search:
+  # rodent[orgn:__txid9989] AND zinc finger X-chromosomal protein-like 
+  
+  # Read all unaligned sequence files with .fa extension
+  fa.files <- list.files(path = "fasta/nt", pattern = "*.fa$", 
+                         include.dirs = T, full.names = T)
+  
+  fa.read  <- lapply(fa.files, read.fasta)
+  nt.raw   <- read.sequences(fa.read)
+  metadata.mammal <<- read.metadata(fa.read) %>%
+    dplyr::mutate(Species_common_name = str_replace(common.name, "_Z[F|f][X|x].*", ""),
+                  Species_common_name = str_replace(Species_common_name, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", ""))
+  
+  # Write the combined fasta to file with .fas extension
+  ape::write.FASTA(nt.raw, file = files$mammal.nt.fas)
+  
+  
+  # Read outgroup NT FA files
+  # Read all unaligned sequence files with .fa extension
+  outgroup.nt.files <- list.files(path = "fasta/aa", pattern = "*.fa$", 
+                                  include.dirs = T, full.names = T)
+  
+  outgroup.fa.read  <- lapply(outgroup.nt.files, read.fasta)
+  outgroup.nt.raw   <- read.sequences(outgroup.fa.read)
+  metadata.outgroup <<-  read.metadata(outgroup.fa.read) %>%
+    dplyr::mutate(Species_common_name = str_replace(common.name, "_Z[F|f][X|x].*", ""),
+                  Species_common_name = str_replace(Species_common_name, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", ""))
+  
+  # Combine the outgroups with the mammals
+  metadata.combined <<- rbind(metadata.mammal, metadata.outgroup)
+  
+  # Write the unaligned combined fasta to file with .fas extension
+  combined.nt.raw <- c(outgroup.nt.raw, nt.raw) # all sequences
+  combined.aa.raw <- ape::trans(combined.nt.raw)
+  
+  ape::write.FASTA(combined.nt.raw, file = files$combined.nt.fas)
+  ape::write.FASTA(combined.aa.raw, file = files$combined.aa.fas)
+  
+  # Create supplementary table with all accessions and sequence info
+  metadata.combined %>%
+    dplyr::rename(Accession = accession, Species = species, Group = group,
+                  Name_in_figures = common.name,Description = original.name  ) %>%
+    dplyr::select(Accession,Species,Group,  Name_in_figures, Description ) %>%
+    create.xlsx(., "figure/accessions.supplement.xlsx")
+}
 
 # Read the given FASTA file and extract metadata
 # Returns as a list containing FA sequence and metadata dataframe
@@ -81,6 +130,50 @@ read.fasta <- function(f){
          "original.name" = original.name,
          "common.name" = common.names,
          "species" = rep(species.name, length(common.names))))
+}
+
+prepare.fas.files <- function(){
+  
+  # Putative Zfy sequences in rodents detected with NCBI gene search:
+  # rodent[orgn:__txid9989] AND zinc finger X-chromosomal protein-like 
+  
+  # Read all unaligned sequence files with .fa extension
+  fa.files <- list.files(path = "fasta/nt", pattern = "*.fa$", 
+                         include.dirs = T, full.names = T)
+  
+  fa.read  <- lapply(fa.files, read.fasta)
+  nt.raw   <- read.sequences(fa.read)
+  metadata.mammal <<- read.metadata(fa.read)
+  
+  # Write the combined fasta to file with .fas extension
+  ape::write.FASTA(nt.raw, file = files$mammal.nt.fas)
+  
+  
+  # Read outgroup NT FA files
+  # Read all unaligned sequence files with .fa extension
+  outgroup.nt.files <- list.files(path = "fasta/aa", pattern = "*.fa$", 
+                                  include.dirs = T, full.names = T)
+  
+  outgroup.fa.read  <- lapply(outgroup.nt.files, read.fasta)
+  outgroup.nt.raw   <- read.sequences(outgroup.fa.read)
+  metadata.outgroup <<-  read.metadata(outgroup.fa.read)
+  
+  # Combine the outgroups with the mammals
+  metadata.combined <<- rbind(metadata.mammal, metadata.outgroup)
+  
+  # Write the unaligned combined fasta to file with .fas extension
+  combined.nt.raw <- c(outgroup.nt.raw, nt.raw) # all sequences
+  combined.aa.raw <- ape::trans(combined.nt.raw)
+  
+  ape::write.FASTA(combined.nt.raw, file = files$combined.nt.fas)
+  ape::write.FASTA(combined.aa.raw, file = files$combined.aa.fas)
+  
+  # Create supplementary table with all accessions and sequence info
+  metadata.combined %>%
+    dplyr::rename(Accession = accession, Species = species, Group = group,
+                  Name_in_figures = common.name,Description = original.name  ) %>%
+    dplyr::select(Accession,Species,Group,  Name_in_figures, Description ) %>%
+    create.xlsx(., "figure/accessions.supplement.xlsx")
 }
 
 read.sequences <- function(read.fasta.output){
@@ -571,3 +664,12 @@ create.xlsx = function(data, file.name, cols.to.fixed.size.font = NULL, cols.to.
   options(oldOpt)
 }
 
+read.time.tree.data <- function(){
+  pairwise.times <- read_tsv("time.tree.data.tsv")
+  # Swap the reciprocals and use adjusted age where available to keep tree ultrametric
+  rbind(pairwise.times, pairwise.times %>% dplyr::rename(taxon_a_id = 2, 
+                                                                           taxon_b_id = 1,
+                                                                           scientific_name_a = 4,
+                                                                           scientific_name_b = 3)) %>%
+    dplyr::mutate(Mya = ifelse(adjusted_age > 0, adjusted_age, precomputed_age))
+}

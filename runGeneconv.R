@@ -340,3 +340,10 @@ aln.geneconv.plot <- ggplot(aln.geneconv.data)+
 
 save.double.width("figure/aln.ancestral.zfxy_geneconv.png", aln.geneconv.plot)
 
+
+#### How do substitution rates compare to the divergence times? ####
+# We want to calculate the number of substitutions per million years
+# Combine the branch lengths with the TimeTree dates
+
+pairwise.times <- read.time.tree.data()
+mammal.nt.tree.data <- tidytree::as_tibble(zfy.nt.aln.tree)
