@@ -10,6 +10,8 @@ aln/*
 bin/*
 figure/*
 paml/*
-pwm/*
 nls/*
 rdp5/*
+*.tar*
+*.json
+*.treefile

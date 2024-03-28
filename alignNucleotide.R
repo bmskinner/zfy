@@ -42,12 +42,12 @@ filesstrings::create_dir("aln")
 filesstrings::create_dir("aln/mammal")
 filesstrings::create_dir("aln/combined")
 filesstrings::create_dir("aln/exons")
+filesstrings::create_dir("aln/hyphy")
 filesstrings::create_dir("aln/pwm")
 filesstrings::create_dir("aln/zfx_only")
 filesstrings::create_dir("aln/zfy_only")
 filesstrings::create_dir("bin")
 filesstrings::create_dir("figure")
-filesstrings::create_dir("hyphy")
 filesstrings::create_dir("nls")
 filesstrings::create_dir("paml")
 filesstrings::create_dir("paml/site-specific")
@@ -335,82 +335,21 @@ hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything
 hyphy.tree <- treeio::label_branch_paml(hyphy.tree, rodent.node, "{Test}") # now rodents are test
 hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
 hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
-ape::write.tree(hyphy.tree, file = "hyphy/mammal.nt.aln.hyphy.treefile")
+ape::write.tree(hyphy.tree, file = "aln/hyphy/mammal.nt.aln.hyphy.treefile")
 
 # create an sh file to submit these
 # HyPhy should be installed in a conda environment
 # This script should be invoked within the conda environment
 hyphy.sh.data <- paste0("#!/bin/bash\n",
                         "source activate hyphy\n",
-                        "hyphy relax --alignment paml/exon_1_3-6/exon_1_3-6.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_1_3-6.relax.json\n",
-                        "hyphy relax --alignment paml/exon_2/exon_2.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_2.relax.json\n",
-                        "hyphy relax --alignment paml/exon_7/exon_7.aln --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/exon_7.relax.json\n",
-                        "hyphy relax --alignment  ", files$mammal.nt.aln, " --tree hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output hyphy/mammal.relax.json\n"
+                        "hyphy relax --alignment paml/exon_1_3-6/exon_1_3-6.aln --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon_1_3-6.relax.json\n",
+                        "hyphy relax --alignment paml/exon_2/exon_2.aln --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon_2.relax.json\n",
+                        "hyphy relax --alignment paml/exon_7/exon_7.aln --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon_7.relax.json\n",
+                        "hyphy relax --alignment  ", files$mammal.nt.aln, " --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/mammal.relax.json\n"
 )
 write_file(hyphy.sh.data, "hyphy.sh")
 
-if(!installr::is.windows()){
-  system2("bash", "hyphy.sh")
-  
-  create.relax.k.tree <- function(json.file){
-    # Read the json file and parse results
-    hyphy.data <- jsonlite::read_json(json.file)
-    # Note that the tree needs to terminate with ; otherwise read.tree returns NULL
-    hyphy.input.tree <- ape::read.tree(text = paste0(hyphy.data$input$trees[["0"]], ";"))
-    
-    # Coloration of tree by k based on https://observablehq.com/@spond/plotting-relax-k-values-on-branches-of-the-tree
-    
-    # Make a dataframe with the k values and node numbers
-    k.vals <- data.frame("k" = sapply(hyphy.data$`branch attributes`[["0"]], \(x) x$`k (general descriptive)`))
-    k.vals$NodeLab <- rownames(k.vals)
-    k.vals$node <- sapply(k.vals$NodeLab,  treeio::nodeid, tree = hyphy.input.tree)
-    # Rescale values above 1 to the range 1-2 so we get a clean diverging scale
-    k.vals$adj.k <- ifelse(k.vals$k <= 1, k.vals$k, (k.vals$k/max(k.vals$k)+1))
-    
-    # Add a new row for the root node
-    k.vals[nrow(k.vals)+1,] <- list(0, "", length(hyphy.input.tree$tip.label)+1, 1)
-    
-    # Get the branch lengths from the HyPhy output
-    k.vals$branch.length <-  sapply(k.vals$NodeLab, \(x) ifelse(x=="", 0, hyphy.data$`branch attributes`[["0"]][[x]]$`MG94xREV with separate rates for branch sets`))
-    
-    # Reorder the branches to match the node/tip order of the tree
-    # Ordering in hyphy.input.tree$edge[,2] (the destination node, lengths are for incoming branches)
-    branch.lengths <- unlist(sapply(hyphy.input.tree$edge[,2], \(x)  k.vals[k.vals$node==x,"branch.length"]))
-    hyphy.input.tree$edge.length <- branch.lengths
-    
-    p <- ggtree(hyphy.input.tree) + geom_tiplab()
-    p <- p %<+% k.vals + aes(colour=adj.k) + 
-      scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
-                              direction = -1, 
-                              limits = c(0, 2),
-                              labels = c("0.0", "0.5", "1.0", round(max(k.vals$k)/2, digits = 0), round(max(k.vals$k), digits = 0)))+
-      labs(color = "K")+
-      coord_cartesian(xlim = c(0, 0.7))+
-      annotate(geom="text", x = 0.3, y = 62, 
-               label = paste("K(Muroidea) =", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2)))+
-      theme(legend.position = c(0.8, 0.2))
-    
-    p
-  }
-  
-  
-  if(file.exists("hyphy/mammal.relax.json")){
-    relax.tree.all <- create.relax.k.tree("hyphy/mammal.relax.json")
-    save.double.width("figure/mammal.relax.K.png", relax.tree.all)
-  }
-  if(file.exists("hyphy/exon_1_3-6.relax.json")){
-    relax.tree.e1_3_6 <- create.relax.k.tree("hyphy/exon_1_3-6.relax.json")
-    save.double.width("figure/exon_1_3-6.relax.K.png", relax.tree.e1_3_6)
-  }
-  if(file.exists("hyphy/exon_2.relax.json")){
-    relax.tree.e2 <- create.relax.k.tree("hyphy/exon_2.relax.json")
-    save.double.width("figure/exon_2.relax.K.png", relax.tree.e2)
-  }
-  if(file.exists("hyphy/exon_7.relax.json")){
-    relax.tree.e7 <- create.relax.k.tree("hyphy/exon_7.relax.json")
-    save.double.width("figure/exon_7.relax.K.png", relax.tree.e7)
-  }
-}
+system2("bash", "hyphy.sh")
 
 #### Run HyPhy GARD to test for recombination ####
 

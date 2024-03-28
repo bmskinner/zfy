@@ -791,3 +791,71 @@ try({
 
 
 
+#### Plot HyPhy RELAX test for relaxed selection in Muroidea ####
+
+create.relax.k.tree <- function(json.file){
+  # Read the json file and parse results
+  hyphy.data <- jsonlite::read_json(json.file)
+  # Note that the tree needs to terminate with ; otherwise read.tree returns NULL
+  hyphy.input.tree <- ape::read.tree(text = paste0(hyphy.data$input$trees[["0"]], ";"))
+  
+  # Coloration of tree by k based on https://observablehq.com/@spond/plotting-relax-k-values-on-branches-of-the-tree
+  
+  # Make a dataframe with the k values and node numbers
+  k.vals <- data.frame("k" = sapply(hyphy.data$`branch attributes`[["0"]], \(x) x$`k (general descriptive)`))
+  k.vals$NodeLab <- rownames(k.vals)
+  k.vals$node <- sapply(k.vals$NodeLab,  treeio::nodeid, tree = hyphy.input.tree)
+  # Rescale values above 1 to the range 1-2 so we get a clean diverging scale
+  k.vals$adj.k <- ifelse(k.vals$k <= 1, k.vals$k, (k.vals$k/50)+1)
+  
+  # Add a new row for the root node
+  k.vals[nrow(k.vals)+1,] <- list(0, "", length(hyphy.input.tree$tip.label)+1, 1)
+  
+  # Get the branch lengths from the HyPhy output
+  k.vals$branch.length <-  sapply(k.vals$NodeLab, \(x) ifelse(x=="", 0, hyphy.data$`branch attributes`[["0"]][[x]]$`MG94xREV with separate rates for branch sets`))
+  
+  # Reorder the branches to match the node/tip order of the tree
+  # Ordering in hyphy.input.tree$edge[,2] (the destination node, lengths are for incoming branches)
+  branch.lengths <- unlist(sapply(hyphy.input.tree$edge[,2], \(x)  k.vals[k.vals$node==x,"branch.length"]))
+  hyphy.input.tree$edge.length <- branch.lengths
+  
+  p <- ggtree(hyphy.input.tree) + geom_tiplab()
+  p <- p %<+% k.vals + aes(colour=adj.k) + 
+    scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                            direction = -1, 
+                            limits = c(0, 2),
+                            labels = c("0.0", "0.5", "1.0", round(25, digits = 0), round(50, digits = 0)))+
+    labs(color = "K")+
+    coord_cartesian(xlim = c(0, 0.7))+
+    annotate(geom="text", x = 0.3, y = 62, 
+             label = paste("K(Muroidea) =", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2)))+
+    theme(legend.position = "top")
+  
+  p
+}
+
+if(file.exists("hyphy/mammal.relax.json")){
+  relax.tree.all <- create.relax.k.tree("hyphy/mammal.relax.json")
+  save.double.width("figure/mammal.relax.K.png", relax.tree.all)
+  
+  relax.tree.e1_3_6 <- create.relax.k.tree("hyphy/exon_1_3-6.relax.json")
+  save.double.width("figure/exon_1_3-6.relax.K.png", relax.tree.e1_3_6)
+  
+  relax.tree.e2 <- create.relax.k.tree("hyphy/exon_2.relax.json")
+  save.double.width("figure/exon_2.relax.K.png", relax.tree.e2)
+  
+  relax.tree.e7 <- create.relax.k.tree("hyphy/exon_7.relax.json")
+  save.double.width("figure/exon_7.relax.K.png", relax.tree.e7)
+  
+  # Combine the exon trees into one figure
+  exon.relax.tree <- relax.tree.e1_3_6 + relax.tree.e2 + relax.tree.e7 + 
+    plot_annotation(tag_levels = list(c("Exons 1,3-6", "Exon 2", "Exon 7"))) +
+    plot_layout(guides = "collect") &
+    theme(legend.position='bottom')
+  save.double.width("figure/exons.relax.K.png", exon.relax.tree)
+}
+
+
+#### Tar the outputs ####
+system2("tar", "czf figure.tar.gz figure")
+cat("Done!\n")
