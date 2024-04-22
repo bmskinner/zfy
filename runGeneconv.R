@@ -347,3 +347,114 @@ save.double.width("figure/aln.ancestral.zfxy_geneconv.png", aln.geneconv.plot)
 
 pairwise.times <- read.time.tree.data()
 mammal.nt.tree.data <- tidytree::as_tibble(zfy.nt.aln.tree)
+
+# Manually match the divergence times from the TimeTree data
+divergence.point.data <- c(
+  "Mammalia" = 180.06610,
+  "Theria" = 160,
+  "Eutheria" = 99.18870,
+  "Atlantogenata" = 97,
+  "Boreoeutheria" = 94.00000,
+  "Laurasiatheria" = 76.00000,
+  "Carnivora" = 55.36164,
+  "Caniformia" = 45.10000,
+  "Arctoidea" = 40.12000,
+  "Euungulata" = 72.7,
+  "Artiodactyla" = 61.84265,
+  "Pecora" = 23.7,
+  "Bovidae" = 21.62563,
+  "Euarchonoglires" = 87.20000,
+  "Simiiformes" = 42.90000,
+  "Catarrhini" = 28.82000,
+  "Hominidae" = 8.60000,
+  "Hominini" = 6.40000,
+  "Cercopithecidae" = 17.75500,
+  "Cercopithecinae" = 10.45400,
+  "Rodentia" = 70.20250,
+  "Sciuridae" = 34.46259,
+  "Xerinae" = 11.38264,
+  "Muroidea" = 68.31756,
+  "Eumuroida" = 26.2,
+  "Cricetidae" = 18.6,
+  "Muridae" = 12.44458,
+  "Murinae" = 11.64917,
+  "Mus-Arvicanthis" = 10.05224
+)
+
+divergence.point.species <- rep(0, length(zfy.nt.aln.tree$tip.label))
+names(divergence.point.species) <- zfy.nt.aln.tree$tip.label
+divergence.point.data <- c(divergence.point.data, divergence.point.species)
+
+# TODO - Use these times to create weights for each edge - plot like the relax K trees
+zfy.nt.aln.tree$node.label[1] <- "Mammalia" # replace default 'Root' label
+zfy.nt.aln.tree$tip.label <- str_replace_all(zfy.nt.aln.tree$tip.label, "_", " ")
+
+get.edge.time <- function(node, tree){
+  nodelabel <- treeio::nodelab(tree, node)
+  parentnode <- tree$edge[tree$edge[,2]==node,1] # parent of edge leading to node
+  parentlabel <- treeio::nodelab(tree, parentnode) # label of the parent
+
+  v1 = max(divergence.point.data[parentlabel], divergence.point.data[nodelabel])
+  v2 = min(divergence.point.data[parentlabel], divergence.point.data[nodelabel])
+  time = v1 - v2
+  edge.row <-  ifelse(length(parentnode)==0,0, which(tree$edge[,2]==node))
+  
+  edgelength <- ifelse(length(parentnode)==0,0, tree$edge.length[edge.row])
+  subsPerMyr <- ifelse(length(parentnode)==0,0, edgelength / time)
+
+  return(data.frame(parentnode = ifelse(length(parentnode)==0, NA, parentnode),
+                    parentlabel =ifelse(length(parentnode)==0, NA, parentlabel),
+                    node = node,
+                    nodelabel = nodelabel,
+                    name = paste0(parentlabel, "-", nodelabel),
+                    parent.time = v1,
+                    node.time = v2,
+                    time = time,
+                    edge.row,
+                    subsPerSite = edgelength,
+                    subsPerMyr = subsPerMyr))
+}
+
+time.vals <- do.call(rbind, lapply(1:59, get.edge.time, tree=zfy.nt.aln.tree))
+
+subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
+  time.vals +
+  aes(colour = log(subsPerMyr)) +
+  scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                          direction = -1, limits =c(-9, -3))+
+  labs(color = "Log substitutions per site\nper million years")+
+  geom_nodelab(size=2, nudge_x = -0.01, nudge_y = 0.5, hjust = 1, color = "black")+
+  geom_tiplab(size=2, color = "black")+
+  geom_treescale(fontsize =2, y = -1) +
+  coord_cartesian(xlim = c(-0.05, 0.4))+
+  theme_tree() +
+  theme(legend.position = c(0.2, 0.8),
+        legend.background = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))
+save.double.width("figure/subs.per.site.per.Myr.png", subs.site.mya.plot)
+
+# Redraw the tree with branch lengths from the actual dates. Confirm it adds up
+# to about the same length per species.
+
+zfy.nt.aln.tree.time <- zfy.nt.aln.tree
+get.time.for.node <- function(node) time.vals[time.vals$node==node,"time"]
+zfy.nt.aln.tree.time$edge.length <- sapply(zfy.nt.aln.tree.time$edge[,2], get.time.for.node)
+
+time.plot <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
+  time.vals +
+  aes(colour = log(subsPerMyr)) +
+  scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                          direction = -1, limits =c(-9, -3))+
+  labs(color = "Log substitutions per site\nper million years")+
+  geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
+  geom_tiplab(size=2, color = "black")+
+  geom_treescale(fontsize =2, y = -1) +
+  coord_cartesian(xlim = c(-5, 210))+
+  theme_tree() +
+  theme(legend.position = c(0.2, 0.8),
+        legend.background = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))
+save.double.width("figure/subs.per.site.time.png", time.plot)
+
