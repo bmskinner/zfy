@@ -102,7 +102,8 @@ create.exon.plot <- function(i){
   mammal.gene.groups <- split(metadata.mammal$common.name, metadata.mammal$group)
   exon.tree <- groupOTU(exon.tree, mammal.gene.groups, group_name = "group")
   
-  plot.exon.tree <- plot.tree(exon.tree, col="group")  + coord_cartesian(clip="off", xlim = c(0, 0.8))
+  plot.exon.tree <- plot.tree(exon.tree, col="group")  + 
+    coord_cartesian(clip="off", xlim = c(0, 0.8))
   exon.fig.file <- paste0("figure/exon_", mouse.exons$exon[i], ".zfx.zfy.tree.png")
   save.double.width(exon.fig.file, plot.exon.tree)
   

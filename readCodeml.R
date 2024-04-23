@@ -78,7 +78,7 @@ lrts[[3]]
 
 # Bayes Empirical Bayes (BEB) analysis (Yang, Wong & Nielsen 2005. Mol. Biol. Evol. 22:1107-1118)
 # Extract sites under positive selection
-positive.sites <- read_lines("paml/branch-site/branch.site.paml.out.txt") %>%
+positive.sites <- read_lines("paml/branch-site/branch-site.paml.out.txt") %>%
   as.data.frame %>%
   dplyr::rename_with(.fn = function(i) "line") %>%
   dplyr::filter(grepl("^ {2,5} \\d{1,3} [A-Z\\-]", line)  ) %>%

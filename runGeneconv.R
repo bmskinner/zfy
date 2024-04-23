@@ -423,7 +423,7 @@ subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
   scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
                           direction = -1, limits =c(-9, -3))+
   labs(color = "Log substitutions per site\nper million years")+
-  geom_nodelab(size=2, nudge_x = -0.01, nudge_y = 0.5, hjust = 1, color = "black")+
+  geom_nodelab(size=2, nudge_x = -0.005, nudge_y = 0.5, hjust = 1, color = "black")+
   geom_tiplab(size=2, color = "black")+
   geom_treescale(fontsize =2, y = -1) +
   coord_cartesian(xlim = c(-0.05, 0.4))+
