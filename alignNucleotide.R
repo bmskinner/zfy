@@ -19,13 +19,13 @@
 # source activate hyphy
 #### Imports #####
 
-source("functions.R")
+source("src/functions.R")
 load.packages()
 
-source("find9aaTADs.R")
-source("findZF.R")
-source("calcCharge.R")
-source("calcHydrophobicity.R")
+source("src/find9aaTADs.R")
+source("src/findZF.R")
+source("src/calcCharge.R")
+source("src/calcHydrophobicity.R")
 
 cat("Packages loaded\n")
 

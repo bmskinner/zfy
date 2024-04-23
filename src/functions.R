@@ -683,3 +683,33 @@ read.time.tree.data <- function(){
                                                                            scientific_name_b = 3)) %>%
     dplyr::mutate(Mya = ifelse(adjusted_age > 0, adjusted_age, precomputed_age))
 }
+
+
+# Calculate the fraction of AA sequences conserved with the given outgroup
+calculate.conservation <-function(aa.aln, outgroup.name){
+  
+  # Find the characters in the reference sequence
+  ref.aa.aln <- ggmsa::tidy_msa(aa.aln) %>%
+    dplyr::filter(name==outgroup.name) %>%
+    dplyr::select(-name, position, ref_char = character)
+  
+  # Filter the alignment to only mammalia after opossum
+  # We can use the sequence level order for this
+  outgroup.level <- which(combined.taxa.name.order=="Opossum_ZFX")
+  species.to.calc <- combined.taxa.name.order[1:outgroup.level-1]
+  
+  ggmsa::tidy_msa(aa.aln) %>%
+    merge(ref.aa.aln, by = c("position")) %>%
+    dplyr::filter(ref_char!="-", 
+                  name %in% species.to.calc) %>%
+    dplyr::mutate(matchesRef = character==ref_char) %>%
+    dplyr::group_by(position, matchesRef) %>%
+    dplyr::summarise(fraction = n()/length(species.to.calc)) %>%
+    tidyr::pivot_wider(names_from = matchesRef, values_from = fraction, values_fill=0) %>%
+    dplyr::rename(fraction = `TRUE`) %>%
+    dplyr::select(-`FALSE`) %>%
+    dplyr::ungroup() %>%
+    # Perform smoothing over aa moving windows
+    dplyr::mutate(smoothed9 = slider::slide_dbl(fraction, mean, .before=4, .after = 4),
+                  smoothed5 = slider::slide_dbl(fraction, mean, .before=2, .after = 2))
+}

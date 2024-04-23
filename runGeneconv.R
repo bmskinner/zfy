@@ -1,6 +1,6 @@
 # Run GENECONV to test for gene conversion
 # GENECONV is expected on the path
-source("functions.R")
+source("src/functions.R")
 
 filesstrings::dir.remove("aln/zfx_only")
 filesstrings::dir.remove("aln/zfy_only")
