@@ -39,9 +39,10 @@ read.combined.outgroup.tree <- function(file){
 combined.outgroup.tree <- read.combined.outgroup.tree(files$combined.aa.aln.treefile)
 
 combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")+
-  coord_cartesian(clip="off", xlim = c(0, 0.9), ylim= c(-2, 62))
+  coord_cartesian(clip="off", xlim = c(0, 0.7), ylim= c(-2, length(combined.outgroup.tree$tip.label)))+
+  annotate("text", x = 0.32, y = 58.5, label = "Eumuroida", size=2)
 
-save.double.width("figure/combined.aa.tree.png", combined.aa.tree)
+save.double.width("figure/Figure_1_aa_tree.png", combined.aa.tree)
 
 # Also save the order of taxa in the outgroup tree to use later
 combined.taxa.name.order <- ggtree::get_taxa_name(combined.aa.tree) 
@@ -65,7 +66,7 @@ plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off
 laurasiatheria.node <- ape::getMRCA(nt.aln.tree, c("Cat_ZFY", "Cat_ZFX"))
 plot.zfx.zfy <- rotate(plot.zfx.zfy, laurasiatheria.node)
 
-save.double.width("figure/mammal.zfxy.tree.png", plot.zfx.zfy)
+save.double.width("figure/Figure_xxxx_nucleotide_tree.png", plot.zfx.zfy)
 
 # Get the order of taxa names for reordering other plots later
 mammal.taxa.name.order <- get_taxa_name(plot.zfx.zfy) 
@@ -140,16 +141,13 @@ seqin.aln <- seqinr::read.alignment(files$mammal.nt.aln, format = "fasta")
 kaks.data <- seqinr::kaks(seqin.aln)
 
 kaks.ratio <- kaks.data$ka / kaks.data$ks
-kaks.pairwise <- metagMisc::dist2list(kaks.ratio, tri = F)
-kaks.pairwise$col <- factor(kaks.pairwise$col, 
-                            levels = mammal.taxa.name.order)
-kaks.pairwise$row <- factor(kaks.pairwise$row, 
-                            levels = mammal.taxa.name.order)
-
-kaks.pairwise %<>% 
-  dplyr::rowwise() %>%
-  dplyr::mutate(rownum = which(row==mammal.taxa.name.order),
-                colnum = which(col==mammal.taxa.name.order)) %>%
+kaks.pairwise <- metagMisc::dist2list(kaks.ratio, tri = F) %>%
+  dplyr::mutate(col = str_replace_all(col, "_", " "),
+                row = str_replace_all(row, "_", " "),
+                col = factor(col, levels = mammal.taxa.name.order),
+                row = factor(row, levels = mammal.taxa.name.order),
+                colnum = as.integer(col),
+                rownum = as.integer(row)) %>%
   dplyr::filter(rownum > colnum)
 
 kaks.pairwise.plot <- ggplot(kaks.pairwise, aes(x = col, y = row))+
@@ -190,17 +188,15 @@ seqin.aln.exon.7 <- seqinr::read.alignment("aln/exons/exon_7.kaks.aln", format =
 create.pairwise.kaks.data <- function(seqinr.aln){
   kaks.data <- seqinr::kaks(seqinr.aln, rmgap = FALSE)
   kaks.ratio <- kaks.data$ka / kaks.data$ks
-  kaks.pairwise <- dist2list(kaks.ratio, tri = F)
-  kaks.pairwise$col <- factor(kaks.pairwise$col, 
-                              levels = mammal.taxa.name.order)
-  kaks.pairwise$row <- factor(kaks.pairwise$row, 
-                              levels = mammal.taxa.name.order)
   
-  kaks.pairwise %>% 
-    dplyr::rowwise() %>%
-    dplyr::mutate(rownum = which(row==mammal.taxa.name.order),
-                  colnum = which(col==mammal.taxa.name.order),
-                  value  = ifelse(value==1, NA, value)) %>%  # values of exactly 1 are from missing data
+  kaks.pairwise <- metagMisc::dist2list(kaks.ratio, tri = F) %>%
+    dplyr::mutate(col = str_replace_all(col, "_", " "),
+                  row = str_replace_all(row, "_", " "),
+                  col = factor(col, levels = mammal.taxa.name.order),
+                  row = factor(row, levels = mammal.taxa.name.order),
+                  colnum = as.integer(col),
+                  rownum = as.integer(row),
+                  value  = ifelse(value==1, NA, value)) %>%  # values of exactly 1 are from missing data)
     dplyr::filter(rownum > colnum)
 }
 
@@ -234,7 +230,7 @@ save.double.width("figure/exon.1_3-6.2.7.dnds.png", exon.kaks.plot, height=110)
 
 #### Identify the locations of the ZFs, 9aaTADs and NLS in the AA & NT MSAs ####
 
-locations.zf <- locate.zfs.in.alignment(files$combined.aa.aln, files$mammal.nt.aln, combined.taxa.name.order)
+locations.zf <- locate.zfs.in.alignment(combined.taxa.name.order)
 locations.9aaTAD <- locate.9aaTADs.in.alignment(files$combined.aa.aln, files$mammal.nt.aln, combined.taxa.name.order)
 locations.NLS <- locate.NLS.in.alignment(files$combined.aa.aln, files$mammal.nt.aln, combined.taxa.name.order)
 
@@ -555,6 +551,9 @@ names(rodent.plus.anc.nt.aln) <- c(names(alignments$nt.mammal.ape), rodent.ances
 
 # Plot the MSA
 
+
+mammal.taxa.name.order <- gsub(" ", "_", mammal.taxa.name.order)
+combined.taxa.name.order <- gsub(" ", "_", combined.taxa.name.order)
 # Find the tips under the ancestral node and get the labels
 rodent.tip.labels <- tidytree::offspring( as_tibble(nt.aln.tree.nodes), .node = rodent.node+length(nt.aln.tree.nodes$tip.label), tiponly = T)
 
@@ -633,7 +632,7 @@ aa.structure.plot <- ggplot()+
             fill="green", alpha=0.5)
 aa.structure.plot <- annotate.structure.plot(aa.structure.plot, length(combined.taxa.name.order) + 1.5)
 
-save.double.width("figure/aa.structure.png", aa.structure.plot, height = 120)
+save.double.width("figure/Figure_Sxxxx_aa.structure.png", aa.structure.plot, height = 120)
 
 # Also create a trimmed down version that has only the 83, 92, 100% confidence 9aaTADs
 aa.structure.confident.plot <- ggplot()+
@@ -653,7 +652,7 @@ aa.structure.confident.plot <- ggplot()+
             fill="green", alpha=0.5)
 aa.structure.confident.plot <- annotate.structure.plot(aa.structure.confident.plot, length(combined.taxa.name.order) + 1.5)
 
-save.double.width("figure/aa.structure.confident.png", aa.structure.confident.plot, height = 120)
+save.double.width("figure/Figure_2_aa.structure.confident.png", aa.structure.confident.plot, height = 120)
 
 
 #### Plot the conservation of hydrophobicity across mammal/outgroup AA MSA ####
@@ -665,6 +664,14 @@ msa.aa.aln.hydrophobicity <- do.call(rbind, mapply(calc.hydrophobicity, aa=align
   dplyr::mutate(sequence = factor(sequence, levels = rev(combined.taxa.name.order))) # sort reverse to match tree
 
 n.taxa <- length(combined.taxa.name.order) + 1.5
+
+
+# TODO: guides does nto work with new_scale(), so we may need to specify the order of the colour bar manually
+# scale_fill_gradient2(low = "#f0f0f0", mid = "#969696", high = "#252525", midpoint = 21, n.breaks = 5, 
+#                      guide = guide_colourbar(title = "Salinity", title.theme = element_text(size = 16, face = "bold"),
+#                                              label.theme = element_text(size = 14, face = "bold"), label.position = "top",
+#                                              barwidth = 10.7, barheight = 1, order = 1, frame.linetype = 1, frame.colour = "#000000",
+#                                              ticks.colour = "#000000", direction = "horizontal")))
 
 hydrophobicity.plot <- ggplot()+
   geom_tile(data=msa.aa.aln.hydrophobicity,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
@@ -789,7 +796,8 @@ create.relax.k.tree <- function(json.file){
   branch.lengths <- unlist(sapply(hyphy.input.tree$edge[,2], \(x)  k.vals[k.vals$node==x,"branch.length"]))
   hyphy.input.tree$edge.length <- branch.lengths
   
-  p <- ggtree(hyphy.input.tree) + geom_tiplab()
+  p <- ggtree(hyphy.input.tree) + 
+    geom_tiplab(size=2)
   p <- p %<+% k.vals + aes(colour=adj.k) + 
     scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
                             direction = -1, 
@@ -799,7 +807,10 @@ create.relax.k.tree <- function(json.file){
     coord_cartesian(xlim = c(0, 0.7))+
     annotate(geom="text", x = 0.3, y = 62, 
              label = paste("K(Muroidea) =", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2)))+
-    theme(legend.position = "top")
+    theme(legend.position = "top",
+          legend.background = element_blank(),
+          legend.text = element_text(size=6),
+          legend.title = element_text(size=6))
   
   p
 }
@@ -890,21 +901,21 @@ if(file.exists("paml/site-specific/site.specific.paml.out.txt")){
   # M0,indicating that the selective pressure reflected by ω
   # varies hugely among sites.
   cat("M0 vs. M1a\n")
-  lrts[[1]]
+  cat(paste(lrts[[1]], collapse = " | "), "\n")
   
   # Compared with M1a, M2a adds a class of sites under positive selection with ω2
   # > 1 (in proportion p2). This does not improve the fit of the model
   # significantly
   # (nearly neutral vs. positive selection)
   cat("M1a, M2a\n")
-  lrts[[2]]
+  cat(paste(lrts[[2]], collapse = " | "), "\n")
   
   # Additional test for positive selection by comparing M7 (beta, null model)
   # against M8 (beta&ω, alternative model).
   # (positive selection vs null model)
   # Evidence for sites under positive selection 
   cat("M7, M8\n")
-  lrts[[3]]
+  cat(paste(lrts[[3]], collapse = " | "), "\n")
   
   
   #### codeml branch-site model to look for selection specifically in Muroidea ####

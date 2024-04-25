@@ -204,9 +204,11 @@ read.metadata <- function(read.fasta.output){
 }
 
 
-save.double.width <- function(filename, plot, height=170) ggsave(filename, plot, dpi = 300, 
-                                                                 units = "mm", width = 170, 
-                                                                 height = height)
+save.double.width <- function(filename, plot, height=170){ 
+  ggsave(filename, plot, dpi = 600, units = "mm", width = 170, height = height)
+  ggsave(str_replace(filename, ".png$", ".svg"), plot,dpi = 300, 
+         units = "mm", width = 170, height = height)
+}
 
 # Translate ungapped coordinates back to gapped
 # site.no.gap - the integer site in an ungapped sequence to convert
@@ -284,6 +286,10 @@ find.exons <- function(biostrings.nt.alignment, biostrings.aa.alignment){
 }
 
 plot.tree <- function(tree.data, ...){
+  
+  # Remove underscores for pretty printing
+  tree.data$tip.label <- str_replace_all(tree.data$tip.label, "_"," ")
+  
   # Get the complete node labels
   # Separate out bootstrap info
   # Numbers in parentheses are SH-aLRT support (%) / ultrafast bootstrap support (%)
@@ -300,11 +306,12 @@ plot.tree <- function(tree.data, ...){
   ggtree(tree.data) + 
     geom_tree() +
     geom_tiplab(size=2, aes_string(...))+
+    scale_color_manual(values = c("#808180", "#EE0000", "#3B4992"))+
     # geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")+
     geom_nodepoint(size=1.5,  col="black")+
     geom_nodepoint(size=0.75,  col=node.label.values$colour)+
-    geom_treescale(fontsize =2, y = -1) +
-    coord_cartesian(clip="off")+
+    geom_treescale(fontsize =2, y = -1, width = 0.05) +
+    coord_cartesian(clip="off", ylim = c(-2, length(tree.data$tip.label)+1))+
     theme_tree() +
     theme(legend.position = "none")
 }
@@ -323,7 +330,7 @@ make.outgroup.mini.tree <-function(combined.outgroup.tree, text.labels){
   combined.outgroup.tree.mini$tip.label <- rep("", length(combined.outgroup.tree.mini$tip.label))
   result <- ggtree(combined.outgroup.tree.mini, aes(color=group)) + 
     geom_tiplab(align=TRUE, linetype='dashed', linesize=.3) + # use tiplab to get lines
-    scale_color_manual(values = c("#4f4f4f", "#85af1f", "#911faf"))+
+    scale_color_manual(values = c("#808180", "#EE0000", "#3B4992"))+
     coord_cartesian(ylim = c(1, max.y))
   
   curr.y <- length(combined.outgroup.tree.mini$tip.label) + 2.5
@@ -332,11 +339,7 @@ make.outgroup.mini.tree <-function(combined.outgroup.tree, text.labels){
                                 label=text.labels[i], size=2, hjust=1, vjust=0.5)
     curr.y <- curr.y + 3
   }
-  # 
-  # 
-  # annotate(geom="text", x=-20, y=n.taxa+4, label="Chicken", size=1)+
-  # annotate(geom="text", x=-20, y=n.taxa+7, label="Opossum", size=1)+
-  
+
   result + theme(legend.position = "none",
                  plot.margin = margin(r=0))
 }
@@ -444,7 +447,6 @@ annotate.structure.plot <- function(plot, n.taxa){
     # Draw the conservation with Xenopus, chicken and opossum
     new_scale_fill()+ 
     scale_fill_paletteer_c("grDevices::Cividis", direction = 1, limits = c(0, 1))+
-    # scale_fill_paletteer_c("ggthemes::Classic Gray", direction = -1, limits = c(0, 1))+
     labs(fill="Conservation (5 site average)")+
     add.conservation.track(msa.aa.aln.tidy.frog.conservation,    n.taxa,   n.taxa+2)+
     add.conservation.track(msa.aa.aln.tidy.chicken.conservation, n.taxa+3, n.taxa+5)+
@@ -487,14 +489,17 @@ annotate.structure.plot <- function(plot, n.taxa){
     patchwork::plot_layout(widths = c(0.1, 0.9))
 }
 
-locate.zfs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.order){
-  aa.aln <- Biostrings::readAAMultipleAlignment(aa.alignment.file, format="fasta")
-  nt.aln <- Biostrings::readDNAMultipleAlignment(nt.alignment.file, format="fasta")
+locate.zfs.in.alignment <- function(taxa.order){
+  
+  taxa.order <- gsub(" ", "_", taxa.order) # in case _ had previously been replaced
   
   # Run the prediction from pwm_predict
   system2("hmmsearch", "--domtblout aln/pwm/combined.aa.hmm.dom.txt  bin/pwm_predict/zf_C2H2.ls.hmm fasta/combined.aa.fas")
   
   # Parse the resulting table
+  if(!file.exists("aln/pwm/combined.aa.hmm.dom.txt")){
+    stop("Missing hmmsearch output, cannot find ZFs")
+  }
   zf.data <- read_table("aln/pwm/combined.aa.hmm.dom.txt", comment = "#",
              col_names = FALSE)
   zf.data <- zf.data[,c(1, 20, 21)]
@@ -505,7 +510,7 @@ locate.zfs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
                         sequence.name = zf.data$sequence, 
                         start = zf.data$start_ungapped,
                         end = zf.data$end_ungapped,
-                        MoreArgs = list(aa=aa.aln),
+                        MoreArgs = list(aa=alignments$aa.combined.biostrings),
                         SIMPLIFY = FALSE)) %>%
     dplyr::mutate(sequence = factor(sequence, 
                                     levels = rev(taxa.order))) %>% # sort reverse to match tree
@@ -513,14 +518,14 @@ locate.zfs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
     dplyr::mutate(i = as.integer(sequence)) %>%  # Set the row indexes for plotting
     
     # Add the gapped nt alignment coordinates for nt sequences
-    dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(nt.aln@unmasked), # we have the nt alignment
-                                            convert.to.gapped.coordinate(start_nt_ungapped,  nt.aln@unmasked[[sequence]]),
+    dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(alignments$nt.mammal.biostrings@unmasked), # we have the nt alignment
+                                            convert.to.gapped.coordinate(start_nt_ungapped,  alignments$nt.mammal.biostrings@unmasked[[sequence]]),
                                             NA),
-                  end_nt_gapped = ifelse( sequence %in% names(nt.aln@unmasked), # we have the nt alignment
-                                          convert.to.gapped.coordinate(end_nt_ungapped,  nt.aln@unmasked[[sequence]]),
+                  end_nt_gapped = ifelse( sequence %in% names(alignments$nt.mammal.biostrings@unmasked), # we have the nt alignment
+                                          convert.to.gapped.coordinate(end_nt_ungapped,  alignments$nt.mammal.biostrings@unmasked[[sequence]]),
                                           NA)) %>%
     # Add the AA sequence covered by the ZF and motifs
-    dplyr::mutate(aa_motif = gsub("-", "", aa.aln@unmasked[[sequence]][start_gapped:end_gapped]),
+    dplyr::mutate(aa_motif = gsub("-", "", alignments$aa.combined.biostrings@unmasked[[sequence]][start_gapped:end_gapped]),
                                                                              # 6    32  -1
                   # find the contact motif within the ZF (if available) .*H.{3}H(.)..(..).(.).{5}C..C.*
                   # via https://genomebiology.biomedcentral.com/articles/10.1186/s13059-017-1287-y
@@ -532,6 +537,9 @@ locate.zfs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
 
 # Identify 9aaTADs and group overlapping TADS above a given rc threshold into 'superTADs'
 locate.9aaTADs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.order){
+  
+  taxa.order <- gsub(" ", "_", taxa.order) # in case _ had previously been replaced
+  
   aa.aln <- Biostrings::readAAMultipleAlignment(aa.alignment.file, format="fasta")
   nt.aln <- Biostrings::readDNAMultipleAlignment(nt.alignment.file, format="fasta")
   
@@ -556,6 +564,9 @@ locate.9aaTADs.in.alignment <- function(aa.alignment.file, nt.alignment.file, ta
 }
 
 locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.order){
+  
+  taxa.order <- gsub(" ", "_", taxa.order) # in case _ had previously been replaced
+  
   aa.aln <- Biostrings::readAAMultipleAlignment(aa.alignment.file, format="fasta")
   nt.aln <- Biostrings::readDNAMultipleAlignment(nt.alignment.file, format="fasta")
   
