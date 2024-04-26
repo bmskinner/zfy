@@ -629,7 +629,7 @@ aa.structure.plot <- ggplot()+
   geom_tile(data = locations.NLS,     aes(x=(start_gapped+end_gapped)/2,
                                           width = (end_gapped-start_gapped),
                                           y=sequence),
-            fill="green", alpha=0.5)
+            fill=NLS.COLOUR, alpha=0.5)
 aa.structure.plot <- annotate.structure.plot(aa.structure.plot, length(combined.taxa.name.order) + 1.5)
 
 save.double.width("figure/Figure_Sxxxx_aa.structure.png", aa.structure.plot, height = 120)
@@ -674,7 +674,10 @@ n.taxa <- length(combined.taxa.name.order) + 1.5
 #                                              ticks.colour = "#000000", direction = "horizontal")))
 
 hydrophobicity.plot <- ggplot()+
-  geom_tile(data=msa.aa.aln.hydrophobicity,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
+  geom_raster(data=msa.aa.aln.hydrophobicity,  aes(x = position_gapped,
+                                                   y = sequence,
+                                                   fill=hydrophobicity_smoothed),
+                                                   hjust = 0, vjust = 0)+ 
   scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
   labs(fill="Hydrophobicity (9 site average)")
 hydrophobicity.plot <- annotate.structure.plot(hydrophobicity.plot, n.taxa)
@@ -689,8 +692,10 @@ msa.aa.aln.charge <- do.call(rbind, mapply(calc.charge, aa=alignments$aa.combine
   dplyr::mutate(sequence = factor(sequence, levels = rev(combined.taxa.name.order))) # sort reverse to match tree
 
 charge.plot <- ggplot()+
-  # Draw the charges per sequence
-  geom_tile(data=msa.aa.aln.charge,  aes(x = position_gapped, y = sequence, fill=charge_smoothed))+
+  geom_raster(data=msa.aa.aln.charge,  aes(x = position_gapped,
+                                                   y = sequence,
+                                                   fill=charge_smoothed),
+              hjust = 0, vjust = 0)+ 
   scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = 1, limits = c(-1, 1))+
   labs(fill="Charge (9 site average)")
 charge.plot <- annotate.structure.plot(charge.plot, n.taxa)

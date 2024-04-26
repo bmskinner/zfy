@@ -1,5 +1,13 @@
 # Common functions across scripts
 
+#### Global variables #####
+ZFY.TREE.COLOUR <- "#860086"  #3B4992
+ZFX.TREE.COLOUR <- "#3CB22D" #EE0000
+OUT.TREE.COLOUR <- "#303030"
+TAD.COLOUR      <- "#00366C" # fill color max from "grDevices::Blues 3"
+NLS.COLOUR      <- "#3CB22D"  #60CC52 #2CA02C
+ZF.COLOUR       <- "grey"
+  
 # Load all R packages installing if needed
 load.packages <- function(){
   
@@ -221,7 +229,7 @@ convert.to.gapped.coordinate <- function(site.no.gap, gapped.seq){
   gaps <- str_locate_all(gapped.seq.char, "-|\\*")[[1]][,1]
   n <- site.no.gap
   for(i in gaps){
-    if(i<n) n <- n + 1
+    if(i<=n) n <- n + 1
   }
   n
 }
@@ -306,7 +314,7 @@ plot.tree <- function(tree.data, ...){
   ggtree(tree.data) + 
     geom_tree() +
     geom_tiplab(size=2, aes_string(...))+
-    scale_color_manual(values = c("#808180", "#EE0000", "#3B4992"))+
+    scale_color_manual(values = c(OUT.TREE.COLOUR, ZFX.TREE.COLOUR, ZFY.TREE.COLOUR))+
     # geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")+
     geom_nodepoint(size=1.5,  col="black")+
     geom_nodepoint(size=0.75,  col=node.label.values$colour)+
@@ -326,14 +334,31 @@ make.outgroup.mini.tree <-function(combined.outgroup.tree, text.labels){
   max.y <- length(combined.outgroup.tree.mini$tip.label) + (length(text.labels)*3)
   
   
+  
   # Replace the tip labels with empty string so no labels are plotted
   combined.outgroup.tree.mini$tip.label <- rep("", length(combined.outgroup.tree.mini$tip.label))
   result <- ggtree(combined.outgroup.tree.mini, aes(color=group)) + 
-    geom_tiplab(align=TRUE, linetype='dashed', linesize=.3) + # use tiplab to get lines
-    scale_color_manual(values = c("#808180", "#EE0000", "#3B4992"))+
-    coord_cartesian(ylim = c(1, max.y))
+    geom_tiplab(align=TRUE, linetype="dotted", linesize=.3) + # use tiplab to get lines
+    scale_color_manual(values = c(OUT.TREE.COLOUR, ZFX.TREE.COLOUR, ZFY.TREE.COLOUR))+
+    coord_cartesian(ylim = c(0.5, max.y+1), expand = FALSE)
   
-  curr.y <- length(combined.outgroup.tree.mini$tip.label) + 2.5
+  # Draw marker lines for ZFX and ZFX sequences
+  result <- result + annotate(geom="text", x=0.05, y = 49, size = 2,
+                              angle = 90, label="ZFY", col = ZFY.TREE.COLOUR)
+  result <- result + annotate(geom="text", x=0.05, y = 20, size = 2,
+                              angle = 90, label="ZFX", col = ZFX.TREE.COLOUR)
+  
+  result <- result + annotate(geom="segment", x=0.05, y = 6, size = 0.5,
+                              xend = 0.05, yend=18, col = ZFX.TREE.COLOUR)
+  result <- result + annotate(geom="segment", x=0.05, y = 22, size = 0.5,
+                              xend = 0.05, yend=33, col = ZFX.TREE.COLOUR)
+  result <- result + annotate(geom="segment", x=0.05, y = 34, size = 0.5,
+                              xend = 0.05, yend=47, col = ZFY.TREE.COLOUR)
+  result <- result + annotate(geom="segment", x=0.05, y = 51, size = 0.5,
+                              xend = 0.05, yend=63, col = ZFY.TREE.COLOUR)
+  
+  # Whare is the top of the tree?
+  curr.y <- length(combined.outgroup.tree.mini$tip.label) + 3
   for(i in 1:length(text.labels)){
     result <- result + annotate(geom="text", x=0.6, y=curr.y, 
                                 label=text.labels[i], size=2, hjust=1, vjust=0.5)
@@ -406,14 +431,14 @@ add.track <- function(ranges, y.start, y.end, start_col = "start", end_col = "en
 add.track.labels <- function(ranges, y.start, y.end, start_col = "start", end_col = "end", label_col ="label", ...){
   geom_text(data=ranges,
             aes(x =(.data[[start_col]]+.data[[end_col]])/2, y=(y.start+y.end)/2, 
-                label=.data[[label_col]]), size=1.5, ...)
+                label=.data[[label_col]]), size=2, ...)
 }
 # Add a conservation track to a plot
 add.conservation.track <- function(ranges,  y.start, y.end, ...){
-  geom_rect(data=ranges,  aes(xmin=position-0.45, 
-                              xmax=position+0.45, 
-                              ymin=y.start, 
-                              ymax=y.end, 
+  geom_rect(data=ranges,  aes(xmin=position-0.55,
+                              xmax=position+0.55,
+                              ymin=y.start,
+                              ymax=y.end,
                               fill=smoothed5))
 }
 
@@ -425,7 +450,7 @@ add.exon.track <- function(y.start, y.end, start_col = "start_aa", end_col = "en
                                             ymin = y.start, ymax = y.end,
                                             pattern = exon==2, fill=exon), 
                     pattern_xoffset = 0.04, # so the stripes don't obscure labels
-                    pattern_yoffset = 0.02, 
+                    pattern_yoffset = 0.0375, 
                     pattern_angle = 45, 
                     pattern_density = 0.5, # equal stripe widths
                     pattern_spacing = 0.05, # enough space for text label
@@ -445,18 +470,21 @@ annotate.structure.plot <- function(plot, n.taxa){
   
   plot <- plot+
     # Draw the conservation with Xenopus, chicken and opossum
+    
+    
+    # Draw the structures
+    add.track(ranges.NLS.common,    n.taxa+8.5, n.taxa+11.5, fill=NLS.COLOUR, alpha = 1)+ # +8.5
+    add.track(ranges.ZF.common,     n.taxa+9, n.taxa+11, fill=ZF.COLOUR)+ # 9 - 11
+    add.track.labels(ranges.ZF.common, n.taxa+9, n.taxa+11, col="white", label_col = "motif_number")+   # Label the ZFs
+    add.track(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, fill=TAD.COLOUR,  alpha = 0.9)+  #9
+    add.track.labels(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, col="white")+   # Label the 9aaTADs
+    
     new_scale_fill()+ 
     scale_fill_paletteer_c("grDevices::Cividis", direction = 1, limits = c(0, 1))+
     labs(fill="Conservation (5 site average)")+
     add.conservation.track(msa.aa.aln.tidy.frog.conservation,    n.taxa,   n.taxa+2)+
     add.conservation.track(msa.aa.aln.tidy.chicken.conservation, n.taxa+3, n.taxa+5)+
     add.conservation.track(msa.aa.aln.tidy.opossum.conservation, n.taxa+6, n.taxa+8)+
-    
-    # Draw the structures
-    add.track(ranges.ZF.common,     n.taxa+9, n.taxa+11, fill="grey")+
-    add.track(ranges.NLS.common,    n.taxa+9, n.taxa+11, fill="#2de200", alpha = 0.5)+
-    add.track(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, fill="#00366C",  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
-    add.track.labels(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, col="white")+   # Label the 9aaTADs
     
     new_scale_fill()+
     scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
@@ -480,7 +508,10 @@ annotate.structure.plot <- function(plot, n.taxa){
           legend.key.height = unit(3, "mm"),
           legend.spacing.y = unit(2, "mm"),
           legend.box.spacing = unit(2, "mm"),
-          panel.grid = element_blank())
+          panel.border = element_blank(),
+          axis.line.x.bottom = element_line(),
+          panel.grid = element_blank(),
+          plot.margin = margin(l=0))
   
   # Add the tree with the outgroups
   make.outgroup.mini.tree(combined.outgroup.tree,

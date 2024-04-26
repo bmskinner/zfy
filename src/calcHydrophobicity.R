@@ -23,7 +23,7 @@ calc.hydrophobicity <- function(aa, sequence.name, window.size){
     gaps <- str_locate_all(gapped.seq.char, "-|\\*")[[1]][,1]
     n <- site.no.gap
     for(i in gaps){
-      if(i<n) n <- n + 1
+      if(i<=n) n <- n + 1
     }
     n
   }

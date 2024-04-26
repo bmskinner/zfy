@@ -173,9 +173,11 @@ find.common.aa.9aaTADs <- function(locations.9aaTAD, rc.threshold = 80, coverage
     dplyr::mutate(motif_number = row_number(),
                   adj.motif.number = ifelse(motif_number>4, motif_number-1, motif_number),
                   # For labels, we want D1, D2, E ..., not D, E, F ...
-                  label = case_when(motif_number==4 ~ paste0(LETTERS[adj.motif.number], 1),
-                                    motif_number==5 ~ paste0(LETTERS[adj.motif.number], 2),
-                                    .default = LETTERS[adj.motif.number] )) %>%
+                  # label = case_when(motif_number==4 ~ paste0(LETTERS[adj.motif.number], 1),
+                  #                   motif_number==5 ~ paste0(LETTERS[adj.motif.number], 2),
+                  #                   .default = LETTERS[adj.motif.number] )) %>%
+                  label = LETTERS[motif_number]) %>%
+    
     dplyr::select(-adj.motif.number) 
 }
 
@@ -207,9 +209,10 @@ find.common.nt.9aaTADs <- function(locations.9aaTAD, rc.threshold = 80, coverage
     dplyr::mutate(motif_number = row_number(),
                   adj.motif.number = ifelse(motif_number>4, motif_number-1, motif_number),
                   # For labels, we want D1, D2, E ..., not D, E, F ...
-                  label = case_when(motif_number==4 ~ paste0(LETTERS[adj.motif.number], 1),
-                                    motif_number==5 ~ paste0(LETTERS[adj.motif.number], 2),
-                                    .default = LETTERS[adj.motif.number] )) %>%
+                  # label = case_when(motif_number==4 ~ paste0(LETTERS[adj.motif.number], 1),
+                  #                   motif_number==5 ~ paste0(LETTERS[adj.motif.number], 2),
+                  #                   .default = LETTERS[adj.motif.number] )) %>%
+                  label = LETTERS[motif_number]) %>%
     dplyr::select(-adj.motif.number)  %>%
     dplyr::rename(start_nt = start, end_nt = end, width_nt = width)
 }
