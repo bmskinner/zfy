@@ -329,14 +329,80 @@ locations.zf %>%
   create.xlsx(., "figure/locations.zf.xlsx", cols.to.fixed.size.font = 2:14)
 
 # Just the ZF contact bases
-locations.zf %>%
+
+zf.contact.bases <- locations.zf %>%
   dplyr::select(Sequence = sequence, motif_number, contact_bases) %>%
   dplyr::arrange(desc(motif_number)) %>% # so we display 13 - 1
   dplyr::mutate(motif_number = paste0("ZF_", motif_number)) %>%
   tidyr::pivot_wider(id_cols = Sequence, names_from = motif_number, values_from = contact_bases) %>%
   as.data.frame %>%
-  dplyr::arrange(as.integer(Sequence)) %>%
-  create.xlsx(., "figure/locations.zf.contact_bases.xlsx", cols.to.fixed.size.font = 2:14)
+  dplyr::arrange(as.integer(Sequence))
+
+# What are the most common ZF contact motifs?
+zf.contact.bases.conserved <- locations.zf %>%
+  dplyr::select(Sequence = sequence, motif_number, contact_bases) %>%
+  dplyr::arrange(desc(motif_number)) %>% # so we display 13 - 1
+  dplyr::mutate(motif_number = paste0("ZF_", motif_number)) %>%
+  dplyr::group_by(motif_number, contact_bases) %>%
+  dplyr::summarise(count = n()) %>%
+  dplyr::group_by(motif_number) %>%
+  dplyr::arrange(desc(count)) %>%
+  dplyr::slice_head(n=1)
+
+# Create excel file, colouring the contact bases by whether they are conserved
+
+create.contact.base.xlsx <- function(contact.bases){
+  wb = xlsx::createWorkbook(type = "xlsx")
+  sh = xlsx::createSheet(wb)
+  xlsx::addDataFrame(contact.bases, sh, row.names = F)
+  xlsx::createFreezePane(sh, 2, 2, 2, 2) # freeze top row and first column
+  
+  fixed.style <- xlsx::CellStyle(wb) + 
+    xlsx::Font(wb, heightInPoints = 10, isBold = FALSE, name="Courier New")
+  
+  fixed.style.low <- xlsx::CellStyle(wb) + 
+    xlsx::Font(wb, heightInPoints = 10, isBold = FALSE, name="Courier New")+
+    xlsx::Fill(backgroundColor = "orange",
+               foregroundColor = "orange")
+  
+  fixed.style.missing <- xlsx::CellStyle(wb) + 
+    xlsx::Font(wb, heightInPoints = 10, isBold = FALSE, name="Courier New")+
+    xlsx::Fill(backgroundColor = "salmon",
+               foregroundColor = "salmon")
+  
+  
+  rows <- getRows(sh) 
+  for(i in 2:length(xlsx::getRows(sh))){
+    cells <- getCells(rows[i]) 
+    cell.names <- names(cells)
+    for(col in 2:14){
+      cell.name <- cell.names[col]
+      cell.ref <- cells[[cell.name]]
+      zf.motif <- paste0("ZF_",(15-col)) # zfs are in descending order
+      cell.val <-  contact.bases[i-1, col]
+      
+      
+      if( is.na(cell.val)){
+        xlsx::setCellStyle(cell.ref, fixed.style.missing)
+      } else {
+        
+        common.zf.base <- zf.contact.bases.conserved[zf.contact.bases.conserved$motif_number==zf.motif, "contact_bases"]
+        # print(paste("Col", col, "Row", i, "Value", cell.val, "Motif", zf.motif, "Common", common.zf.base))
+        if(cell.val != common.zf.base){
+          xlsx::setCellStyle(cell.ref, fixed.style.low)
+        } else {
+          xlsx::setCellStyle(cell.ref, fixed.style)
+        }
+      }
+    }
+  }
+  
+  xlsx::autoSizeColumn(sh, 1:ncol(contact.bases))
+  xlsx::saveWorkbook(wb, file="figure/locations.zf.contact_bases.xlsx")
+}
+create.contact.base.xlsx(zf.contact.bases)
+
+# create.xlsx(zf.contact.bases, "figure/locations.zf.contact_bases.xlsx", cols.to.fixed.size.font = 2:14)
 
 locations.NLS %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
@@ -815,14 +881,15 @@ create.relax.k.tree <- function(json.file){
                             # 
                             # labels = c("-2", "0", "2", round(25, digits = 0), round(50, digits = 0)))+
     labs(color = "log(K)")+
-    coord_cartesian(xlim = c(0, 0.45))+
+    coord_cartesian(xlim = c(0, 0.7), clip = "off")+
     geom_treescale(fontsize =2, y = -1, width = 0.05) +
     # annotate(geom="text", x = 0.3, y = 62, size = 2,
     #          label = paste("K(Muroidea) =", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2)))+
     theme(legend.position = c(0.8, 0.5),
           legend.background = element_blank(),
           legend.text = element_text(size=6),
-          legend.title = element_text(size=6))
+          legend.title = element_text(size=6),
+          plot.margin = margin(r=0, l=0))
   
   p
 }
@@ -832,19 +899,16 @@ if(file.exists("hyphy/mammal.relax.json")){
   save.double.width("figure/Figure_xxxx_RELAX_mammal.png", relax.tree.all)
   
   relax.tree.e1_3_6 <- create.relax.k.tree("hyphy/exon_1_3-6.relax.json")
-  save.double.width("figure/exon_1_3-6.relax.K.png", relax.tree.e1_3_6)
-  
   relax.tree.e2 <- create.relax.k.tree("hyphy/exon_2.relax.json")
-  save.double.width("figure/exon_2.relax.K.png", relax.tree.e2)
-  
   relax.tree.e7 <- create.relax.k.tree("hyphy/exon_7.relax.json")
-  save.double.width("figure/exon_7.relax.K.png", relax.tree.e7)
-  
+
   # Combine the exon trees into one figure
   exon.relax.tree <- relax.tree.e1_3_6 + relax.tree.e2 + relax.tree.e7 + 
     plot_annotation(tag_levels = list(c("Exons 1,3-6", "Exon 2", "Exon 7"))) +
     plot_layout(guides = "collect") &
-    theme(legend.position='bottom')
+    theme(legend.position='bottom', 
+          plot.tag = element_text(size=6),
+          plot.tag.position = c(0.2, 1))
   save.double.width("figure/exons.relax.K.png", exon.relax.tree)
 }
 
