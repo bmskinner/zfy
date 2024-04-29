@@ -7,32 +7,21 @@ filesstrings::dir.remove("aln/zfy_only")
 filesstrings::create_dir("aln/zfx_only")
 filesstrings::create_dir("aln/zfy_only")
 
-alignments <- list()
-alignments$nt.mammal.ape <- ape::read.FASTA(files$mammal.nt.aln)
+prepare.fas.files()
 
-#### Read the aligned FASTA files and metadata, export ZFX and ZFY separately ####
-fa.files <- list.files(path = "fasta/nt", pattern = "*.fa$", 
-                       include.dirs = T, full.names = T)
+ALIGNMENTS <- read.alignments()
 
-fa.read  <- lapply(fa.files, read.fasta)
-metadata.mammal <- read.metadata(fa.read)
 
-# We want to look at gene conversion within species lineages. We also want to
-# compare the ancestral ZFXs and ZFYs at each node To do this, create a separate
-# tree for each of ZFX and ZFY, confirm that they have equivalent branches, then
-# add the ancestral reconstruction to the geneconv config file.
-nt.aln.file <- "aln/mammal/mammal.nt.aln"
-msa.nt.aln <- Biostrings::readDNAMultipleAlignment(nt.aln.file, format="fasta")
-ape.nt.aln <- ape::read.FASTA(nt.aln.file)
+#### Export ZFX and ZFY separately ####
 
 # Write ZFX sequences to file
-zfx.nt.aln <- msa.nt.aln@unmasked[names(msa.nt.aln@unmasked) %in% c(metadata.mammal$common.name[metadata.mammal$group=="ZFX"], 
-                                                                    metadata.mammal$common.name[metadata.mammal$group=="Outgroup"])]
+zfx.nt.aln <- ALIGNMENTS$nt.mammal.biostrings@unmasked[names(ALIGNMENTS$nt.mammal.biostrings@unmasked) %in% c(METADATA$mammal$common.name[METADATA$mammal$group=="ZFX"], 
+                                                                                                              METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
 Biostrings::writeXStringSet(zfx.nt.aln,  file = "aln/zfx_only/zfx.aln", format = "fasta")
 
 # Write ZFY sequences to file
-zfy.nt.aln <- msa.nt.aln@unmasked[names(msa.nt.aln@unmasked) %in% c(metadata.mammal$common.name[metadata.mammal$group=="ZFY"], 
-                                                                    metadata.mammal$common.name[metadata.mammal$group=="Outgroup"])]
+zfy.nt.aln <- ALIGNMENTS$nt.mammal.biostrings@unmasked[names(ALIGNMENTS$nt.mammal.biostrings@unmasked) %in% c(METADATA$mammal$common.name[METADATA$mammal$group=="ZFY"], 
+                                                                                                              METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
 Biostrings::writeXStringSet(zfy.nt.aln,  file = "aln/zfy_only/zfy.aln", format = "fasta")
 
 #### Create independent trees for ZFX and ZFY sequences ####
@@ -138,9 +127,6 @@ system2("iqtree", paste("-s ", "aln/zfy_only/zfy.aln",
 zfx.nt.aln.tree <- ape::read.tree("aln/zfx_only/zfx.aln.treefile")
 zfy.nt.aln.tree <- ape::read.tree("aln/zfy_only/zfy.aln.treefile")
 
-# zfx.nt.aln.tree <- ape::read.tree(text = zfx.phylogeny)
-# zfy.nt.aln.tree <- ape::read.tree(text = zfy.phylogeny)
-
 # Drop the second ZFYs in mouse and rat
 zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2") 
 zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "African_Grass_Rat_ZFY2-like_1") 
@@ -164,7 +150,7 @@ dev.off()
 # Plot the two trees with node labels
 zfx.nt.aln.tree.plot <- plot.tree(zfx.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
 zfy.nt.aln.tree.plot <- plot.tree(zfy.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
-# zfx.zfy.aln.tree.plot <- zfx.nt.aln.tree.plot + zfy.nt.aln.tree.plot + patchwork::plot_annotation(tag_levels = list(c("ZFX", "ZFY")))
+
 save.double.width("figure/ancestral.zfx.png", zfx.nt.aln.tree.plot)
 save.double.width("figure/ancestral.zfy.png", zfy.nt.aln.tree.plot)
 
@@ -207,7 +193,7 @@ anc.node.seqs <- paste0(c(zfy.zfx.common.nodes$anc.zfx, zfy.zfx.common.nodes$anc
 write_file(anc.node.seqs, "aln/ancestral.zfx.zfy.nodes.fa")
 
 # Combine with existing ZFX/Y sequence file
-ape::write.dna(alignments$nt.mammal.ape, "aln/ancestral.zfx.zfy.nodes.fa", format="fasta", 
+ape::write.dna(ALIGNMENTS$nt.mammal.ape, "aln/ancestral.zfx.zfy.nodes.fa", format="fasta", 
                append = TRUE, colsep = "", nbcol=-1)
 
 #### Run geneconv with the ancestral nodes and real sequences ####
@@ -218,7 +204,7 @@ node.string.names <- zfy.zfx.common.nodes %>%
   dplyr::mutate(GroupString= paste0("-group ZFX_", ZFX_node, "_ZFY_",ZFY_node, " ZFX_", ZFX_node, " ZFY_",ZFY_node ))
 node.string <- paste(node.string.names$GroupString, collapse = "\n")
 
-split.gene.names <- metadata.mammal %>%
+split.gene.names <- METADATA$mammal %>%
   # Since we're about to split on 'Z', remove secondary instances of the string
   # keeping whatever - or _ was in the original name
   dplyr::mutate(common.name = str_replace(common.name, "putative-Zfy", "putative-Y"),
@@ -427,6 +413,8 @@ subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
   geom_tiplab(size=2, color = "black")+
   geom_treescale(fontsize =2, y = -1) +
   coord_cartesian(xlim = c(-0.05, 0.4))+
+  annotate("rect", xmin=0.12, ymin=26.3, xmax=0.19, ymax=27.5, fill="darkgreen", alpha=0.3)+
+  annotate("text", x=0.13, y=27, label="Ssty appears", size=2, hjust=0)+
   theme_tree() +
   theme(legend.position = c(0.2, 0.8),
         legend.background = element_blank(),
@@ -449,7 +437,7 @@ time.plot <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
   labs(color = "Log substitutions per site\nper million years")+
   geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
   geom_tiplab(size=2, color = "black")+
-  geom_treescale(fontsize =2, y = -1) +
+  geom_treescale(fontsize =2, y = -1, width = 10) +
   coord_cartesian(xlim = c(-5, 210))+
   theme_tree() +
   theme(legend.position = c(0.2, 0.8),

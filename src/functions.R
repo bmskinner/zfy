@@ -66,8 +66,10 @@ set.file.paths <-function(){
   files
 }
 
-files <- set.file.paths()
+FILES <- set.file.paths()
 
+# Read source FASTA files, combine to single .fas and translate
+# to protein. Read metadata
 prepare.fas.files <- function(){
   
   # Putative Zfy sequences in rodents detected with NCBI gene search:
@@ -79,12 +81,14 @@ prepare.fas.files <- function(){
   
   fa.read  <- lapply(fa.files, read.fasta)
   nt.raw   <- read.sequences(fa.read)
-  metadata.mammal <<- read.metadata(fa.read) %>%
+  
+  METADATA <<- list()
+  METADATA$mammal <<- read.metadata(fa.read) %>%
     dplyr::mutate(Species_common_name = str_replace(common.name, "_Z[F|f][X|x].*", ""),
                   Species_common_name = str_replace(Species_common_name, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", ""))
   
   # Write the combined fasta to file with .fas extension
-  ape::write.FASTA(nt.raw, file = files$mammal.nt.fas)
+  ape::write.FASTA(nt.raw, file = FILES$mammal.nt.fas)
   
   
   # Read outgroup NT FA files
@@ -94,22 +98,22 @@ prepare.fas.files <- function(){
   
   outgroup.fa.read  <- lapply(outgroup.nt.files, read.fasta)
   outgroup.nt.raw   <- read.sequences(outgroup.fa.read)
-  metadata.outgroup <<-  read.metadata(outgroup.fa.read) %>%
+  METADATA$outgroup <<-  read.metadata(outgroup.fa.read) %>%
     dplyr::mutate(Species_common_name = str_replace(common.name, "_Z[F|f][X|x].*", ""),
                   Species_common_name = str_replace(Species_common_name, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", ""))
   
   # Combine the outgroups with the mammals
-  metadata.combined <<- rbind(metadata.mammal, metadata.outgroup)
+  METADATA$combined <<- rbind(METADATA$mammal, METADATA$outgroup)
   
   # Write the unaligned combined fasta to file with .fas extension
   combined.nt.raw <- c(outgroup.nt.raw, nt.raw) # all sequences
   combined.aa.raw <- ape::trans(combined.nt.raw)
   
-  ape::write.FASTA(combined.nt.raw, file = files$combined.nt.fas)
-  ape::write.FASTA(combined.aa.raw, file = files$combined.aa.fas)
+  ape::write.FASTA(combined.nt.raw, file = FILES$combined.nt.fas)
+  ape::write.FASTA(combined.aa.raw, file = FILES$combined.aa.fas)
   
   # Create supplementary table with all accessions and sequence info
-  metadata.combined %>%
+  METADATA$combined %>%
     dplyr::rename(Accession = accession, Species = species, Group = group,
                   Name_in_figures = common.name,Description = original.name  ) %>%
     dplyr::select(Accession,Species,Group,  Name_in_figures, Description ) %>%
@@ -118,11 +122,11 @@ prepare.fas.files <- function(){
 
 read.alignments <- function(){
   alignments <- list()
-  alignments$aa.combined.ape <- ape::read.FASTA(files$combined.aa.aln, type="AA")
+  alignments$aa.combined.ape <- ape::read.FASTA(FILES$combined.aa.aln, type="AA")
   # Read in Biostrings format for exon detection also
-  alignments$aa.combined.biostrings <- Biostrings::readAAMultipleAlignment(files$combined.aa.aln, format="fasta")
-  alignments$nt.mammal.ape <- ape::read.FASTA(files$mammal.nt.aln)
-  alignments$nt.mammal.biostrings <- Biostrings::readDNAMultipleAlignment(files$mammal.nt.aln, format="fasta")
+  alignments$aa.combined.biostrings <- Biostrings::readAAMultipleAlignment(FILES$combined.aa.aln, format="fasta")
+  alignments$nt.mammal.ape <- ape::read.FASTA(FILES$mammal.nt.aln)
+  alignments$nt.mammal.biostrings <- Biostrings::readDNAMultipleAlignment(FILES$mammal.nt.aln, format="fasta")
   alignments
 }
 
@@ -150,49 +154,6 @@ read.fasta <- function(f){
          "species" = rep(species.name, length(common.names))))
 }
 
-prepare.fas.files <- function(){
-  
-  # Putative Zfy sequences in rodents detected with NCBI gene search:
-  # rodent[orgn:__txid9989] AND zinc finger X-chromosomal protein-like 
-  
-  # Read all unaligned sequence files with .fa extension
-  fa.files <- list.files(path = "fasta/nt", pattern = "*.fa$", 
-                         include.dirs = T, full.names = T)
-  
-  fa.read  <- lapply(fa.files, read.fasta)
-  nt.raw   <- read.sequences(fa.read)
-  metadata.mammal <<- read.metadata(fa.read)
-  
-  # Write the combined fasta to file with .fas extension
-  ape::write.FASTA(nt.raw, file = files$mammal.nt.fas)
-  
-  
-  # Read outgroup NT FA files
-  # Read all unaligned sequence files with .fa extension
-  outgroup.nt.files <- list.files(path = "fasta/aa", pattern = "*.fa$", 
-                                  include.dirs = T, full.names = T)
-  
-  outgroup.fa.read  <- lapply(outgroup.nt.files, read.fasta)
-  outgroup.nt.raw   <- read.sequences(outgroup.fa.read)
-  metadata.outgroup <<-  read.metadata(outgroup.fa.read)
-  
-  # Combine the outgroups with the mammals
-  metadata.combined <<- rbind(metadata.mammal, metadata.outgroup)
-  
-  # Write the unaligned combined fasta to file with .fas extension
-  combined.nt.raw <- c(outgroup.nt.raw, nt.raw) # all sequences
-  combined.aa.raw <- ape::trans(combined.nt.raw)
-  
-  ape::write.FASTA(combined.nt.raw, file = files$combined.nt.fas)
-  ape::write.FASTA(combined.aa.raw, file = files$combined.aa.fas)
-  
-  # Create supplementary table with all accessions and sequence info
-  metadata.combined %>%
-    dplyr::rename(Accession = accession, Species = species, Group = group,
-                  Name_in_figures = common.name,Description = original.name  ) %>%
-    dplyr::select(Accession,Species,Group,  Name_in_figures, Description ) %>%
-    create.xlsx(., "figure/accessions.supplement.xlsx")
-}
 
 read.sequences <- function(read.fasta.output){
   do.call(c, lapply(read.fasta.output, function(x) x$fa))
@@ -293,7 +254,7 @@ find.exons <- function(biostrings.nt.alignment, biostrings.aa.alignment){
   
 }
 
-plot.tree <- function(tree.data, ...){
+plot.tree <- function(tree.data, tiplab.font.size = 2, ...){
   
   # Remove underscores for pretty printing
   tree.data$tip.label <- str_replace_all(tree.data$tip.label, "_"," ")
@@ -313,7 +274,7 @@ plot.tree <- function(tree.data, ...){
                                      .default = "white"))
   ggtree(tree.data) + 
     geom_tree() +
-    geom_tiplab(size=2, aes_string(...))+
+    geom_tiplab(size=tiplab.font.size, aes_string(...))+
     scale_color_manual(values = c(OUT.TREE.COLOUR, ZFX.TREE.COLOUR, ZFY.TREE.COLOUR))+
     # geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")+
     geom_nodepoint(size=1.5,  col="black")+
@@ -541,7 +502,7 @@ locate.zfs.in.alignment <- function(taxa.order){
                         sequence.name = zf.data$sequence, 
                         start = zf.data$start_ungapped,
                         end = zf.data$end_ungapped,
-                        MoreArgs = list(aa=alignments$aa.combined.biostrings),
+                        MoreArgs = list(aa=ALIGNMENTS$aa.combined.biostrings),
                         SIMPLIFY = FALSE)) %>%
     dplyr::mutate(sequence = factor(sequence, 
                                     levels = rev(taxa.order))) %>% # sort reverse to match tree
@@ -549,14 +510,14 @@ locate.zfs.in.alignment <- function(taxa.order){
     dplyr::mutate(i = as.integer(sequence)) %>%  # Set the row indexes for plotting
     
     # Add the gapped nt alignment coordinates for nt sequences
-    dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(alignments$nt.mammal.biostrings@unmasked), # we have the nt alignment
-                                            convert.to.gapped.coordinate(start_nt_ungapped,  alignments$nt.mammal.biostrings@unmasked[[sequence]]),
+    dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(ALIGNMENTS$nt.mammal.biostrings@unmasked), # we have the nt alignment
+                                            convert.to.gapped.coordinate(start_nt_ungapped,  ALIGNMENTS$nt.mammal.biostrings@unmasked[[sequence]]),
                                             NA),
-                  end_nt_gapped = ifelse( sequence %in% names(alignments$nt.mammal.biostrings@unmasked), # we have the nt alignment
-                                          convert.to.gapped.coordinate(end_nt_ungapped,  alignments$nt.mammal.biostrings@unmasked[[sequence]]),
+                  end_nt_gapped = ifelse( sequence %in% names(ALIGNMENTS$nt.mammal.biostrings@unmasked), # we have the nt alignment
+                                          convert.to.gapped.coordinate(end_nt_ungapped,  ALIGNMENTS$nt.mammal.biostrings@unmasked[[sequence]]),
                                           NA)) %>%
     # Add the AA sequence covered by the ZF and motifs
-    dplyr::mutate(aa_motif = gsub("-", "", alignments$aa.combined.biostrings@unmasked[[sequence]][start_gapped:end_gapped]),
+    dplyr::mutate(aa_motif = gsub("-", "", ALIGNMENTS$aa.combined.biostrings@unmasked[[sequence]][start_gapped:end_gapped]),
                                                                              # 6    32  -1
                   # find the contact motif within the ZF (if available) .*H.{3}H(.)..(..).(.).{5}C..C.*
                   # via https://genomebiology.biomedcentral.com/articles/10.1186/s13059-017-1287-y
@@ -601,7 +562,7 @@ locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
   aa.aln <- Biostrings::readAAMultipleAlignment(aa.alignment.file, format="fasta")
   nt.aln <- Biostrings::readDNAMultipleAlignment(nt.alignment.file, format="fasta")
   
-  if(!file.exists("nls/combined.aa.nls.filt.out")){
+  if(!file.exists("aln/nls/combined.aa.nls.filt.out")){
     # Nuclear localisation sequence
     # using NLStradamus
     # Nguyen Ba AN, Pogoutse A, Provart N, Moses AM. NLStradamus: a simple Hidden Markov Model for nuclear localization signal prediction. BMC Bioinformatics. 2009 Jun 29;10(1):202. 
@@ -610,14 +571,14 @@ locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
     # ensure relatively lax threshold for broad detection
     # look for bipartite NLS
     # perl bin/nlstradamus.pl -i fasta/combined.aa.fas -t 0.5 -m 2 > nls/combined.aa.nls.out
-    system2("perl", paste(" bin/nlstradamus.pl -i fasta/combined.aa.fas -t 0.5 > nls/combined.aa.nls.out"))
+    system2("perl", paste(" bin/nlstradamus.pl -i fasta/combined.aa.fas -t 0.5 > aln/nls/combined.aa.nls.out"))
     
     # Remove the non-table output
-    system2("cat", "nls/combined.aa.nls.out | grep -v 'Finished' | grep -v '=' | grep -v 'Analyzed' | grep -v 'sites' | grep -v 'Input' | grep -v 'Threshold' > nls/combined.aa.nls.filt.out")
+    system2("cat", "aln/nls/combined.aa.nls.out | grep -v 'Finished' | grep -v '=' | grep -v 'Analyzed' | grep -v 'sites' | grep -v 'Input' | grep -v 'Threshold' > aln/nls/combined.aa.nls.filt.out")
     
   }
   # Read in the NLS prections
-  locations.NLS <- read_table("nls/combined.aa.nls.filt.out", 
+  locations.NLS <- read_table("aln/nls/combined.aa.nls.filt.out", 
                               col_names = c("sequence", "type", "posterior_prob", "start_ungapped", "end_ungapped", "aa_motif"))
   
   # Adjust the raw sequences to their positions in aa msa

@@ -14,11 +14,11 @@ cat("Packages loaded\n")
 filesstrings::create_dir("figure")
 prepare.fas.files()
 
-alignments <- read.alignments()
+ALIGNMENTS <- read.alignments()
 
 # Identify the coordinates of the exon boundaries in the gapped alignments
 # Based on the mouse Zfy1 sequence
-mouse.exons <- find.exons(alignments$nt.mammal.biostrings, alignments$aa.combined.biostrings)
+mouse.exons <- find.exons(ALIGNMENTS$nt.mammal.biostrings, ALIGNMENTS$aa.combined.biostrings)
 
 #### Plot combined mammal/outgroup AA tree ####
 read.combined.outgroup.tree <- function(file){
@@ -31,12 +31,12 @@ read.combined.outgroup.tree <- function(file){
   combined.outgroup.tree <- phytools::reroot(combined.outgroup.tree, xenopus.node, position = 0.1)
   ape::write.tree(combined.outgroup.tree, file = rooted.file)
   
-  mammal.gene.groups <- split(metadata.combined$common.name, metadata.combined$group)
+  mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
   combined.outgroup.tree <- groupOTU(combined.outgroup.tree, mammal.gene.groups, group_name = "group")
   combined.outgroup.tree
 }
 
-combined.outgroup.tree <- read.combined.outgroup.tree(files$combined.aa.aln.treefile)
+combined.outgroup.tree <- read.combined.outgroup.tree(FILES$combined.aa.aln.treefile)
 
 combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")+
   coord_cartesian(clip="off", xlim = c(0, 0.7), ylim= c(-2, length(combined.outgroup.tree$tip.label)))+
@@ -49,15 +49,15 @@ combined.taxa.name.order <- ggtree::get_taxa_name(combined.aa.tree)
 
 #### Plot mammal CDS NT tree #####
 
-nt.aln.tree <- ape::read.tree(files$mammal.nt.aln.treefile)
+nt.aln.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
 
 # Root the tree on platypus and resave
 # The root is arbitrarily placed in the platypus branch to fit neatly
 nt.aln.tree <- phytools::reroot(nt.aln.tree, which(nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
-ape::write.tree(nt.aln.tree, file = paste0(files$mammal.nt.aln, ".rooted.treefile"))
+ape::write.tree(nt.aln.tree, file = paste0(FILES$mammal.nt.aln, ".rooted.treefile"))
 
 # Find the nodes that are ZFY vs ZFX and add to tree
-mammal.gene.groups <- split(metadata.mammal$common.name, metadata.mammal$group)
+mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
 nt.aln.tree <- tidytree::groupOTU(nt.aln.tree, mammal.gene.groups, group_name = "group")
 
 plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off", xlim = c(0, 0.5))
@@ -76,14 +76,14 @@ mammal.taxa.name.order <- get_taxa_name(plot.zfx.zfy)
 # Drop the ZFY sequences and just look at the ZFX nodes in the tree
 tree.zfx <- ape::drop.tip(nt.aln.tree, mammal.gene.groups$ZFY)
 tree.zfx <- groupOTU(tree.zfx, mammal.gene.groups, group_name = "group")
-ape::write.tree(tree.zfx, file = paste0(files$mammal.nt.aln, ".zfx.treefile"))
+ape::write.tree(tree.zfx, file = paste0(FILES$mammal.nt.aln, ".zfx.treefile"))
 plot.zfx <- plot.tree(tree.zfx)
 save.double.width("figure/mammal.zfx.tree.png", plot.zfx)
 
 # Keep Zfy and outgroups, drop other tips
 tree.zfy <- ape::keep.tip(nt.aln.tree, c(mammal.gene.groups$ZFY, mammal.gene.groups$Outgroup))
 tree.zfy <- groupOTU(tree.zfy, mammal.gene.groups, group_name = "group")
-ape::write.tree(tree.zfy, file = paste0(files$mammal.nt.aln, ".zfy.treefile"))
+ape::write.tree(tree.zfy, file = paste0(FILES$mammal.nt.aln, ".zfy.treefile"))
 plot.zfy <- plot.tree(tree.zfy)
 save.double.width("figure/mammal.zfy.tree.png", plot.zfy)
 
@@ -100,13 +100,13 @@ create.exon.plot <- function(i){
   exon.tree <- phytools::reroot(exon.tree, which(exon.tree$tip.label=="Platypus_ZFX"), position = 0.015)
   
   # Find the nodes that are ZFY vs ZFX and add to tree
-  mammal.gene.groups <- split(metadata.mammal$common.name, metadata.mammal$group)
+  mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
   exon.tree <- groupOTU(exon.tree, mammal.gene.groups, group_name = "group")
   
-  plot.exon.tree <- plot.tree(exon.tree, col="group")  + 
-    coord_cartesian(clip="off", xlim = c(0, 0.8))
-  exon.fig.file <- paste0("figure/exon_", mouse.exons$exon[i], ".zfx.zfy.tree.png")
-  save.double.width(exon.fig.file, plot.exon.tree)
+  plot.exon.tree <- plot.tree(exon.tree, tiplab.font.size = 1.5,  col="group")  + 
+    coord_cartesian(clip="off", xlim = c(0.16, 0.83))
+  # exon.fig.file <- paste0("figure/exon_", mouse.exons$exon[i], ".zfx.zfy.tree.png")
+  # save.double.width(exon.fig.file, plot.exon.tree)
   
   # Return for playing
   plot.exon.tree
@@ -121,23 +121,25 @@ exon.1.6.tree <- ape::read.tree(paste0(exon.1.6.aln.file, ".treefile"))
 exon.1.6.tree <- phytools::reroot(exon.1.6.tree, which(exon.1.6.tree$tip.label=="Platypus_ZFX"), position = 0.015)
 # Find the nodes that are ZFY vs ZFX and add to tree
 # Find the nodes that are ZFY vs ZFX and add to tree
-mammal.gene.groups <- split(metadata.mammal$common.name, metadata.mammal$group)
+mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
 exon.1.6.tree <- groupOTU(exon.1.6.tree, mammal.gene.groups, group_name = "group")
 
-plot.exon.1.6.tree <- plot.tree(exon.1.6.tree, col="group")  + coord_cartesian(clip="off", xlim = c(0, 0.8))
-exon.1.6.fig.file <- paste0("figure/exon_1-6.zfx.zfy.tree.png")
-save.double.width(exon.1.6.fig.file, plot.exon.1.6.tree)
+plot.exon.1.6.tree <- plot.tree(exon.1.6.tree, tiplab.font.size = 1.5,  col="group")  + coord_cartesian(clip="off", xlim = c(0.16, 0.83))
+# exon.1.6.fig.file <- paste0("figure/exon_1-6.zfx.zfy.tree.png")
+# save.double.width(exon.1.6.fig.file, plot.exon.1.6.tree)
 
-# Create a joint figure of exons 1-6 and exon 7
+# Create a joint figure of exons 1-6, exon 2, and exon 7
 
 exon.joint.tree <- plot.exon.1.6.tree + exon.1.7.plots[[2]] + exon.1.7.plots[[7]] + 
   patchwork::plot_annotation(tag_levels = list(c("Exons 1-6", "Exon 2", "Exon 7"))) &
-  theme(plot.tag = element_text(size = 6))
-save.double.width("figure/exon.joint.tree.png", exon.joint.tree, height=120)
+  theme(plot.tag = element_text(size = 6),
+        plot.margin = margin(t=0, l=0, r=0, b=0))
+save.double.width("figure/Figure_Sxxxx_exons_tree.png", exon.joint.tree, height=120)
+
 #### Test selection globally in mammals ####
 
-# ape::dnds(alignments$nt.mammal.ape) # errors
-seqin.aln <- seqinr::read.alignment(files$mammal.nt.aln, format = "fasta")
+# ape::dnds(ALIGNMENTS$nt.mammal.ape) # errors
+seqin.aln <- seqinr::read.alignment(FILES$mammal.nt.aln, format = "fasta")
 kaks.data <- seqinr::kaks(seqin.aln)
 
 kaks.ratio <- kaks.data$ka / kaks.data$ks
@@ -171,17 +173,17 @@ save.double.width("figure/dnds.png", kaks.pairwise.plot)
 # pronounced in the ZFs versus exon 2 and exon 7?
 exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset[1]:mouse.exons$end_nt_codon_offset[1], 
                     mouse.exons$start_nt_codon_offset[3]:mouse.exons$end_nt_codon_offset[6])
-exon1.3_6.aln <- as.matrix(alignments$nt.mammal.ape)[,exon1.3_6.locs]
+exon1.3_6.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,exon1.3_6.locs]
 
 ape::write.FASTA(exon1.3_6.aln, file = "aln/exons/exon_1_3-6.kaks.aln")
 seqin.aln.exon.1.3_6 <- seqinr::read.alignment("aln/exons/exon_1_3-6.kaks.aln", format = "fasta")
 
-exon2.aln <- as.matrix(alignments$nt.mammal.ape)[,mouse.exons$start_nt_codon_offset[2]:(mouse.exons$end_nt_codon_offset[2])]
+exon2.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt_codon_offset[2]:(mouse.exons$end_nt_codon_offset[2])]
 ape::write.FASTA(exon2.aln, file = "aln/exons/exon_2.kaks.aln")
 seqin.aln.exon.2 <- seqinr::read.alignment("aln/exons/exon_2.kaks.aln", format = "fasta")
 exon2.aln.msa <- ape::read.FASTA("aln/exons/exon_2.kaks.aln")
 
-exon.7.aln <- as.matrix(alignments$nt.mammal.ape)[,(mouse.exons$start_nt_codon_offset[7]):mouse.exons$end_nt_codon_offset[7]] 
+exon.7.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,(mouse.exons$start_nt_codon_offset[7]):mouse.exons$end_nt_codon_offset[7]] 
 ape::write.FASTA(exon.7.aln, file = "aln/exons/exon_7.kaks.aln")
 seqin.aln.exon.7 <- seqinr::read.alignment("aln/exons/exon_7.kaks.aln", format = "fasta")
 
@@ -231,8 +233,8 @@ save.double.width("figure/exon.1_3-6.2.7.dnds.png", exon.kaks.plot, height=110)
 #### Identify the locations of the ZFs, 9aaTADs and NLS in the AA & NT MSAs ####
 
 locations.zf <- locate.zfs.in.alignment(combined.taxa.name.order)
-locations.9aaTAD <- locate.9aaTADs.in.alignment(files$combined.aa.aln, files$mammal.nt.aln, combined.taxa.name.order)
-locations.NLS <- locate.NLS.in.alignment(files$combined.aa.aln, files$mammal.nt.aln, combined.taxa.name.order)
+locations.9aaTAD <- locate.9aaTADs.in.alignment(FILES$combined.aa.aln, FILES$mammal.nt.aln, combined.taxa.name.order)
+locations.NLS <- locate.NLS.in.alignment(FILES$combined.aa.aln, FILES$mammal.nt.aln, combined.taxa.name.order)
 
 # Export the locations of the  ZFs,  9aaTADs, and NLS
 write_tsv(locations.zf %>% 
@@ -385,7 +387,7 @@ extract.superTAD.motifs <- function(locations.9aaTAD){
                   tad.end = ifelse(is.na(tad.end), end, tad.end)) %>%
     # EXtract the sequence for the tad range from the aa alignment
     dplyr::rowwise() %>%
-    dplyr::mutate(tad.sequence = subset.sequence(alignments$aa.combined.biostrings,
+    dplyr::mutate(tad.sequence = subset.sequence(ALIGNMENTS$aa.combined.biostrings,
                                                  sequence,
                                                  tad.start,
                                                  tad.end)) %>%
@@ -522,13 +524,13 @@ write_tsv(pwm.predictions, "figure/zf_targets.tsv")
 #### Ancestral sequence reconstruction #####
 
 # Read the ancestral reconstruction
-ancestral.nt.seqs <- read.table(paste0(files$mammal.nt.aln, ".state") ,header=TRUE)
+ancestral.nt.seqs <- read.table(paste0(FILES$mammal.nt.aln, ".state") ,header=TRUE)
 
 # We care about the eutherian common ancestor and the rodent ancestor
 # Find these nodes
 
 # Read the tree back to keep full node names
-nt.aln.tree.nodes <- ape::read.tree(paste0(files$mammal.nt.aln, ".treefile"))
+nt.aln.tree.nodes <- ape::read.tree(paste0(FILES$mammal.nt.aln, ".treefile"))
 nt.aln.tree.nodes <- ape::root(nt.aln.tree.nodes, "Platypus_ZFX")
 
 # Node number returned includes number of tip labels; subtract to get node
@@ -542,12 +544,12 @@ rodent.anc.nt <- ancestral.nt.seqs %>%
 rodent.anc.nt <- ape::as.DNAbin(rodent.anc.nt$State)
 
 # Bind together as a matrix
-rodent.plus.anc.nt.aln <- rbind(as.matrix(alignments$nt.mammal.ape), rodent.anc.nt)
+rodent.plus.anc.nt.aln <- rbind(as.matrix(ALIGNMENTS$nt.mammal.ape), rodent.anc.nt)
 
 # Convert back to list and add names
 rodent.ancestor.label <- "Muroidea ancestral Zfy"
 rodent.plus.anc.nt.aln <- as.list.DNAbin(rodent.plus.anc.nt.aln)
-names(rodent.plus.anc.nt.aln) <- c(names(alignments$nt.mammal.ape), rodent.ancestor.label)
+names(rodent.plus.anc.nt.aln) <- c(names(ALIGNMENTS$nt.mammal.ape), rodent.ancestor.label)
 
 # Plot the MSA
 
@@ -592,7 +594,7 @@ rodent.plus.anc.nt.msa.plot <- ggplot()+
   geom_rect(data = rodent.plus.anc.9aaTAD, aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="blue", alpha=0.5)+
   geom_rect(data = rodent.plus.anc.NLS,    aes(xmin=start_nt_gapped, xmax=end_nt_gapped, ymin=i-0.5, ymax=i+0.5), fill="green", alpha=0.5)
 
-if(file.exists(files$paml.branch.site.output)){
+if(file.exists(FILES$paml.branch.site.output)){
   rodent.plus.anc.nt.msa.plot <- rodent.plus.anc.nt.msa.plot +
     geom_point(data=positive.sites[positive.sites$p>0.9,], aes(x = site*3, y = p+6.5) , size=0.25)
 }
@@ -609,9 +611,9 @@ save.double.width("figure/rodent.ancestral.nt.msa.png", rodent.plus.anc.nt.msa.p
 #### Calculate the conservation across the mammal AA domains for outgroup levels ####
 
 # Use Xenopus ZFX.S as the comparison group
-msa.aa.aln.tidy.frog.conservation    <- calculate.conservation(alignments$aa.combined.biostrings,"Xenopus_ZFX.S" )
-msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(alignments$aa.combined.biostrings,"Chicken_ZFX" )
-msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(alignments$aa.combined.biostrings,"Opossum_ZFX" )
+msa.aa.aln.tidy.frog.conservation    <- calculate.conservation(ALIGNMENTS$aa.combined.biostrings,"Xenopus_ZFX.S" )
+msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(ALIGNMENTS$aa.combined.biostrings,"Chicken_ZFX" )
+msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(ALIGNMENTS$aa.combined.biostrings,"Opossum_ZFX" )
 
 # Combine the structural conservation plot with the aa tree
 # This should show all the 9aaTADs
@@ -657,8 +659,8 @@ save.double.width("figure/Figure_2_aa.structure.confident.png", aa.structure.con
 
 #### Plot the conservation of hydrophobicity across mammal/outgroup AA MSA ####
 
-msa.aa.aln.hydrophobicity <- do.call(rbind, mapply(calc.hydrophobicity, aa=alignments$aa.combined.biostrings@unmasked, 
-                                                   sequence.name = names(alignments$aa.combined.biostrings@unmasked), 
+msa.aa.aln.hydrophobicity <- do.call(rbind, mapply(calc.hydrophobicity, aa=ALIGNMENTS$aa.combined.biostrings@unmasked, 
+                                                   sequence.name = names(ALIGNMENTS$aa.combined.biostrings@unmasked), 
                                                    window.size = 9,
                                                    SIMPLIFY = FALSE))  %>%
   dplyr::mutate(sequence = factor(sequence, levels = rev(combined.taxa.name.order))) # sort reverse to match tree
@@ -685,8 +687,8 @@ save.double.width("figure/hydrophobicity.convervation.tree.png", hydrophobicity.
 
 #### Plot conservation of charge across mammal/outgroup AA MSA ####
 
-msa.aa.aln.charge <- do.call(rbind, mapply(calc.charge, aa=alignments$aa.combined.biostrings@unmasked, 
-                                           sequence.name = names(alignments$aa.combined.biostrings@unmasked), 
+msa.aa.aln.charge <- do.call(rbind, mapply(calc.charge, aa=ALIGNMENTS$aa.combined.biostrings@unmasked, 
+                                           sequence.name = names(ALIGNMENTS$aa.combined.biostrings@unmasked), 
                                            window.size = 9,
                                            SIMPLIFY = FALSE))  %>%
   dplyr::mutate(sequence = factor(sequence, levels = rev(combined.taxa.name.order))) # sort reverse to match tree
@@ -708,8 +710,8 @@ structure.plot <- (aa.structure.plot) / (hydrophobicity.plot) / (charge.plot) + 
 save.double.width("figure/structure.plot.png", structure.plot, height = 230)
 
 #### What are the hydrophobic patches in exons 3 and 5 that are not 9aaTADs? ####
-exon3.patch.start <- mouse.exons$start_aa[3]+32
-exon3.patch.end   <- mouse.exons$end_aa[3]-5
+exon3.patch.start <- mouse.exons$start_aa[3]+25
+exon3.patch.end   <- mouse.exons$end_aa[3]
 exon3.patch <- msa.aa.aln.hydrophobicity %>%
   dplyr::filter(position_gapped>exon3.patch.start & position_gapped<exon3.patch.end)
 
@@ -722,9 +724,9 @@ save.double.width(filename = "figure/hydrophobic.patch.exon.3.png", exon3.hydro.
 # Get the region from the msa
 
 exon3.patch.table <- do.call(rbind, 
-                             lapply(metadata.combined$common.name,  
+                             lapply(METADATA$combined$common.name,  
                                     \(i) list("Sequence" = i, 
-                                              as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
+                                              as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
   as.data.frame %>%
   dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
   dplyr::arrange(as.integer(Sequence)) 
@@ -741,9 +743,9 @@ exon5.hydro.plot <- ggplot()+
   labs(fill="Hydrophobicity (9 site average)")
 save.double.width(filename = "figure/hydrophobic.patch.exon.5.png", exon5.hydro.plot)
 
-exon5.patch.table <- do.call(rbind, lapply(metadata.combined$common.name,  
+exon5.patch.table <- do.call(rbind, lapply(METADATA$combined$common.name,  
                                            \(i) list("Sequence" = i,
-                                                     as.character(alignments$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
+                                                     as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
   as.data.frame %>%
   dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
   dplyr::arrange(as.integer(Sequence))
@@ -757,12 +759,12 @@ exon.patch.table <- merge(exon3.patch.table, exon5.patch.table, by=c("Sequence")
 # Note Biostrings::consensusString will fail if there are non-standard / ambiguity characters
 try({
   # Get the consensus matrix and find the most frequent value per site
-  exon.3.patch.consensus <- paste(unlist(apply(consensusMatrix(alignments$aa.combined.biostrings)[,exon3.patch.start:exon3.patch.end], 
+  exon.3.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,exon3.patch.start:exon3.patch.end], 
                                                2, 
                                                \(x) names(which(x==max(x))))), 
                                   collapse = "")
   
-  exon.5.patch.consensus <- paste(unlist(apply(consensusMatrix(alignments$aa.combined.biostrings)[,exon5.patch.start:exon5.patch.end], 
+  exon.5.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,exon5.patch.start:exon5.patch.end], 
                                                2, 
                                                \(x) names(which(x==max(x))))), 
                                   collapse = "")
@@ -788,7 +790,8 @@ create.relax.k.tree <- function(json.file){
   k.vals$NodeLab <- rownames(k.vals)
   k.vals$node <- sapply(k.vals$NodeLab,  treeio::nodeid, tree = hyphy.input.tree)
   # Rescale values above 1 to the range 1-2 so we get a clean diverging scale
-  k.vals$adj.k <- ifelse(k.vals$k <= 1, k.vals$k, (k.vals$k/50)+1)
+  # k.vals$adj.k <- ifelse(k.vals$k <= 1, k.vals$k, (k.vals$k/50)+1)
+  k.vals$adj.k <- log(k.vals$k)
   
   # Add a new row for the root node
   k.vals[nrow(k.vals)+1,] <- list(0, "", length(hyphy.input.tree$tip.label)+1, 1)
@@ -801,18 +804,22 @@ create.relax.k.tree <- function(json.file){
   branch.lengths <- unlist(sapply(hyphy.input.tree$edge[,2], \(x)  k.vals[k.vals$node==x,"branch.length"]))
   hyphy.input.tree$edge.length <- branch.lengths
   
+  hyphy.input.tree <- phytools::reroot(hyphy.input.tree, which(hyphy.input.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+  
   p <- ggtree(hyphy.input.tree) + 
     geom_tiplab(size=2)
   p <- p %<+% k.vals + aes(colour=adj.k) + 
-    scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
-                            direction = -1, 
-                            limits = c(0, 2),
-                            labels = c("0.0", "0.5", "1.0", round(25, digits = 0), round(50, digits = 0)))+
-    labs(color = "K")+
-    coord_cartesian(xlim = c(0, 0.7))+
-    annotate(geom="text", x = 0.3, y = 62, 
-             label = paste("K(Muroidea) =", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2)))+
-    theme(legend.position = "top",
+    scale_color_paletteer_c("ggthemes::Classic Red-Blue",
+                            direction = 1,
+                            limits = c(-3, 3))+
+                            # 
+                            # labels = c("-2", "0", "2", round(25, digits = 0), round(50, digits = 0)))+
+    labs(color = "log(K)")+
+    coord_cartesian(xlim = c(0, 0.45))+
+    geom_treescale(fontsize =2, y = -1, width = 0.05) +
+    # annotate(geom="text", x = 0.3, y = 62, size = 2,
+    #          label = paste("K(Muroidea) =", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2)))+
+    theme(legend.position = c(0.8, 0.5),
           legend.background = element_blank(),
           legend.text = element_text(size=6),
           legend.title = element_text(size=6))
@@ -822,7 +829,7 @@ create.relax.k.tree <- function(json.file){
 
 if(file.exists("hyphy/mammal.relax.json")){
   relax.tree.all <- create.relax.k.tree("hyphy/mammal.relax.json")
-  save.double.width("figure/mammal.relax.K.png", relax.tree.all)
+  save.double.width("figure/Figure_xxxx_RELAX_mammal.png", relax.tree.all)
   
   relax.tree.e1_3_6 <- create.relax.k.tree("hyphy/exon_1_3-6.relax.json")
   save.double.width("figure/exon_1_3-6.relax.K.png", relax.tree.e1_3_6)
@@ -946,25 +953,26 @@ if(file.exists("paml/site-specific/site.specific.paml.out.txt")){
     scale_fill_viridis_c()+
     theme_bw()
   
-  # msa.aa.aln.tidy.frog.conservation    <- calculate.conservation(alignments$aa.combined.biostrings,"Xenopus_ZFX.S" )
-  # msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(alignments$aa.combined.biostrings,"Chicken_ZFX" )
-  # msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(alignments$aa.combined.biostrings,"Opossum_ZFX" )
+  # msa.aa.aln.tidy.frog.conservation    <- calculate.conservation(ALIGNMENTS$aa.combined.biostrings,"Xenopus_ZFX.S" )
+  # msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(ALIGNMENTS$aa.combined.biostrings,"Chicken_ZFX" )
+  # msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(ALIGNMENTS$aa.combined.biostrings,"Opossum_ZFX" )
   
-  n.taxa <- 7
+  n.taxa <- 2
   positive.sites.plot <-  positive.sites.plot+
     # Draw the conservation with Xenopus, chicken and opossum
     new_scale_fill()+
     scale_fill_viridis_c(limits = c(0, 1))+
     labs(fill="Conservation (5 site average)")+
-    add.conservation.track(msa.aa.aln.tidy.frog.conservation,    n.taxa,   n.taxa+2)+
-    add.conservation.track(msa.aa.aln.tidy.chicken.conservation, n.taxa+3, n.taxa+5)+
-    add.conservation.track(msa.aa.aln.tidy.opossum.conservation, n.taxa+6, n.taxa+8)+
-    
+    # add.conservation.track(msa.aa.aln.tidy.frog.conservation,    n.taxa,   n.taxa+2)+
+    # add.conservation.track(msa.aa.aln.tidy.chicken.conservation, n.taxa+3, n.taxa+5)+
+    # add.conservation.track(msa.aa.aln.tidy.opossum.conservation, n.taxa+6, n.taxa+8)+
+    add.track(ranges.NLS.common,    n.taxa+4.5, n.taxa+7.5, fill=NLS.COLOUR, alpha = 1)+
     # Draw the structures
-    add.track(ranges.ZF.common,     n.taxa+9, n.taxa+11, fill="lightgrey")+
-    add.track(ranges.NLS.common,    n.taxa+9, n.taxa+11, fill="green", alpha = 0.5)+
-    add.track(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, fill="#00366C",  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
-    add.track.labels(ranges.9aaTAD.common, n.taxa+9, n.taxa+11)+   # Label the 9aaTADs
+    add.track(ranges.ZF.common,     n.taxa+5, n.taxa+7, fill=ZF.COLOUR)+
+    add.track.labels(ranges.ZF.common, n.taxa+5, n.taxa+7, col="white", label_col = "motif_number")+
+    
+    add.track(ranges.9aaTAD.common, n.taxa+5, n.taxa+7, fill=TAD.COLOUR,  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
+    add.track.labels(ranges.9aaTAD.common, n.taxa+3, n.taxa+7, col="white")+   # Label the 9aaTADs
     
     new_scale_fill()+
     scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
@@ -972,8 +980,8 @@ if(file.exists("paml/site-specific/site.specific.paml.out.txt")){
     
     scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
     guides(fill = "none", pattern="none")+
-    add.exon.track(n.taxa+12, n.taxa+14, col = "black")+ # color of border
-    add.exon.labels(n.taxa+12, n.taxa+14)+
+    add.exon.track(n.taxa+8, n.taxa+10, col = "black")+ # color of border
+    add.exon.labels(n.taxa+8, n.taxa+10)+
     
     scale_x_continuous(expand = c(0, 0), breaks = seq(0, 950, 50))+
     coord_cartesian(xlim = c(0, max(msa.aa.aln.tidy.frog.conservation$position)))+
@@ -988,10 +996,66 @@ if(file.exists("paml/site-specific/site.specific.paml.out.txt")){
           legend.key.height = unit(3, "mm"),
           legend.spacing.y = unit(2, "mm"),
           legend.box.spacing = unit(2, "mm"),
+          panel.border = element_blank(),
+          axis.line.x.bottom = element_line(),
           panel.grid = element_blank())
   
   save.double.width("figure/positive.sites.png", positive.sites.plot, height = 85)
   
+  
+  # Plot the fraction of sites under possible selection in a 9-base window
+  sites <- data.frame(site = 1:max(mouse.exons$end_aa))
+  sites$isSelected <- sapply(sites$site, \(i) nrow(positive.sites[positive.sites$site==i,"p"])>0)
+  sites$isSelected.0.9 <- sapply(sites$site, \(i) ifelse(nrow(positive.sites[positive.sites$site==i,"p"])>0, positive.sites[positive.sites$site==i,"p"]>0.9, FALSE))
+  
+  
+  sites %<>% dplyr::mutate(
+    smoothSelected = slider::slide_dbl(isSelected, sum, .before=4, .after = 4),
+    smoothSelected0.9 = slider::slide_dbl(isSelected.0.9, sum, .before=4, .after = 4),
+  )
+  
+  sites.plot <- ggplot()+
+    
+    annotate("segment", x=0, xend=0, y=0, yend=8, linewidth=1)+
+    new_scale_fill()+
+    scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
+    scale_pattern_color_manual(values=c("white", "white"))+
+    
+    scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
+    guides(fill = "none", pattern="none")+
+    add.exon.track(-2, -1, col = "black")+ # color of border
+    add.exon.labels(-2, -1)+
+    
+    add.track(ranges.NLS.common, -0.75, 7.25, fill=NLS.COLOUR, alpha = 1)+
+    # Draw the structures
+    add.track(ranges.ZF.common,    -0.5, 7,, fill=ZF.COLOUR)+
+    add.track.labels(ranges.ZF.common, -0.5, 0, col="white", label_col = "motif_number")+
+    
+    add.track(ranges.9aaTAD.common, -0.5, 7, fill=TAD.COLOUR,  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
+    add.track.labels(ranges.9aaTAD.common, -0.5, 0, col="white")+  # Label the 9aaTADs
+    geom_line(data=sites,aes(x=site, y=smoothSelected0.9), linewidth=0.5 )+
+    coord_cartesian(xlim = c(0, max(sites$site)))+
+    scale_x_continuous(expand = c(0, 0), breaks = seq(0, 950, 50))+
+    scale_y_continuous(breaks= c(0, 2, 4, 6, 8), labels = round(c(0, 2/9, 4/9, 6/9, 8/9), digits=2))+
+    labs(y = "Fraction of bases under selection")+
+    theme_bw()+
+    theme(
+      axis.text.y = element_text(size=7),
+      axis.title.x = element_blank(),
+      axis.title.y = element_text(size=6),
+      # axis.ticks.y = element_blank(),
+      axis.text.x = element_text(size=6),
+      legend.position = "top",
+      legend.title = element_text(size = 6, vjust = 0.85),
+      legend.text = element_text(size = 6),
+      legend.key.height = unit(3, "mm"),
+      legend.spacing.y = unit(2, "mm"),
+      legend.box.spacing = unit(2, "mm"),
+      panel.border = element_blank(),
+      axis.line.x.bottom = element_line(),
+      panel.grid = element_blank())
+  
+  save.double.width("figure/positive.sites.filt.png", sites.plot, height = 85)
 }
 
 #### Tar the outputs ####
