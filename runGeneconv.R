@@ -413,8 +413,13 @@ subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
   geom_tiplab(size=2, color = "black")+
   geom_treescale(fontsize =2, y = -1) +
   coord_cartesian(xlim = c(-0.05, 0.4))+
-  annotate("rect", xmin=0.12, ymin=26.3, xmax=0.19, ymax=27.5, fill="darkgreen", alpha=0.3)+
+  annotate("rect", xmin=0.12, ymin=25.8, xmax=0.19, ymax=27.5, fill="darkgreen", alpha=0.4)+
   annotate("text", x=0.13, y=27, label="Ssty appears", size=2, hjust=0)+
+  annotate("text", x=0.13, y=26.2, label="Zfy testis specific", size=2, hjust=0)+
+  annotate("rect", xmin=0.29, ymin=29.5, xmax=0.34, ymax=31, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=0.295, y=30.5, label="Sly amplifies", size=2, hjust=0)+
+  annotate("rect", xmin=0.24, ymin=27.4, xmax=0.27, ymax=29, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=0.242, y=28, label="Slxl1\nacquired?", size=2, hjust=0)+
   theme_tree() +
   theme(legend.position = c(0.2, 0.8),
         legend.background = element_blank(),
