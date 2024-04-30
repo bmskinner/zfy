@@ -12,13 +12,11 @@ source("src/calcHydrophobicity.R")
 
 cat("Packages loaded\n")
 filesstrings::create_dir("figure")
-prepare.fas.files()
-
 ALIGNMENTS <- read.alignments()
 
 # Identify the coordinates of the exon boundaries in the gapped alignments
 # Based on the mouse Zfy1 sequence
-mouse.exons <- find.exons(ALIGNMENTS$nt.mammal.biostrings, ALIGNMENTS$aa.combined.biostrings)
+mouse.exons <- find.exons()
 
 #### Plot combined mammal/outgroup AA tree ####
 read.combined.outgroup.tree <- function(file){
@@ -49,15 +47,17 @@ combined.taxa.name.order <- ggtree::get_taxa_name(combined.aa.tree)
 
 #### Plot mammal CDS NT tree #####
 
-nt.aln.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
+nt.aln.tree <- ape::read.tree(FILES$combined.nt.aln.treefile)
 
 # Root the tree on platypus and resave
 # The root is arbitrarily placed in the platypus branch to fit neatly
-nt.aln.tree <- phytools::reroot(nt.aln.tree, which(nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
-ape::write.tree(nt.aln.tree, file = paste0(FILES$mammal.nt.aln, ".rooted.treefile"))
+xenopus.node <- ape::getMRCA(nt.aln.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
+nt.aln.tree <- phytools::reroot(nt.aln.tree, xenopus.node, position = 0.01)
+# nt.aln.tree <- phytools::reroot(nt.aln.tree, which(nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+ape::write.tree(nt.aln.tree, file = paste0(FILES$combined.nt.aln, ".rooted.treefile"))
 
 # Find the nodes that are ZFY vs ZFX and add to tree
-mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
+mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
 nt.aln.tree <- tidytree::groupOTU(nt.aln.tree, mammal.gene.groups, group_name = "group")
 
 plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off", xlim = c(0, 0.5))
@@ -230,55 +230,33 @@ exon.kaks.plot <- exon.1.3_6.kaks.pairwise.plot + exon.2.kaks.pairwise.plot + ex
 
 save.double.width("figure/exon.1_3-6.2.7.dnds.png", exon.kaks.plot, height=110)
 
-#### Identify the locations of the ZFs, 9aaTADs and NLS in the AA & NT MSAs ####
+#### Identify the locations of the ZFs in the AA & NT MSAs ####
 
 locations.zf <- locate.zfs.in.alignment(combined.taxa.name.order)
-locations.9aaTAD <- locate.9aaTADs.in.alignment(FILES$combined.aa.aln, FILES$mammal.nt.aln, combined.taxa.name.order)
-locations.NLS <- locate.NLS.in.alignment(FILES$combined.aa.aln, FILES$mammal.nt.aln, combined.taxa.name.order)
 
-# Export the locations of the  ZFs,  9aaTADs, and NLS
 write_tsv(locations.zf %>% 
             dplyr::select(sequence, aa_motif, start_ungapped, end_ungapped, 
                           start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
                           start_nt_gapped, end_nt_gapped),
           "figure/locations.zf.tsv")
+
+ranges.ZF.common <- merge(find.common.aa.overlaps(locations.zf), find.common.nt.overlaps(locations.zf), by = "motif_number")
+
+# Annotate the individual ZFs with which consensus motif they belong to (0 if none)
+locations.zf %<>% 
+  dplyr::rowwise() %>%
+  dplyr::mutate(motif_number = find.matching.range("start", "end", start_gapped, end_gapped, ranges.ZF.common )) %>%
+  dplyr::ungroup()
+
+#### Identify the locations of the 9aaTADs in the AA & NT MSAs ####
+
+locations.9aaTAD <- locate.9aaTADs.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
+
 write_tsv(locations.9aaTAD %>% 
             dplyr::select(sequence, aa_motif, rc_score, start_ungapped, end_ungapped, 
                           start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
                           start_nt_gapped, end_nt_gapped),
           "figure/locations.9aaTAD.tsv")
-write_tsv(locations.NLS %>% 
-            dplyr::select(sequence, aa_motif, type, posterior_prob, start_ungapped, end_ungapped, 
-                          start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
-                          start_nt_gapped, end_nt_gapped),
-          "figure/locations.NLS.tsv")
-
-# We need to combine the full set of structure locations into an overlapping set
-# to be plotted in a single row. Keep those that overlap in >=5 species
-find.common.aa.overlaps <- function(locations.data){
-  ranges.9aaTAD <- IRanges(start=locations.data$start_gapped, end = locations.data$end_gapped, names = locations.data$sequence)
-  ranges.9aaTAD.reduce <- IRanges::reduce(ranges.9aaTAD)
-  
-  n.sequences.in.range <- sapply(1:length(ranges.9aaTAD.reduce), \(i) length(subsetByOverlaps(ranges.9aaTAD, ranges.9aaTAD.reduce[i,])))
-  as.data.frame(ranges.9aaTAD.reduce[n.sequences.in.range>4,]) %>%
-    dplyr::mutate(motif_number = row_number())
-}
-
-find.common.nt.overlaps <- function(locations.data){
-  locations.data %<>%
-    dplyr::filter(!is.na(start_nt_gapped) & !is.na(end_nt_gapped))
-  
-  ranges.9aaTAD <- IRanges(start=locations.data$start_nt_gapped, end = locations.data$end_nt_gapped, names = locations.data$sequence)
-  ranges.9aaTAD.reduce <- IRanges::reduce(ranges.9aaTAD)
-  
-  n.sequences.in.range <- sapply(1:length(ranges.9aaTAD.reduce), \(i) length(subsetByOverlaps(ranges.9aaTAD, ranges.9aaTAD.reduce[i,])))
-  as.data.frame(ranges.9aaTAD.reduce[n.sequences.in.range>4,]) %>%
-    dplyr::mutate(motif_number = row_number()) %>%
-    dplyr::rename(start_nt = start, end_nt = end, width_nt = width)
-}
-
-ranges.ZF.common <- merge(find.common.aa.overlaps(locations.zf), find.common.nt.overlaps(locations.zf), by = "motif_number")
-ranges.NLS.common <- merge(find.common.aa.overlaps(locations.NLS), find.common.nt.overlaps(locations.NLS), by = "motif_number")
 
 # Only keep the high confidence 9aaTADs for the track
 ranges.9aaTAD.common <-  merge(find.common.aa.9aaTADs(locations.9aaTAD, 
@@ -290,20 +268,6 @@ ranges.9aaTAD.common <-  merge(find.common.aa.9aaTADs(locations.9aaTAD,
                                by = c("motif_number", "label"), all.x = T)
 
 
-
-
-
-find.matching.range <-function(start.col, end.col, start, end, ranges){
-  hit <- ranges[ranges[[start.col]]<=start & ranges[[end.col]]>=end,]$motif_number
-  if(length(hit)==0) 0 else hit
-}
-
-# Annotate the individual ZFs, 9aaTADs and NLS with which consensus motif they belong to (0 if none)
-locations.zf %<>% 
-  dplyr::rowwise() %>%
-  dplyr::mutate(motif_number = find.matching.range("start", "end", start_gapped, end_gapped, ranges.ZF.common )) %>%
-  dplyr::ungroup()
-
 locations.9aaTAD %<>%
   dplyr::rowwise() %>%
   dplyr::mutate(motif_number = find.matching.range("start", "end", 
@@ -311,12 +275,31 @@ locations.9aaTAD %<>%
   dplyr::ungroup() %>%
   merge(., ranges.9aaTAD.common, by = "motif_number", all.x = TRUE)
 
+#### Identify the locations of the NLS in the AA & NT MSAs ####
+
+locations.NLS <- locate.NLS.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
+
+# Export the locations of the NLS
+write_tsv(locations.NLS %>% 
+            dplyr::select(sequence, aa_motif, type, posterior_prob, start_ungapped, end_ungapped, 
+                          start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
+                          start_nt_gapped, end_nt_gapped),
+          "figure/locations.NLS.tsv")
+
+# We need to combine the full set of structure locations into an overlapping set
+# to be plotted in a single row. Keep those that overlap in >=5 species
+ranges.NLS.common <- merge(find.common.aa.overlaps(locations.NLS), 
+                           find.common.nt.overlaps(locations.NLS), 
+                           by = "motif_number")
+
+
+# Annotate the individual NLS with which consensus motif they belong to (0 if none)
 locations.NLS %<>% 
   dplyr::rowwise() %>%
   dplyr::mutate(motif_number = find.matching.range("start", "end", start_gapped, end_gapped, ranges.NLS.common )) %>%
   dplyr::ungroup()
 
-#### Export the residues within each ZF and NLS ####
+#### Export the residues within each ZF ####
 
 # Full ZF motifs
 locations.zf %>%
@@ -328,7 +311,7 @@ locations.zf %>%
   dplyr::arrange(as.integer(Sequence)) %>%
   create.xlsx(., "figure/locations.zf.xlsx", cols.to.fixed.size.font = 2:14)
 
-# Just the ZF contact bases
+#### Export the contact bases  within each ZF ####
 
 zf.contact.bases <- locations.zf %>%
   dplyr::select(Sequence = sequence, motif_number, contact_bases) %>%
@@ -350,7 +333,6 @@ zf.contact.bases.conserved <- locations.zf %>%
   dplyr::slice_head(n=1)
 
 # Create excel file, colouring the contact bases by whether they are conserved
-
 create.contact.base.xlsx <- function(contact.bases){
   wb = xlsx::createWorkbook(type = "xlsx")
   sh = xlsx::createSheet(wb)
@@ -402,7 +384,7 @@ create.contact.base.xlsx <- function(contact.bases){
 }
 create.contact.base.xlsx(zf.contact.bases)
 
-# create.xlsx(zf.contact.bases, "figure/locations.zf.contact_bases.xlsx", cols.to.fixed.size.font = 2:14)
+#### Export the residues within each NLS ####
 
 locations.NLS %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
@@ -470,7 +452,7 @@ extract.superTAD.motifs <- function(locations.9aaTAD){
                        values_from = c(tad.sequence, rc_score), values_fn = ~paste(.x, collapse = ", "),
                        names_glue = "9aaTAD_{tad.label}_{.value}") %>%
     as.data.frame %>%
-    dplyr::mutate(across(`9aaTAD_A_rc_score`:`9aaTAD_F_rc_score`, as.numeric)) %>%
+    dplyr::mutate(across(`9aaTAD_A_rc_score`:`9aaTAD_G_rc_score`, as.numeric)) %>%
     dplyr::rename_with(.fn = function(x) gsub("_tad.sequence", "", x)) %>%
     dplyr::arrange(as.integer(Sequence))
   
@@ -759,12 +741,13 @@ msa.aa.aln.charge <- do.call(rbind, mapply(calc.charge, aa=ALIGNMENTS$aa.combine
                                            SIMPLIFY = FALSE))  %>%
   dplyr::mutate(sequence = factor(sequence, levels = rev(combined.taxa.name.order))) # sort reverse to match tree
 
+n.taxa <- length(combined.taxa.name.order) + 1.5
 charge.plot <- ggplot()+
   geom_raster(data=msa.aa.aln.charge,  aes(x = position_gapped,
                                                    y = sequence,
                                                    fill=charge_smoothed),
               hjust = 0, vjust = 0)+ 
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = 1, limits = c(-1, 1))+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Black", direction = -1, limits = c(-1, 1))+
   labs(fill="Charge (9 site average)")
 charge.plot <- annotate.structure.plot(charge.plot, n.taxa)
 save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 120)
@@ -772,20 +755,31 @@ save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 1
 #### Combine all structure plots ####
 
 # To test spacing and balance
-structure.plot <- (aa.structure.plot) / (hydrophobicity.plot) / (charge.plot) + plot_layout(ncol = 1)
-save.double.width("figure/structure.plot.png", structure.plot, height = 230)
+structure.plot <- (hydrophobicity.plot) / (charge.plot) + plot_layout(ncol = 1)
+save.double.width("figure/Figure_xxxx_combined_structure.plot.png", structure.plot, height = 230)
 
-#### What are the hydrophobic patches in exons 3 and 5 that are not 9aaTADs? ####
+#### What are the hydrophobic patches in exons 2, 3 and 5 that are not 9aaTADs? ####
+
+exon2.patch.start <- mouse.exons$start_aa[2]+95
+exon2.patch.end   <- mouse.exons$start_aa[2]+118
+exon2.patch <- msa.aa.aln.hydrophobicity %>%
+  dplyr::filter(position_gapped>exon2.patch.start & position_gapped<exon2.patch.end)
+
+exon2.patch.table <- do.call(rbind, 
+                             lapply(METADATA$combined$common.name,  
+                                    \(i) list("Sequence" = i, 
+                                              as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon2.patch.start:exon2.patch.end])))) %>%
+  as.data.frame %>%
+  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+  dplyr::arrange(as.integer(Sequence)) 
+colnames(exon2.patch.table) <- c("Sequence", paste0("exon_2_",exon2.patch.start,"-", 
+                                                    exon2.patch.end))
+
+
 exon3.patch.start <- mouse.exons$start_aa[3]+25
 exon3.patch.end   <- mouse.exons$end_aa[3]
 exon3.patch <- msa.aa.aln.hydrophobicity %>%
   dplyr::filter(position_gapped>exon3.patch.start & position_gapped<exon3.patch.end)
-
-exon3.hydro.plot <- ggplot()+
-  geom_tile(data=exon3.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
-  labs(fill="Hydrophobicity (9 site average)")
-save.double.width(filename = "figure/hydrophobic.patch.exon.3.png", exon3.hydro.plot)
 
 # Get the region from the msa
 
@@ -799,15 +793,10 @@ exon3.patch.table <- do.call(rbind,
 colnames(exon3.patch.table) <- c("Sequence", paste0("exon_3_",exon3.patch.start,"-", 
                                                     exon3.patch.end))
 
-exon5.patch.start <- mouse.exons$start_aa[5]+39
+exon5.patch.start <- mouse.exons$start_aa[5]+28
 exon5.patch.end   <- mouse.exons$end_aa[5]+1
 exon5.patch <- msa.aa.aln.hydrophobicity %>%
   dplyr::filter(position_gapped>exon5.patch.start & position_gapped<exon5.patch.end)
-exon5.hydro.plot <- ggplot()+
-  geom_tile(data=exon5.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity_smoothed))+
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
-  labs(fill="Hydrophobicity (9 site average)")
-save.double.width(filename = "figure/hydrophobic.patch.exon.5.png", exon5.hydro.plot)
 
 exon5.patch.table <- do.call(rbind, lapply(METADATA$combined$common.name,  
                                            \(i) list("Sequence" = i,
@@ -818,26 +807,78 @@ exon5.patch.table <- do.call(rbind, lapply(METADATA$combined$common.name,
 colnames(exon5.patch.table)<-c("Sequence", paste0("exon_5_",exon5.patch.start,"-", 
                                                   exon5.patch.end))
 
-exon.patch.table <- merge(exon3.patch.table, exon5.patch.table, by=c("Sequence")) %>%
-  create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:3)
+exon.patch.table <- merge(exon2.patch.table, exon3.patch.table, by=c("Sequence")) %>%
+  merge(., exon5.patch.table, by=c("Sequence")) %>%
+  create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:4)
 
-# Get consensus strings for the two patches
+
+
+
+
+# Get consensus strings for the patches
 # Note Biostrings::consensusString will fail if there are non-standard / ambiguity characters
 try({
   # Get the consensus matrix and find the most frequent value per site
-  exon.3.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,exon3.patch.start:exon3.patch.end], 
+  exon.2.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon2.patch.start+1):(exon2.patch.end-1)], 
                                                2, 
                                                \(x) names(which(x==max(x))))), 
                                   collapse = "")
   
-  exon.5.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,exon5.patch.start:exon5.patch.end], 
+  exon.3.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon3.patch.start+1):(exon3.patch.end-1)], 
                                                2, 
                                                \(x) names(which(x==max(x))))), 
                                   collapse = "")
   
+  exon.5.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon5.patch.start+1):(exon5.patch.end-1)], 
+                                               2, 
+                                               \(x) names(which(x==max(x))))), 
+                                  collapse = "")
+  
+  cat("Exon 2 patch consensus: ", exon.2.patch.consensus, "\n")
   cat("Exon 3 patch consensus: ", exon.3.patch.consensus, "\n")
   cat("Exon 5 patch consensus: ", exon.5.patch.consensus, "\n")
 })
+
+exon2.hydro.plot <- ggplot()+
+  geom_tile(data=exon2.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
+  geom_text(data = exon2.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
+  labs(fill="Hydrophobicity (per residue)")+
+  coord_cartesian(xlim = c(exon2.patch.start,exon2.patch.end),  ylim = c(0, 63), clip = 'off')+
+  annotate("text", label=s2c(exon.2.patch.consensus), size=2, x=(exon2.patch.start+1):(exon2.patch.end-1), 
+           y=64.2, hjust=0.5, family="mono", fontface="bold")
+
+exon3.hydro.plot <- ggplot()+
+  geom_tile(data=exon3.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
+  geom_text(data = exon3.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
+  labs(fill="Hydrophobicity (per residue)")+
+  coord_cartesian(xlim = c(exon3.patch.start,exon3.patch.end),  ylim = c(0, 63), clip = 'off')+
+  annotate("text", label=s2c(exon.3.patch.consensus), size=2, x=(exon3.patch.start+1):(exon3.patch.end-1), 
+           y=64.2, hjust=0.5, family="mono", fontface="bold")
+# save.double.width(filename = "figure/hydrophobic.patch.exon.3.png", exon3.hydro.plot)
+exon5.hydro.plot <- ggplot()+
+  geom_tile(data=exon5.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
+  geom_text(data = exon5.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
+  labs(fill="Hydrophobicity (per residue)")+
+  coord_cartesian(xlim = c(exon5.patch.start,exon5.patch.end),  ylim = c(0, 63), clip = 'off')+
+  annotate("text", label=s2c(exon.5.patch.consensus), size=2, x=(exon5.patch.start+1):(exon5.patch.end-1), 
+           y=64.2, hjust=0.5, family="mono", fontface="bold")
+# save.double.width(filename = "figure/hydrophobic.patch.exon.5.png", exon5.hydro.plot)
+
+
+# Collect the plots
+
+patch.plot.complete <- exon2.hydro.plot + exon3.hydro.plot + exon5.hydro.plot +
+  plot_layout(nrow=1, guides = "collect", axes = "collect") &
+  theme_bw()+
+  theme(legend.position = "top",
+        axis.text = element_text(size=6),
+        axis.title = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=8))
+save.double.width(filename = "figure/hydrophobic.patch.all.png", patch.plot.complete)
 
 
 

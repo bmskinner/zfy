@@ -187,7 +187,7 @@ find.common.nt.9aaTADs <- function(locations.9aaTAD, rc.threshold = 80, coverage
     dplyr::filter(!is.na(start_nt_gapped) & !is.na(end_nt_gapped))
   
   # We only want to use the high confidence 9aaTADs, and ignore the site in exon 7
-  tads.filtered <- locations.9aaTAD[locations.9aaTAD$rc_score>=rc.threshold & locations.9aaTAD$end_nt_gapped < mouse.exons$start[7],]
+  tads.filtered <- locations.9aaTAD[locations.9aaTAD$rc_score>=rc.threshold & locations.9aaTAD$end_nt_gapped < mouse.exons$start_nt[7],]
   
   # Make ranges from all of the TADs with >80% RC
   tad.ranges <- IRanges(start = tads.filtered$start_nt_gapped, end = tads.filtered$end_nt_gapped, names = tads.filtered$sequence)

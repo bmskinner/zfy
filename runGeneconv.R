@@ -7,8 +7,6 @@ filesstrings::dir.remove("aln/zfy_only")
 filesstrings::create_dir("aln/zfx_only")
 filesstrings::create_dir("aln/zfy_only")
 
-prepare.fas.files()
-
 ALIGNMENTS <- read.alignments()
 
 

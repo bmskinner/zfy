@@ -7,7 +7,22 @@ OUT.TREE.COLOUR <- "#303030"
 TAD.COLOUR      <- "#00366C" # fill color max from "grDevices::Blues 3"
 NLS.COLOUR      <- "#3CB22D"  #60CC52 #2CA02C
 ZF.COLOUR       <- "grey"
-  
+
+# Common file paths
+FILES <- list(
+  mammal.nt.fas = "fasta/mammal.nt.fas",
+  combined.nt.fas = "fasta/combined.nt.fas",
+  combined.nt.aln = "aln/combined/combined.nt.aln",
+  combined.aa.fas = "fasta/combined.aa.fas",
+  combined.aa.aln = "aln/combined/combined.aa.aln",
+  mammal.nt.aln = "aln/mammal/mammal.nt.aln",
+  mammal.aa.aln = "aln/mammal/mammal.aa.aln",
+  mammal.nt.aln.treefile = "aln/mammal/mammal.nt.aln.treefile",
+  combined.nt.aln.treefile = "aln/combined/combined.nt.aln.treefile",
+  combined.aa.aln.treefile = "aln/combined/combined.aa.aln.treefile",
+  paml.branch.site.output = "paml/branch-site/zfy.branch-site.positive.sites.txt"
+)
+
 # Load all R packages installing if needed
 load.packages <- function(){
   
@@ -51,23 +66,6 @@ load.packages <- function(){
 }
 load.packages() # load on source
 
-# Set common file paths
-set.file.paths <-function(){
-  files <- list() # common file paths
-  files$mammal.nt.fas <- "fasta/mammal.nt.fas"
-  files$combined.nt.fas <- "fasta/combined.nt.fas"
-  files$combined.aa.fas <- "fasta/combined.aa.fas"
-  files$combined.aa.aln <- "aln/combined/combined.aa.aln"
-  files$mammal.nt.aln <- "aln/mammal/mammal.nt.aln"
-  files$mammal.aa.aln <- "aln/mammal/mammal.aa.aln"
-  files$mammal.nt.aln.treefile <- paste0(files$mammal.nt.aln, ".treefile")
-  files$combined.aa.aln.treefile <- paste0(files$combined.aa.aln, ".treefile")
-  files$paml.branch.site.output <- "paml/branch-site/zfy.branch-site.positive.sites.txt"
-  files
-}
-
-FILES <- set.file.paths()
-
 # Read source FASTA files, combine to single .fas and translate
 # to protein. Read metadata
 prepare.fas.files <- function(){
@@ -82,8 +80,8 @@ prepare.fas.files <- function(){
   fa.read  <- lapply(fa.files, read.fasta)
   nt.raw   <- read.sequences(fa.read)
   
-  METADATA <<- list()
-  METADATA$mammal <<- read.metadata(fa.read) %>%
+  metadata <- list()
+  metadata$mammal <- read.metadata(fa.read) %>%
     dplyr::mutate(Species_common_name = str_replace(common.name, "_Z[F|f][X|x].*", ""),
                   Species_common_name = str_replace(Species_common_name, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", ""))
   
@@ -98,12 +96,12 @@ prepare.fas.files <- function(){
   
   outgroup.fa.read  <- lapply(outgroup.nt.files, read.fasta)
   outgroup.nt.raw   <- read.sequences(outgroup.fa.read)
-  METADATA$outgroup <<-  read.metadata(outgroup.fa.read) %>%
+  metadata$outgroup <-  read.metadata(outgroup.fa.read) %>%
     dplyr::mutate(Species_common_name = str_replace(common.name, "_Z[F|f][X|x].*", ""),
                   Species_common_name = str_replace(Species_common_name, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", ""))
   
   # Combine the outgroups with the mammals
-  METADATA$combined <<- rbind(METADATA$mammal, METADATA$outgroup)
+  metadata$combined <- rbind(METADATA$mammal, METADATA$outgroup)
   
   # Write the unaligned combined fasta to file with .fas extension
   combined.nt.raw <- c(outgroup.nt.raw, nt.raw) # all sequences
@@ -113,21 +111,31 @@ prepare.fas.files <- function(){
   ape::write.FASTA(combined.aa.raw, file = FILES$combined.aa.fas)
   
   # Create supplementary table with all accessions and sequence info
-  METADATA$combined %>%
+  metadata$combined %>%
     dplyr::rename(Accession = accession, Species = species, Group = group,
                   Name_in_figures = common.name,Description = original.name  ) %>%
     dplyr::select(Accession,Species,Group,  Name_in_figures, Description ) %>%
     create.xlsx(., "figure/accessions.supplement.xlsx")
+  
+  metadata
 }
+#### Generate combined FA files for alignment #####
+METADATA <- prepare.fas.files() # run on source
 
+# Read all alignments and return as a list
 read.alignments <- function(){
-  alignments <- list()
-  alignments$aa.combined.ape <- ape::read.FASTA(FILES$combined.aa.aln, type="AA")
-  # Read in Biostrings format for exon detection also
-  alignments$aa.combined.biostrings <- Biostrings::readAAMultipleAlignment(FILES$combined.aa.aln, format="fasta")
-  alignments$nt.mammal.ape <- ape::read.FASTA(FILES$mammal.nt.aln)
-  alignments$nt.mammal.biostrings <- Biostrings::readDNAMultipleAlignment(FILES$mammal.nt.aln, format="fasta")
-  alignments
+  list(
+    aa.combined.ape = ape::read.FASTA(FILES$combined.aa.aln, type="AA"),
+    # Read in Biostrings format for exon detection also
+    aa.combined.biostrings = Biostrings::readAAMultipleAlignment(FILES$combined.aa.aln, format="fasta"),
+    
+    nt.combined.ape = ape::read.FASTA(FILES$combined.nt.aln, type="DNA"),
+    # Read in Biostrings format for exon detection also
+    nt.combined.biostrings = Biostrings::readAAMultipleAlignment(FILES$combined.nt.aln, format="fasta"),
+    
+    nt.mammal.ape = ape::read.FASTA(FILES$mammal.nt.aln),
+    nt.mammal.biostrings = Biostrings::readDNAMultipleAlignment(FILES$mammal.nt.aln, format="fasta")
+  )
 }
 
 # Read the given FASTA file and extract metadata
@@ -197,14 +205,18 @@ convert.to.gapped.coordinate <- function(site.no.gap, gapped.seq){
 
 # Exon by exon coordinates of the alignment will be needed for clear
 # testing of selection. Match these in the final alignment via mouse Zfy1
-# biostrings.nt.alignment - an MSA from Biostrings::readDNAMultipleAlignment
-# biostrings.aa.alignment - an MSA from Biostrings::readAAMultipleAlignment
-find.exons <- function(biostrings.nt.alignment, biostrings.aa.alignment){
+find.exons <- function(){
   
-  mouse.zfy1.nt <- as.character(biostrings.nt.alignment@unmasked$Mouse_Zfy1)
+  # Mammal only NT alignment
+  mouse.zfy1.nt <- as.character(ALIGNMENTS$nt.mammal.biostrings@unmasked$Mouse_Zfy1)
   mouse.zfy1.nt.ungapped <- str_remove_all(mouse.zfy1.nt, "-|\\*")
   
-  mouse.zfy1.aa <- as.character(biostrings.aa.alignment@unmasked$Mouse_Zfy1)
+  # Combined NT alignment
+  mouse.zfy1.nt.combined <- as.character(ALIGNMENTS$nt.combined.biostrings@unmasked$Mouse_Zfy1)
+  mouse.zfy1.nt.combined.ungapped <- str_remove_all(mouse.zfy1.nt.combined, "-|\\*")
+  
+  # Combined AA alignment
+  mouse.zfy1.aa <- as.character(ALIGNMENTS$aa.combined.biostrings@unmasked$Mouse_Zfy1)
   mouse.zfy1.aa.ungapped <- str_remove_all(mouse.zfy1.aa, "-|\\*")
   
   mouse.exons <- data.frame("exon"     = c("1", "2", "3",  "4", "5", "6",  "7"),
@@ -220,32 +232,37 @@ find.exons <- function(biostrings.nt.alignment, biostrings.aa.alignment){
   start.nt <- sapply(mouse.exons$start_nt, str_locate, string=mouse.zfy1.nt.ungapped)[1,]
   end.nt   <- sapply(mouse.exons$end_nt,   str_locate, string=mouse.zfy1.nt.ungapped)[2,]
   
+  start.nt.combined <- sapply(mouse.exons$start_nt, str_locate, string=mouse.zfy1.nt.combined.ungapped)[1,]
+  end.nt.combined   <- sapply(mouse.exons$end_nt,   str_locate, string=mouse.zfy1.nt.combined.ungapped)[2,]
+  
   start.aa <- sapply(mouse.exons$start_aa, str_locate, string=mouse.zfy1.aa.ungapped)[1,]
   end.aa   <- sapply(mouse.exons$end_aa,   str_locate, string=mouse.zfy1.aa.ungapped)[2,]
   
   # Note that the aa and nt positions are not from equivalent alignments!
   # NT is from mammals, AA is from mammals + outgroups
   data <- data.frame("exon"     = mouse.exons$exon,
-             "start"    = sapply(start.nt, convert.to.gapped.coordinate, mouse.zfy1.nt),
-             "end"      = sapply(end.nt,   convert.to.gapped.coordinate, mouse.zfy1.nt),
-             "start_aa" = sapply(start.aa, convert.to.gapped.coordinate, mouse.zfy1.aa),
-             "end_aa"   = sapply(end.aa,   convert.to.gapped.coordinate, mouse.zfy1.aa),
-             "is_even"  = sapply(mouse.exons$exon, function(i) as.numeric(i)%%2==0)) %>%
+                     "start_nt"    = sapply(start.nt, convert.to.gapped.coordinate, mouse.zfy1.nt),
+                     "end_nt"      = sapply(end.nt,   convert.to.gapped.coordinate, mouse.zfy1.nt),
+                     "start_nt_combined"    = sapply(start.nt.combined, convert.to.gapped.coordinate, mouse.zfy1.nt),
+                     "end_nt_combined"      = sapply(end.nt.combined,   convert.to.gapped.coordinate, mouse.zfy1.nt),
+                     "start_aa" = sapply(start.aa, convert.to.gapped.coordinate, mouse.zfy1.aa),
+                     "end_aa"   = sapply(end.aa,   convert.to.gapped.coordinate, mouse.zfy1.aa),
+                     "is_even"  = sapply(mouse.exons$exon, function(i) as.numeric(i)%%2==0)) %>%
     dplyr::mutate(
-                  # Correct for gaps in the alignment affecting exon boundaries
-                  # Extend the next exon to start at the end of the current
-                  start = ifelse(lag(end)+1!=start & !is.na(lag(end)), lag(end)+1, start),
+      # Correct for gaps in the alignment affecting exon boundaries
+      # Extend the next exon to start at the end of the current
+      start_nt = ifelse(lag(end_nt)+1!=start_nt & !is.na(lag(end_nt)), lag(end_nt)+1, start_nt),
       
-                  length_nt = end - start + 1,
-                  length_aa = end_aa - start_aa + 1,
-                  # fix the offsets to get ORF of each exon
-                  start_nt_codon_offset = case_when(exon==1 ~ start, # hardcode the codon offsets for subsetting
-                                                    exon>=2 ~ start-1),
-                  end_nt_codon_offset   = case_when(exon<7 ~ end-1,
-                                                    exon==7 ~ end),
-                  corrected_offset_length = (end_nt_codon_offset - start_nt_codon_offset +1)%%3) %>%
+      length_nt = end_nt - start_nt + 1,
+      length_aa = end_aa - start_aa + 1,
+      # fix the offsets to get ORF of each exon
+      start_nt_codon_offset = case_when(exon==1 ~ start_nt, # hardcode the codon offsets for subsetting
+                                        exon>=2 ~ start_nt-1),
+      end_nt_codon_offset   = case_when(exon<7 ~ end_nt-1,
+                                        exon==7 ~ end_nt),
+      corrected_offset_length = (end_nt_codon_offset - start_nt_codon_offset +1)%%3) %>%
     dplyr::rowwise() %>%
-    dplyr::mutate(exon_orf = subset.sequence(biostrings.nt.alignment, "Mouse_Zfy1", start_nt_codon_offset, end_nt_codon_offset),
+    dplyr::mutate(exon_orf = subset.sequence(ALIGNMENTS$nt.combined.biostrings, "Mouse_Zfy1", start_nt_codon_offset, end_nt_codon_offset),
                   exon_orf_length = nchar(exon_orf),
                   exon_orf_triplet = exon_orf_length/3) # check divisible by 3
   
@@ -493,10 +510,10 @@ locate.zfs.in.alignment <- function(taxa.order){
     stop("Missing hmmsearch output, cannot find ZFs")
   }
   zf.data <- read_table("aln/pwm/combined.aa.hmm.dom.txt", comment = "#",
-             col_names = FALSE)
+                        col_names = FALSE)
   zf.data <- zf.data[,c(1, 20, 21)]
   colnames(zf.data) <- c("sequence", "start_ungapped", "end_ungapped")
-
+  
   # Find ZFs in each aa sequence, then find the gapped coordinates in the nt alignment
   do.call(rbind, mapply(find.zf, 
                         sequence.name = zf.data$sequence, 
@@ -510,21 +527,53 @@ locate.zfs.in.alignment <- function(taxa.order){
     dplyr::mutate(i = as.integer(sequence)) %>%  # Set the row indexes for plotting
     
     # Add the gapped nt alignment coordinates for nt sequences
-    dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(ALIGNMENTS$nt.mammal.biostrings@unmasked), # we have the nt alignment
-                                            convert.to.gapped.coordinate(start_nt_ungapped,  ALIGNMENTS$nt.mammal.biostrings@unmasked[[sequence]]),
+    dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(ALIGNMENTS$nt.combined.biostrings@unmasked), # we have the nt alignment
+                                            convert.to.gapped.coordinate(start_nt_ungapped,  ALIGNMENTS$nt.combined.biostrings@unmasked[[sequence]]),
                                             NA),
-                  end_nt_gapped = ifelse( sequence %in% names(ALIGNMENTS$nt.mammal.biostrings@unmasked), # we have the nt alignment
-                                          convert.to.gapped.coordinate(end_nt_ungapped,  ALIGNMENTS$nt.mammal.biostrings@unmasked[[sequence]]),
+                  end_nt_gapped = ifelse( sequence %in% names(ALIGNMENTS$nt.combined.biostrings@unmasked), # we have the nt alignment
+                                          convert.to.gapped.coordinate(end_nt_ungapped,  ALIGNMENTS$nt.combined.biostrings@unmasked[[sequence]]),
                                           NA)) %>%
     # Add the AA sequence covered by the ZF and motifs
-    dplyr::mutate(aa_motif = gsub("-", "", ALIGNMENTS$aa.combined.biostrings@unmasked[[sequence]][start_gapped:end_gapped]),
-                                                                             # 6    32  -1
+    dplyr::mutate(aa_motif_gapped = as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[sequence]][start_gapped:end_gapped]),
+                  aa_motif = gsub("-", "", aa_motif_gapped),
+                  # 6    32  -1
                   # find the contact motif within the ZF (if available) .*H.{3}H(.)..(..).(.).{5}C..C.*
                   # via https://genomebiology.biomedcentral.com/articles/10.1186/s13059-017-1287-y
                   # but reverse to match our sequences : C..C.{5}(.).(..)..(.)H.{3,4}.H
                   contact_bases = paste(str_match(aa_motif, "C..C.....(.).(..)..(.)H.{3,4}")[,2:4], collapse = "" ),
                   contact_bases = ifelse(contact_bases=="NANANA", NA, contact_bases) # clean up NAs
-                  )
+                  
+                  # Find where the contact bases motif starts with respect to the start position of the ZF already identified
+                  # contact_bases_start = str_locate(aa_motif, "C..C.....(.).(..)..(.)H.{3,4}")[,1],
+                  # contact_base_ungapped_start = start_nt_ungapped-contact_bases_start+1,
+                  # 
+                  # # Get the nt motif in the ungapped alignment
+                  # nt_seq = gsub("-", "", ALIGNMENTS$nt.combined.biostrings@unmasked[[sequence]]),
+                  # nt_motif = substr(nt_seq, contact_base_ungapped_start, end_nt_ungapped),
+                  # nt_motif_vec = ifelse(is.na(contact_bases), NA, 
+                  #                       list(s2c(nt_motif))),
+                  # nt_motif_tr = ifelse(is.na(contact_bases), NA, 
+                  #                      paste(seqinr::translate(nt_motif_vec), collapse = "")),
+                  # motif_ok = nt_motif_tr==aa_motif
+                  # 
+                  # # Find the coordinate of the contact bases in the ungapped nt alignment
+                  # contact_base_1 = ifelse(is.na(contact_bases), 
+                  #                         NA, contact_base_start+31), # 12aa from start
+                  # contact_base_1_l = ifelse(is.na(contact_bases), 
+                  #                            NA,  substr(nt_seq, contact_base_1, contact_base_1+2)),
+                  # contact_base_23 = ifelse(is.na(contact_bases), 
+                  #                         NA, contact_base_start+37), # 14+15aa from start
+                  # contact_base_23_l = ifelse(is.na(contact_bases), 
+                  #                           NA,  substr(nt_seq, contact_base_23, contact_base_23+5)),
+                  # contact_base_4 = ifelse(is.na(contact_bases), 
+                  #                         NA, contact_base_start+49), # 18aa from start
+                  # contact_base_4_l = ifelse(is.na(contact_bases), 
+                  #                           NA,  substr(nt_seq, contact_base_4, contact_base_4+2)),
+                  # contact_base_nt = paste0(contact_base_1_l, contact_base_23_l, contact_base_4_l),
+                  # contact_nt_tr = paste(seqinr::translate(s2c(contact_base_nt)), collapse = ""),
+                  # contact_motif_ok = contact_nt_tr==contact_bases
+                  
+    )
 }
 
 # Identify 9aaTADs and group overlapping TADS above a given rc threshold into 'superTADs'
@@ -715,4 +764,33 @@ calculate.conservation <-function(aa.aln, outgroup.name){
     # Perform smoothing over aa moving windows
     dplyr::mutate(smoothed9 = slider::slide_dbl(fraction, mean, .before=4, .after = 4),
                   smoothed5 = slider::slide_dbl(fraction, mean, .before=2, .after = 2))
+}
+
+find.common.aa.overlaps <- function(locations.data){
+  ranges.9aaTAD <- IRanges(start=locations.data$start_gapped, end = locations.data$end_gapped, names = locations.data$sequence)
+  ranges.9aaTAD.reduce <- IRanges::reduce(ranges.9aaTAD)
+  
+  n.sequences.in.range <- sapply(1:length(ranges.9aaTAD.reduce), \(i) length(subsetByOverlaps(ranges.9aaTAD, ranges.9aaTAD.reduce[i,])))
+  as.data.frame(ranges.9aaTAD.reduce[n.sequences.in.range>4,]) %>%
+    dplyr::mutate(motif_number = row_number())
+}
+
+find.common.nt.overlaps <- function(locations.data){
+  locations.data %<>%
+    dplyr::filter(!is.na(start_nt_gapped) & !is.na(end_nt_gapped))
+  
+  ranges.9aaTAD <- IRanges(start=locations.data$start_nt_gapped, end = locations.data$end_nt_gapped, names = locations.data$sequence)
+  ranges.9aaTAD.reduce <- IRanges::reduce(ranges.9aaTAD)
+  
+  n.sequences.in.range <- sapply(1:length(ranges.9aaTAD.reduce), \(i) length(subsetByOverlaps(ranges.9aaTAD, ranges.9aaTAD.reduce[i,])))
+  as.data.frame(ranges.9aaTAD.reduce[n.sequences.in.range>4,]) %>%
+    dplyr::mutate(motif_number = row_number()) %>%
+    dplyr::rename(start_nt = start, end_nt = end, width_nt = width)
+}
+
+
+
+find.matching.range <-function(start.col, end.col, start, end, ranges){
+  hit <- ranges[ranges[[start.col]]<=start & ranges[[end.col]]>=end,]$motif_number
+  if(length(hit)==0) 0 else hit
 }

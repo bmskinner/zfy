@@ -58,18 +58,25 @@ filesstrings::create_dir("paml/exon_7")
 
 writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
 
-#### Read NT FA files #####
-
-prepare.fas.files()
 
 #### Run combined mammal/outgroup AA alignment ####
 
 # Use muscle to align the aa files and save out for iqtree
 # Cluster has muscle 3.8.31 on path., so specify the binary directly
-muscle.path <- ifelse(installr::is.windows(), "bin/muscle5.1.win64.exe", "bin/muscle5.1.linux_intel64")
-if(!file.exists(muscle.path)) stop("Muscle5.1 not present in bin directory")
-system2(muscle.path, paste("-align",  files$combined.aa.fas,
-                           "-output", files$combined.aa.aln))
+# muscle.path <- ifelse(installr::is.windows(), "bin/muscle5.1.win64.exe", "bin/muscle5.1.linux_intel64")
+# if(!file.exists(muscle.path)) stop("Muscle5.1 not present in bin directory")
+# system2(muscle.path, paste("-align",  FILES$combined.aa.fas,
+#                            "-output", FILES$combined.aa.aln))
+
+if(!file.exists("bin/macse_v2.07.jar")) stop("MACSE not present in bin directory")
+
+# Use macse to align the nt files for combined species
+system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
+                      "-seq",    FILES$combined.nt.fas, # input
+                      "-out_NT", FILES$combined.nt.aln,  # output nt alignment
+                      "-out_AA", FILES$combined.aa.aln), # output aa alignment
+        stdout = paste0(FILES$combined.nt.aln, ".macse.log"),  # logs
+        stderr = paste0(FILES$combined.nt.aln, ".macse.log"))  # error logs
 
 #### Run mammal NT alignment guided by AA #####
 
@@ -82,27 +89,27 @@ if(!file.exists("bin/macse_v2.07.jar")) stop("MACSE not present in bin directory
 
 # Run the alignment
 system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
-                      "-seq",    files$mammal.nt.fas, # input
-                      "-out_NT", files$mammal.nt.aln,  # output nt alignment
-                      "-out_AA", files$mammal.aa.aln), # output aa alignment
-        stdout = paste0(files$mammal.nt.aln, ".macse.log"),  # logs
-        stderr = paste0(files$mammal.nt.aln, ".macse.err"))  # error logs
+                      "-seq",    FILES$mammal.nt.fas, # input
+                      "-out_NT", FILES$mammal.nt.aln,  # output nt alignment
+                      "-out_AA", FILES$mammal.aa.aln), # output aa alignment
+        stdout = paste0(FILES$mammal.nt.aln, ".macse.log"),  # logs
+        stderr = paste0(FILES$mammal.nt.aln, ".macse.log"))  # error logs
 
 # Read all alignments in ape and Biostrings formats
-alignments <- read.alignments()
+ALIGNMENTS <- read.alignments()
 
 # Identify the coordinates of the exon boundaries in the gapped alignments
 # Based on the mouse Zfy1 sequence
-mouse.exons <- find.exons(alignments$nt.mammal.biostrings, alignments$aa.combined.biostrings)
+mouse.exons <- find.exons()
 
 #### Create combined mammal/outgroup AA tree ####
 
-system2("iqtree", paste("-s ", files$combined.aa.aln, 
+system2("iqtree", paste("-s ", FILES$combined.aa.aln, 
                         "-bb 1000", # number of bootstrap replicates
                         "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
                         "-nt AUTO"), # number of threads
-        stdout = gsub(".aln$", ".iqtree.log", files$combined.aa.aln), 
-        stderr = gsub(".aln$", ".iqtree.log", files$combined.aa.aln))
+        stdout = gsub(".aln$", ".iqtree.log", FILES$combined.aa.aln), 
+        stderr = gsub(".aln$", ".iqtree.log", FILES$combined.aa.aln))
 
 #### Create mammal CDS NT tree #####
 
@@ -110,21 +117,21 @@ system2("iqtree", paste("-s ", files$combined.aa.aln,
 # Expect iqtree on the PATH.
 # Note model testing is automatically performed in v1.5.4 onwards
 # Note: we can use a partition model if we specify exon coordinates
-system2("iqtree", paste("-s ", files$mammal.nt.aln, 
+system2("iqtree", paste("-s ", FILES$combined.nt.aln, 
                         "-bb 1000", # number of bootstrap replicates
                         "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
                         "-nt AUTO", # number of threads
                         "-asr"), # ancestral sequence reconstruction
-        stdout = gsub(".aln$", ".iqtree.log", files$mammal.nt.aln), 
-        stderr = gsub(".aln$", ".iqtree.log", files$mammal.nt.aln))
+        stdout = gsub(".aln$", ".iqtree.log", FILES$combined.nt.aln), 
+        stderr = gsub(".aln$", ".iqtree.log", FILES$combined.nt.aln))
 
-#### Make mammal exon NT trees ####
+#### Make individual mammal exon NT trees ####
 
 # Aim here is to look for signs of gene conversion in the final exon as per other 
 # papers.
 
 create.exon.alignment <- function(i){
-  exon.aln <- as.matrix(alignments$nt.mammal.ape)[,mouse.exons$start[i]:mouse.exons$end[i]]
+  exon.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt[i]:mouse.exons$end_nt[i]]
   exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
   exon.aln.file <- paste0("aln/exons/exon_", mouse.exons$exon[i], ".aln")
   
@@ -141,7 +148,12 @@ create.exon.alignment <- function(i){
 exon.1.7.plots <- lapply(1:nrow(mouse.exons),create.exon.alignment)
 
 # We also want to look at all except exon 7
-exon.1.6.aln <- as.matrix(alignments$nt.mammal.ape)[,mouse.exons$start[1]:mouse.exons$end[6]]
+
+# exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset[1]:mouse.exons$end_nt_codon_offset[1], 
+#                     mouse.exons$start_nt_codon_offset[3]:mouse.exons$end_nt_codon_offset[6])
+# exon1.3_6.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,exon1.3_6.locs]
+
+exon.1.6.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt[1]:mouse.exons$end_nt[6]]
 exon.1.6.aln.file <- paste0("aln/exons/exon_1-6.aln")
 ape::write.FASTA(exon.1.6.aln, file = exon.1.6.aln.file)
 
@@ -164,15 +176,6 @@ filesstrings::move_files(files = c("fasta/combined.aa.pwm"),
 system2("cat", "aln/pwm/combined.aa.pwm | grep -v ';' | split -l 5 - aln/pwm/zf_")
 #### Fetch divergence times to highlight the rapid evolution in the rodents ####
 
-# Get the NCBI taxon ids for each species
-taxon.data <- lapply(metadata.mammal$species, \(x) httr::GET( paste0("http://timetree.temple.edu/api/taxon/",curl::curl_escape(x)))  ) 
-taxon.ids <- sapply(lapply(taxon.data, httr::content), \(x) x$taxon_id)
-metadata.mammal$taxon_id <- taxon.ids
-
-# Find the pairwise distances between each species
-pairwise.species <- expand.grid(unique(metadata.mammal$taxon_id), unique(metadata.mammal$taxon_id)) %>%
-  dplyr::filter(Var1!=Var2, Var1<Var2) # only call each pair once
-
 get.time.tree <- function(tax.a, tax.b){
   tryCatch({
     tt <- httr::GET(paste0("http://timetree.temple.edu/api/pairwise/",tax.a, "/", tax.b))
@@ -192,23 +195,19 @@ get.time.tree <- function(tax.a, tax.b){
 
 # Save to avoid repeated API calls
 if(!file.exists( "time.tree.data.tsv")){
+  
+  # Get the NCBI taxon ids for each species
+  taxon.data <- lapply(metadata.mammal$species, \(x) httr::GET( paste0("http://timetree.temple.edu/api/taxon/",curl::curl_escape(x)))  ) 
+  taxon.ids <- sapply(lapply(taxon.data, httr::content), \(x) x$taxon_id)
+  metadata.mammal$taxon_id <- taxon.ids
+  
+  # Find the pairwise distances between each species
+  pairwise.species <- expand.grid(unique(metadata.mammal$taxon_id), unique(metadata.mammal$taxon_id)) %>%
+    dplyr::filter(Var1!=Var2, Var1<Var2) # only call each pair once
+  
   pairwise.times <- do.call(rbind, mapply(get.time.tree, pairwise.species$Var1, pairwise.species$Var2))
   write_tsv(pairwise.times, file = "time.tree.data.tsv", col_names = T, quote = "none")
 }
-
-# check the tree is sensible
-# pairwise.times <- read.time.tree.data()
-# Cluster a matrix of times
-# pairwise.time.matrix <- pairwise.times %>%
-#   dplyr::select(scientific_name_a, scientific_name_b, age) %>%
-#   tidyr::pivot_wider(names_from = scientific_name_b, values_from = age,
-#                      names_sort = TRUE
-#                      ) %>%
-#   dplyr::arrange(scientific_name_a) %>%
-#   dplyr::select(-scientific_name_a) %>%
-#   as.matrix()
-# rownames(pairwise.time.matrix) <- colnames(pairwise.time.matrix)
-# plot(hclust(as.dist(pairwise.time.matrix)))
 
 #### Prepare codeml site model to check for site-specific selection ####
 
@@ -221,7 +220,7 @@ if(!file.exists( "time.tree.data.tsv")){
 
 # The treefile created earlier needs node names and branch lengths removing.
 # Set node names to the empty string, and set branch lengths to 1
-labelled.tree <- ape::read.tree(paste0(files$mammal.nt.aln, ".treefile"))
+labelled.tree <- ape::read.tree(paste0(FILES$mammal.nt.aln, ".treefile"))
 labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
 labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
 ape::write.tree(labelled.tree, file = "paml/site-specific/zfxy.nt.aln.paml.treefile")
@@ -233,7 +232,7 @@ labelled.tree <- gsub(":1", "", labelled.tree)
 readr::write_file(labelled.tree, "paml/site-specific/zfxy.nt.aln.paml.treefile")
 
 # This control file tests site models With heterogeneous ω Across Sites
-paml.site.file <- paste0("seqfile   = ../../", files$mammal.nt.aln, " * alignment file\n",
+paml.site.file <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
                          "treefile  = zfxy.nt.aln.paml.treefile * tree in Newick format without nodes\n", # 
                          "outfile   = site.specific.paml.out.txt\n",
                          "\n",
@@ -258,11 +257,11 @@ write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
 
 # To look at the rodent clade, we need a rooted tree
 
-nt.aln.tree <- ape::read.tree(files$mammal.nt.aln.treefile)
+nt.aln.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
 # Root the tree on platypus and resave
 # The root is arbitrarily placed in the platypus branch to fit neatly
 nt.aln.tree <- phytools::reroot(nt.aln.tree, which(nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
-ape::write.tree(nt.aln.tree, file = paste0(files$mammal.nt.aln, ".rooted.treefile"))
+ape::write.tree(nt.aln.tree, file = paste0(FILES$mammal.nt.aln, ".rooted.treefile"))
 
 # Find the nodes that are ZFY vs ZFX and add to tree
 mammal.gene.groups <- split(metadata.mammal$common.name, metadata.mammal$group)
@@ -285,7 +284,7 @@ newick.test <- gsub("_#1", " #1", newick.test) # fg labels
 write_file(newick.test, "paml/branch-site/zfxy.nt.aln.paml.fg.treefile")
 
 # This control file tests site models With heterogeneous ω across Sites
-paml.branch.site.file <- paste0("seqfile   = ../../", files$mammal.nt.aln, " * alignment file\n",
+paml.branch.site.file <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
                                 "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
                                 "outfile   = branch-site.paml.out.txt\n",
                                 "\n",
@@ -339,17 +338,16 @@ ape::write.tree(hyphy.tree, file = "aln/hyphy/mammal.nt.aln.hyphy.treefile")
 
 # create an sh file to submit these
 # HyPhy should be installed in a conda environment
-# This script should be invoked within the conda environment
 hyphy.sh.data <- paste0("#!/bin/bash\n",
                         "source activate hyphy\n",
                         "hyphy relax --alignment paml/exon_1_3-6/exon_1_3-6.aln --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon_1_3-6.relax.json\n",
                         "hyphy relax --alignment paml/exon_2/exon_2.aln --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon_2.relax.json\n",
                         "hyphy relax --alignment paml/exon_7/exon_7.aln --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon_7.relax.json\n",
-                        "hyphy relax --alignment  ", files$mammal.nt.aln, " --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/mammal.relax.json\n"
+                        "hyphy relax --alignment  ", FILES$mammal.nt.aln, " --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/mammal.relax.json\n"
 )
-write_file(hyphy.sh.data, "hyphy.sh")
+write_file(hyphy.sh.data, "run_hyphy.sh")
 
-system2("bash", "hyphy.sh")
+system2("bash", "run_hyphy.sh")
 
 #### Run HyPhy GARD to test for recombination ####
 
