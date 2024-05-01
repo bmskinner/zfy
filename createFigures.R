@@ -758,130 +758,6 @@ save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 1
 structure.plot <- (hydrophobicity.plot) / (charge.plot) + plot_layout(ncol = 1)
 save.double.width("figure/Figure_xxxx_combined_structure.plot.png", structure.plot, height = 230)
 
-#### What are the hydrophobic patches in exons 2, 3 and 5 that are not 9aaTADs? ####
-
-exon2.patch.start <- mouse.exons$start_aa[2]+95
-exon2.patch.end   <- mouse.exons$start_aa[2]+118
-exon2.patch <- msa.aa.aln.hydrophobicity %>%
-  dplyr::filter(position_gapped>exon2.patch.start & position_gapped<exon2.patch.end)
-
-exon2.patch.table <- do.call(rbind, 
-                             lapply(METADATA$combined$common.name,  
-                                    \(i) list("Sequence" = i, 
-                                              as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon2.patch.start:exon2.patch.end])))) %>%
-  as.data.frame %>%
-  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
-  dplyr::arrange(as.integer(Sequence)) 
-colnames(exon2.patch.table) <- c("Sequence", paste0("exon_2_",exon2.patch.start,"-", 
-                                                    exon2.patch.end))
-
-
-exon3.patch.start <- mouse.exons$start_aa[3]+25
-exon3.patch.end   <- mouse.exons$end_aa[3]
-exon3.patch <- msa.aa.aln.hydrophobicity %>%
-  dplyr::filter(position_gapped>exon3.patch.start & position_gapped<exon3.patch.end)
-
-# Get the region from the msa
-
-exon3.patch.table <- do.call(rbind, 
-                             lapply(METADATA$combined$common.name,  
-                                    \(i) list("Sequence" = i, 
-                                              as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
-  as.data.frame %>%
-  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
-  dplyr::arrange(as.integer(Sequence)) 
-colnames(exon3.patch.table) <- c("Sequence", paste0("exon_3_",exon3.patch.start,"-", 
-                                                    exon3.patch.end))
-
-exon5.patch.start <- mouse.exons$start_aa[5]+28
-exon5.patch.end   <- mouse.exons$end_aa[5]+1
-exon5.patch <- msa.aa.aln.hydrophobicity %>%
-  dplyr::filter(position_gapped>exon5.patch.start & position_gapped<exon5.patch.end)
-
-exon5.patch.table <- do.call(rbind, lapply(METADATA$combined$common.name,  
-                                           \(i) list("Sequence" = i,
-                                                     as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
-  as.data.frame %>%
-  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
-  dplyr::arrange(as.integer(Sequence))
-colnames(exon5.patch.table)<-c("Sequence", paste0("exon_5_",exon5.patch.start,"-", 
-                                                  exon5.patch.end))
-
-exon.patch.table <- merge(exon2.patch.table, exon3.patch.table, by=c("Sequence")) %>%
-  merge(., exon5.patch.table, by=c("Sequence")) %>%
-  create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:4)
-
-
-
-
-
-# Get consensus strings for the patches
-# Note Biostrings::consensusString will fail if there are non-standard / ambiguity characters
-try({
-  # Get the consensus matrix and find the most frequent value per site
-  exon.2.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon2.patch.start+1):(exon2.patch.end-1)], 
-                                               2, 
-                                               \(x) names(which(x==max(x))))), 
-                                  collapse = "")
-  
-  exon.3.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon3.patch.start+1):(exon3.patch.end-1)], 
-                                               2, 
-                                               \(x) names(which(x==max(x))))), 
-                                  collapse = "")
-  
-  exon.5.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon5.patch.start+1):(exon5.patch.end-1)], 
-                                               2, 
-                                               \(x) names(which(x==max(x))))), 
-                                  collapse = "")
-  
-  cat("Exon 2 patch consensus: ", exon.2.patch.consensus, "\n")
-  cat("Exon 3 patch consensus: ", exon.3.patch.consensus, "\n")
-  cat("Exon 5 patch consensus: ", exon.5.patch.consensus, "\n")
-})
-
-exon2.hydro.plot <- ggplot()+
-  geom_tile(data=exon2.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
-  geom_text(data = exon2.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
-  labs(fill="Hydrophobicity (per residue)")+
-  coord_cartesian(xlim = c(exon2.patch.start,exon2.patch.end),  ylim = c(0, 63), clip = 'off')+
-  annotate("text", label=s2c(exon.2.patch.consensus), size=2, x=(exon2.patch.start+1):(exon2.patch.end-1), 
-           y=64.2, hjust=0.5, family="mono", fontface="bold")
-
-exon3.hydro.plot <- ggplot()+
-  geom_tile(data=exon3.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
-  geom_text(data = exon3.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
-  labs(fill="Hydrophobicity (per residue)")+
-  coord_cartesian(xlim = c(exon3.patch.start,exon3.patch.end),  ylim = c(0, 63), clip = 'off')+
-  annotate("text", label=s2c(exon.3.patch.consensus), size=2, x=(exon3.patch.start+1):(exon3.patch.end-1), 
-           y=64.2, hjust=0.5, family="mono", fontface="bold")
-# save.double.width(filename = "figure/hydrophobic.patch.exon.3.png", exon3.hydro.plot)
-exon5.hydro.plot <- ggplot()+
-  geom_tile(data=exon5.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
-  geom_text(data = exon5.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
-  labs(fill="Hydrophobicity (per residue)")+
-  coord_cartesian(xlim = c(exon5.patch.start,exon5.patch.end),  ylim = c(0, 63), clip = 'off')+
-  annotate("text", label=s2c(exon.5.patch.consensus), size=2, x=(exon5.patch.start+1):(exon5.patch.end-1), 
-           y=64.2, hjust=0.5, family="mono", fontface="bold")
-# save.double.width(filename = "figure/hydrophobic.patch.exon.5.png", exon5.hydro.plot)
-
-
-# Collect the plots
-
-patch.plot.complete <- exon2.hydro.plot + exon3.hydro.plot + exon5.hydro.plot +
-  plot_layout(nrow=1, guides = "collect", axes = "collect") &
-  theme_bw()+
-  theme(legend.position = "top",
-        axis.text = element_text(size=6),
-        axis.title = element_blank(),
-        legend.text = element_text(size=6),
-        legend.title = element_text(size=8))
-save.double.width(filename = "figure/hydrophobic.patch.all.png", patch.plot.complete)
-
-
-
 #### Plot HyPhy RELAX test for relaxed selection in Muroidea ####
 
 create.relax.k.tree <- function(json.file){
@@ -1160,8 +1036,134 @@ if(file.exists("paml/site-specific/site.specific.paml.out.txt")){
       axis.line.x.bottom = element_line(),
       panel.grid = element_blank())
   
-  save.double.width("figure/positive.sites.filt.png", sites.plot, height = 85)
+  save.double.width("figure/positive.sites.filt.png", sites.plot, height = 35)
 }
+
+#### What are the hydrophobic patches in exons 2, 3 and 5 that are not 9aaTADs? ####
+
+exon2.patch.start <- mouse.exons$start_aa[2]+95
+exon2.patch.end   <- mouse.exons$start_aa[2]+118
+exon2.patch <- msa.aa.aln.hydrophobicity %>%
+  dplyr::filter(position_gapped>exon2.patch.start & position_gapped<exon2.patch.end)
+
+exon2.patch.table <- do.call(rbind, 
+                             lapply(METADATA$combined$common.name,  
+                                    \(i) list("Sequence" = i, 
+                                              as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon2.patch.start:exon2.patch.end])))) %>%
+  as.data.frame %>%
+  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+  dplyr::arrange(as.integer(Sequence)) 
+colnames(exon2.patch.table) <- c("Sequence", paste0("exon_2_",exon2.patch.start,"-", 
+                                                    exon2.patch.end))
+
+
+exon3.patch.start <- mouse.exons$start_aa[3]+25
+exon3.patch.end   <- mouse.exons$end_aa[3]
+exon3.patch <- msa.aa.aln.hydrophobicity %>%
+  dplyr::filter(position_gapped>exon3.patch.start & position_gapped<exon3.patch.end)
+
+# Get the region from the msa
+
+exon3.patch.table <- do.call(rbind, 
+                             lapply(METADATA$combined$common.name,  
+                                    \(i) list("Sequence" = i, 
+                                              as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
+  as.data.frame %>%
+  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+  dplyr::arrange(as.integer(Sequence)) 
+colnames(exon3.patch.table) <- c("Sequence", paste0("exon_3_",exon3.patch.start,"-", 
+                                                    exon3.patch.end))
+
+exon5.patch.start <- mouse.exons$start_aa[5]+28
+exon5.patch.end   <- mouse.exons$end_aa[5]+1
+exon5.patch <- msa.aa.aln.hydrophobicity %>%
+  dplyr::filter(position_gapped>exon5.patch.start & position_gapped<exon5.patch.end)
+
+exon5.patch.table <- do.call(rbind, lapply(METADATA$combined$common.name,  
+                                           \(i) list("Sequence" = i,
+                                                     as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
+  as.data.frame %>%
+  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+  dplyr::arrange(as.integer(Sequence))
+colnames(exon5.patch.table)<-c("Sequence", paste0("exon_5_",exon5.patch.start,"-", 
+                                                  exon5.patch.end))
+
+exon.patch.table <- merge(exon2.patch.table, exon3.patch.table, by=c("Sequence")) %>%
+  merge(., exon5.patch.table, by=c("Sequence")) %>%
+  create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:4)
+
+
+
+
+
+# Get consensus strings for the patches
+# Note Biostrings::consensusString will fail if there are non-standard / ambiguity characters
+try({
+  # Get the consensus matrix and find the most frequent value per site
+  exon.2.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon2.patch.start+1):(exon2.patch.end-1)], 
+                                               2, 
+                                               \(x) names(which(x==max(x))))), 
+                                  collapse = "")
+  
+  exon.3.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon3.patch.start+1):(exon3.patch.end-1)], 
+                                               2, 
+                                               \(x) names(which(x==max(x))))), 
+                                  collapse = "")
+  
+  exon.5.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon5.patch.start+1):(exon5.patch.end-1)], 
+                                               2, 
+                                               \(x) names(which(x==max(x))))), 
+                                  collapse = "")
+  
+  cat("Exon 2 patch consensus: ", exon.2.patch.consensus, "\n")
+  cat("Exon 3 patch consensus: ", exon.3.patch.consensus, "\n")
+  cat("Exon 5 patch consensus: ", exon.5.patch.consensus, "\n")
+})
+
+exon2.hydro.plot <- ggplot()+
+  geom_tile(data=exon2.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
+  geom_text(data = exon2.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
+  geom_tile(data = sites, aes(x = site, y = 65, fill = as.integer(isSelected.0.9)))+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
+  scale_y_discrete(labels = gsub("_", " ", rev(combined.taxa.name.order)))+
+  labs(fill="Hydrophobicity (per residue)")+
+  coord_cartesian(xlim = c(exon2.patch.start,exon2.patch.end),  ylim = c(0, 65), clip = 'on')+
+  annotate("text", label=s2c(exon.2.patch.consensus), size=2, x=(exon2.patch.start+1):(exon2.patch.end-1), 
+           y=64.2, hjust=0.5, family="mono", fontface="bold")
+
+exon3.hydro.plot <- ggplot()+
+  geom_tile(data=exon3.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
+  geom_text(data = exon3.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
+  scale_y_discrete(labels = gsub("_", " ", rev(combined.taxa.name.order)))+
+  labs(fill="Hydrophobicity (per residue)")+
+  coord_cartesian(xlim = c(exon3.patch.start,exon3.patch.end),  ylim = c(0, 63), clip = 'off')+
+  annotate("text", label=s2c(exon.3.patch.consensus), size=2, x=(exon3.patch.start+1):(exon3.patch.end-1), 
+           y=64.2, hjust=0.5, family="mono", fontface="bold")
+
+exon5.hydro.plot <- ggplot()+
+  geom_tile(data=exon5.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
+  geom_text(data = exon5.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
+  scale_y_discrete(labels = gsub("_", " ", rev(combined.taxa.name.order)))+
+  labs(fill="Hydrophobicity (per residue)")+
+  coord_cartesian(xlim = c(exon5.patch.start,exon5.patch.end),  ylim = c(0, 63), clip = 'off')+
+  annotate("text", label=s2c(exon.5.patch.consensus), size=2, x=(exon5.patch.start+1):(exon5.patch.end-1), 
+           y=64.2, hjust=0.5, family="mono", fontface="bold")
+
+# Collect the plots
+
+patch.plot.complete <- exon2.hydro.plot + exon3.hydro.plot + exon5.hydro.plot +
+  plot_layout(nrow=1, guides = "collect", axes = "collect") &
+  theme_bw()+
+  theme(legend.position = "top",
+        axis.text = element_text(size=6),
+        axis.title = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=8))
+save.double.width(filename = "figure/hydrophobic.patch.all.png", patch.plot.complete)
+
+
 
 #### Tar the outputs ####
 system2("tar", "czf figure.tar.gz figure")
