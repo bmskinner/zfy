@@ -51,7 +51,6 @@ filesstrings::create_dir("bin")
 filesstrings::create_dir("figure")
 filesstrings::create_dir("paml")
 filesstrings::create_dir("paml/site-specific")
-filesstrings::create_dir("paml/branch-site")
 filesstrings::create_dir("paml/exon_1_3-6")
 filesstrings::create_dir("paml/exon_2")
 filesstrings::create_dir("paml/exon_7")
@@ -266,44 +265,103 @@ ape::write.tree(nt.aln.tree, file = paste0(FILES$mammal.nt.aln, ".rooted.treefil
 # Find the nodes that are ZFY vs ZFX and add to tree
 mammal.gene.groups <- split(metadata.mammal$common.name, metadata.mammal$group)
 nt.aln.tree <- tidytree::groupOTU(nt.aln.tree, mammal.gene.groups, group_name = "group")
+
+
+
+# Label the given node and its children and save to the given files
+# Creates null model and test model directories
+write.paml.fg.tree <- function(fg.node, dir.base){
+  filesstrings::create_dir(dir.base)
+  filesstrings::create_dir(paste0(dir.base, "-null"))
+  # Remove existing node labels, label the nodes and tips of the tree with #1
+  # for foreground branches
+  labelled.tree <- nt.aln.tree
+  labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
+  labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
+  labelled.tree <- treeio::label_branch_paml(labelled.tree, fg.node, "#1")
+  
+  tree.file <- paste0(dir.base, "/tree.treefile")
+  tree.file.null <- paste0(dir.base, "-null/tree.treefile")
+  fg.tree.file <- paste0(dir.base, "/tree.fg.treefile")
+  fg.tree.file.null <- paste0(dir.base, "-null/tree.fg.treefile")
+  control.file <- paste0(dir.base, "/paml.ctl")
+  control.file.null <- paste0(dir.base, "-null/paml.ctl")
+  
+  ape::write.tree(labelled.tree, file = tree.file)
+  ape::write.tree(labelled.tree, file = tree.file.null)
+  
+  # Then remove the branch lengths, separate the labels from taxon names and resave
+  newick.test <- read_file(tree.file)
+  newick.test <- gsub(":1", "", newick.test) # branch lengths we set to 1
+  newick.test <- gsub("_#1", " #1", newick.test) # fg labels
+  write_file(newick.test, fg.tree.file)
+  write_file(newick.test, fg.tree.file.null)
+  
+  # Create control files for the test and null codeml
+  # This control file tests site models With heterogeneous ω across Sites
+  paml.branch.site.file <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
+                                  "treefile  = tree.fg.treefile * tree in Newick format without nodes\n", # 
+                                  "outfile   = paml.out.txt\n",
+                                  "\n",
+                                  "noisy     = 3 * on screen logging\n",
+                                  "verbose   = 1 * detailed output in file\n",
+                                  "\n",
+                                  "seqtype   = 1 * codon data\n",
+                                  "ndata     = 1 * one gene alignment\n",
+                                  "icode     = 0 * universal genetic code\n",
+                                  "cleandata = 0 * keep sites with ambiguity data\n",
+                                  "\n",
+                                  "model     = 2 * 2 ω values across branches\n",
+                                  "NSsites   = 2 * Model M2a\n",
+                                  "CodonFreq = 7 * use mutation selection model\n",
+                                  "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                                  "clock     = 0 * assume no clock\n",
+                                  "fix_omega = 0 * enables option to estimate omega\n",
+                                  "omega     = 0.5 * initial omega value\n")
+  write_file(paml.branch.site.file, control.file.null)
+  
+  # Prepare codeml branch-site null model to look for selection specifically in Muroidea
+  # This control file tests null branch site model With fixed ω across sites
+  paml.branch.site.null.file <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
+                                       "treefile  = tree.fg.treefile * tree in Newick format without nodes\n", # 
+                                       "outfile   = paml.out.txt\n",
+                                       "\n",
+                                       "noisy     = 3 * on screen logging\n",
+                                       "verbose   = 1 * detailed output in file\n",
+                                       "\n",
+                                       "seqtype   = 1 * codon data\n",
+                                       "ndata     = 1 * one gene alignment\n",
+                                       "icode     = 0 * universal genetic code\n",
+                                       "cleandata = 0 * keep sites with ambiguity data\n",
+                                       "\n",
+                                       "model     = 2 * 2 ω values across branches\n",
+                                       "NSsites   = 2 * Model M2a\n",
+                                       "CodonFreq = 7 * use mutation selection model\n",
+                                       "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                                       "clock     = 0 * assume no clock\n",
+                                       "fix_omega = 1 * The value of ω2 for foreground branches will be fixed\n",
+                                       "omega     = 1 * The fixed value will be ω2 = 1\n")
+  write_file(paml.branch.site.null.file, "paml/branch-site-null/zfy.branch-site.null.paml.ctl")
+
+}
+
+rodentia.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Gray_squirrel_Zfy"))
+write.paml.fg.tree(rodentia.node, 
+                   "paml/branch-site-rodentia")
+
 # Find the MRCA of the rodents with rapid ZFY evolution
-rodent.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Desert_hamster_Zfx-like_putative-Zfy"))
+eumuroida.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Desert_hamster_Zfx-like_putative-Zfy"))
+# Create labelled tree for rodent node
+write.paml.fg.tree(eumuroida.node, 
+                   "paml/branch-site-eumuroida")
 
-# Remove existing node labels, label the nodes and tips of the tree with #1
-# for foreground branches
-labelled.tree <- nt.aln.tree
-labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
-labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
-labelled.tree <- treeio::label_branch_paml(labelled.tree, rodent.node, "#1")
-ape::write.tree(labelled.tree, file = "paml/branch-site/zfxy.nt.aln.paml.treefile")
+muridae.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Mongolian_gerbil_Zfx-like_putative-Zfy"))
+write.paml.fg.tree(muridae.node, 
+                   "paml/branch-site-muridae")
 
-# Then remove the branch lengths, separate the labels from taxon names and resave
-newick.test <- read_file("paml/branch-site/zfxy.nt.aln.paml.treefile")
-newick.test <- gsub(":1", "", newick.test) # branch lengths we set to 1
-newick.test <- gsub("_#1", " #1", newick.test) # fg labels
-write_file(newick.test, "paml/branch-site/zfxy.nt.aln.paml.fg.treefile")
-
-# This control file tests site models With heterogeneous ω across Sites
-paml.branch.site.file <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
-                                "treefile  = zfxy.nt.aln.paml.fg.treefile * tree in Newick format without nodes\n", # 
-                                "outfile   = branch-site.paml.out.txt\n",
-                                "\n",
-                                "noisy     = 3 * on screen logging\n",
-                                "verbose   = 1 * detailed output in file\n",
-                                "\n",
-                                "seqtype   = 1 * codon data\n",
-                                "ndata     = 1 * one gene alignment\n",
-                                "icode     = 0 * universal genetic code\n",
-                                "cleandata = 0 * keep sites with ambiguity data\n",
-                                "\n",
-                                "model     = 2 * 2 ω values across branches\n",
-                                "NSsites   = 2 * Model M2a\n",
-                                "CodonFreq = 7 * use mutation selection model\n",
-                                "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
-                                "clock     = 0 * assume no clock\n",
-                                "fix_omega = 0 * enables option to estimate omega\n",
-                                "omega     = 0.5 * initial omega value\n")
-write_file(paml.branch.site.file, "paml/branch-site/zfy.branch-site.paml.ctl")
+murinae.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Rat_Zfy2"))
+write.paml.fg.tree(murinae.node, 
+                   "paml/branch-site-murinae")
 
 # Add a script to submit these jobs to the cluster
 # Run the commands manually
@@ -314,14 +372,28 @@ paml.shell.script <- paste0("#!/bin/bash\n\n",
                             "cd paml/site-specific\n",
                             "# codeml zfy.site-specific.paml.ctl\n",
                             "qsubme codeml zfy.site-specific.paml.ctl\n\n",
-                            "cd ../branch-site\n",
-                            "# codeml zfy.branch-site.paml.ctl\n",
-                            "qsubme codeml zfy.branch-site.paml.ctl\n"
                             
+                            "cd ../branch-site-rodentia\n",
+                            "qsubme codeml paml.ctl\n",
+                            "cd ../branch-site-rodentia-null\n",
+                            "qsubme codeml paml.ctl\n\n",
+                            
+                            "cd ../branch-site-eumuroida\n",
+                            "qsubme codeml paml.ctl\n",
+                            "cd ../branch-site-eumuroida-null\n",
+                            "qsubme codeml paml.ctl\n\n",
+                            
+                            "cd ../branch-site-muridae\n",
+                            "qsubme codeml paml.ctl\n",
+                            "cd ../branch-site-muridae-null\n",
+                            "qsubme codeml paml.ctl\n\n",
+                            
+                            "cd ../branch-site-murinae\n",
+                            "qsubme codeml paml.ctl\n",
+                            "cd ../branch-site-murinae-null\n",
+                            "qsubme codeml paml.ctl\n\n"
 )
 write_file(paml.shell.script, "run_paml.sh")
-
-paml.branch.site.output <- "paml/branch-site/zfy.branch-site.positive.sites.txt"
 
 #### Run HyPhy RELAX to test for relaxed selection in Muroidea ####
 
