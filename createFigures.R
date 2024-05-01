@@ -89,8 +89,8 @@ save.double.width("figure/mammal.zfy.tree.png", plot.zfy)
 
 #### Plot mammal exon NT trees ####
 
-create.exon.plot <- function(i){
-  exon.aln.file <- paste0("aln/exons/exon_", mouse.exons$exon[i], ".aln")
+create.exon.plot <- function(name){
+  exon.aln.file <- paste0("aln/exons/", name)
 
   # Some exons will fail - too many gaps
   if(!file.exists(paste0(exon.aln.file, ".treefile"))) return()
@@ -112,25 +112,13 @@ create.exon.plot <- function(i){
   plot.exon.tree
 }
 
-exon.1.7.plots <- lapply(1:nrow(mouse.exons),create.exon.plot)
 
-# We also want to look at all except exon 7
-exon.1.6.aln.file <- paste0("aln/exons/exon_1-6.aln")
-exon.1.6.tree <- ape::read.tree(paste0(exon.1.6.aln.file, ".treefile"))
-# Root the tree on platypus
-exon.1.6.tree <- phytools::reroot(exon.1.6.tree, which(exon.1.6.tree$tip.label=="Platypus_ZFX"), position = 0.015)
-# Find the nodes that are ZFY vs ZFX and add to tree
-# Find the nodes that are ZFY vs ZFX and add to tree
-mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
-exon.1.6.tree <- groupOTU(exon.1.6.tree, mammal.gene.groups, group_name = "group")
-
-plot.exon.1.6.tree <- plot.tree(exon.1.6.tree, tiplab.font.size = 1.5,  col="group")  + coord_cartesian(clip="off", xlim = c(0.16, 0.83))
-# exon.1.6.fig.file <- paste0("figure/exon_1-6.zfx.zfy.tree.png")
-# save.double.width(exon.1.6.fig.file, plot.exon.1.6.tree)
+exon.plots <- lapply(c("exon_1-6.aln", "exon_2.aln", 
+                       "exon_7.aln", "exon_1.3-6.aln"), 
+                     create.exon.plot)
 
 # Create a joint figure of exons 1-6, exon 2, and exon 7
-
-exon.joint.tree <- plot.exon.1.6.tree + exon.1.7.plots[[2]] + exon.1.7.plots[[7]] + 
+exon.joint.tree <- exon.plots[[1]] + exon.plots[[2]] + exon.plots[[3]] + 
   patchwork::plot_annotation(tag_levels = list(c("Exons 1-6", "Exon 2", "Exon 7"))) &
   theme(plot.tag = element_text(size = 6),
         plot.margin = margin(t=0, l=0, r=0, b=0))

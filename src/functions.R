@@ -23,6 +23,8 @@ FILES <- list(
   paml.branch.site.output = "paml/branch-site/zfy.branch-site.positive.sites.txt"
 )
 
+#### Core functions needed to load data files #####
+
 # Load all R packages installing if needed
 load.packages <- function(){
   
@@ -66,6 +68,113 @@ load.packages <- function(){
 }
 load.packages() # load on source
 
+# Read the given FASTA file and extract metadata
+# Returns as a list containing FA sequence and metadata dataframe
+# The FASTA file headers have common names manually added in [] brackets
+# The file name should be the binomial species name
+read.fasta <- function(f){
+  fa.data <- ape::read.FASTA(f)
+  
+  original.name <- names(fa.data)
+  common.names <-  str_extract(original.name, "\\[.*\\]") %>%
+    str_replace_all("\\[", "")  %>%
+    str_replace_all("\\]", "") %>%
+    str_replace_all(" ", "_")
+  names(fa.data) <- common.names
+  
+  species.name <-gsub("_", " ",  gsub(".fa$", "", gsub("fasta/(nt|aa)/", "",  f)))
+  
+  list("fa" = fa.data,
+       metadata = data.frame(
+         "accession" = str_extract(original.name, "[^:]+"),
+         "original.name" = original.name,
+         "common.name" = common.names,
+         "species" = rep(species.name, length(common.names))))
+}
+
+read.sequences <- function(read.fasta.output){
+  do.call(c, lapply(read.fasta.output, function(x) x$fa))
+}
+
+# Extract and combine metadata from a list of outputs of read.fasta
+read.metadata <- function(read.fasta.output){
+  metadata <- do.call(rbind, lapply(read.fasta.output, function(x) x$metadata))
+  
+  # Grouping for trees
+  metadata %<>%
+    dplyr::mutate(group = case_when(grepl("ZFY", common.name, ignore.case=T) ~ "ZFY",
+                                    common.name %in% c("Platypus_ZFX", "Opossum_ZFX", 
+                                                       "Xenopus_ZFX.S", "Xenopus_ZFX.L", "Chicken_ZFX") ~ "Outgroup",
+                                    T ~ "ZFX"))
+  metadata
+}
+
+# Create an Excel file with column filtering
+create.xlsx = function(data, file.name, cols.to.fixed.size.font = NULL, cols.to.rich.text = NULL){
+  
+  # Set rich text formatting and highlight VV motifs in the given column index
+  set.rich.text.on.vv <- function(wb, sh, col.index){
+    
+    normal.font.ref <-  xlsx::Font(wb, heightInPoints = 10, isBold=FALSE, name = "Courier New")$ref
+    highlight.font.ref <- xlsx::Font(wb, heightInPoints = 10, color="red", isBold=TRUE,  name = "Courier New")$ref
+    
+    for(cell in xlsx::getCells(xlsx::getRows(sh), colIndex=col.index)){
+      
+      oldval <- xlsx::getCellValue(cell)
+      vv.locs <- str_locate_all(oldval, "VV")
+      
+      if( nrow(vv.locs[[1]]) > 0 ){
+        
+        # Create a rich text string
+        new.value <- rJava::.jnew("org/apache/poi/xssf/usermodel/XSSFRichTextString",
+                                  oldval )
+        
+        # Set entire cell to normal style
+        rJava::.jcall(obj=new.value, returnSig = "V",  # void return
+                      method="applyFont", normal.font.ref)
+        
+        for(r in 1:nrow(vv.locs[[1]])){
+          # Apply the new font to the correct indexes (0-indexed inclusive)
+          rJava::.jcall(obj=new.value,returnSig = "V",  # void return
+                        method="applyFont", 
+                        as.integer(vv.locs[[1]][r,1]-1), # start index
+                        as.integer(vv.locs[[1]][r,2]), # end index
+                        highlight.font.ref)
+        }
+        
+        
+        # Set the new cell value and cast to a rich text string
+        rJava::.jcall(cell, "V", "setCellValue",
+                      rJava::.jcast(new.value, "org/apache/poi/ss/usermodel/RichTextString"))
+      }
+    }
+  }
+  
+  oldOpt = options()
+  options(xlsx.date.format="yyyy-mm-dd") # change date format
+  wb = xlsx::createWorkbook(type = "xlsx")
+  sh = xlsx::createSheet(wb)
+  xlsx::addDataFrame(data, sh, row.names = F)
+  xlsx::createFreezePane(sh, 2, 2, 2, 2) # freeze top row and first column
+  cs <- xlsx::CellStyle(wb) + 
+    xlsx::Font(wb,heightInPoints = 10, isBold = FALSE, name="Courier New")
+  if(!is.null(cols.to.fixed.size.font)){
+    for(i in xlsx::getCells(xlsx::getRows(sh), colIndex=cols.to.fixed.size.font)){
+      xlsx::setCellStyle(i, cs)
+    }
+  }
+  
+  if(!is.null(cols.to.rich.text)) {
+    for(col in cols.to.rich.text) set.rich.text.on.vv(wb, sh, col)
+    
+  }
+  xlsx::autoSizeColumn(sh, 1:ncol(data))
+  xlsx::saveWorkbook(wb, file=file.name)
+  options(oldOpt)
+}
+
+#### Load input data #####
+
 # Read source FASTA files, combine to single .fas and translate
 # to protein. Read metadata
 prepare.fas.files <- function(){
@@ -101,7 +210,7 @@ prepare.fas.files <- function(){
                   Species_common_name = str_replace(Species_common_name, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", ""))
   
   # Combine the outgroups with the mammals
-  metadata$combined <- rbind(METADATA$mammal, METADATA$outgroup)
+  metadata$combined <- rbind(metadata$mammal, metadata$outgroup)
   
   # Write the unaligned combined fasta to file with .fas extension
   combined.nt.raw <- c(outgroup.nt.raw, nt.raw) # all sequences
@@ -119,8 +228,10 @@ prepare.fas.files <- function(){
   
   metadata
 }
-#### Generate combined FA files for alignment #####
+
 METADATA <- prepare.fas.files() # run on source
+
+#### Other functions #####
 
 # Read all alignments and return as a list
 read.alignments <- function(){
@@ -138,47 +249,6 @@ read.alignments <- function(){
   )
 }
 
-# Read the given FASTA file and extract metadata
-# Returns as a list containing FA sequence and metadata dataframe
-# The FASTA file headers have common names manually added in [] brackets
-# The file name should be the binomial species name
-read.fasta <- function(f){
-  fa.data <- ape::read.FASTA(f)
-  
-  original.name <- names(fa.data)
-  common.names <-  str_extract(original.name, "\\[.*\\]") %>%
-    str_replace_all("\\[", "")  %>%
-    str_replace_all("\\]", "") %>%
-    str_replace_all(" ", "_")
-  names(fa.data) <- common.names
-  
-  species.name <-gsub("_", " ",  gsub(".fa$", "", gsub("fasta/(nt|aa)/", "",  f)))
-  
-  list("fa" = fa.data,
-       metadata = data.frame(
-         "accession" = str_extract(original.name, "[^:]+"),
-         "original.name" = original.name,
-         "common.name" = common.names,
-         "species" = rep(species.name, length(common.names))))
-}
-
-
-read.sequences <- function(read.fasta.output){
-  do.call(c, lapply(read.fasta.output, function(x) x$fa))
-}
-
-# Extract and combine metadata from a list of outputs of read.fasta
-read.metadata <- function(read.fasta.output){
-  metadata <- do.call(rbind, lapply(read.fasta.output, function(x) x$metadata))
-  
-  # Grouping for trees
-  metadata %<>%
-    dplyr::mutate(group = case_when(grepl("ZFY", common.name, ignore.case=T) ~ "ZFY",
-                                    common.name %in% c("Platypus_ZFX", "Opossum_ZFX", 
-                                                       "Xenopus_ZFX.S", "Xenopus_ZFX.L", "Chicken_ZFX") ~ "Outgroup",
-                                    T ~ "ZFX"))
-  metadata
-}
 
 
 save.double.width <- function(filename, plot, height=170){ 
@@ -660,70 +730,6 @@ locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
 # start, end - coordinates in the gapped alignment
 subset.sequence <- function(aln, sequence.name, start, end){
   as.character(aln@unmasked[[sequence.name]][start:end])
-}
-
-# Create an Excel file with column filtering
-create.xlsx = function(data, file.name, cols.to.fixed.size.font = NULL, cols.to.rich.text = NULL){
-  
-  # Set rich text formatting and highlight VV motifs in the given column index
-  set.rich.text.on.vv <- function(wb, sh, col.index){
-    
-    normal.font.ref <-  xlsx::Font(wb, heightInPoints = 10, isBold=FALSE, name = "Courier New")$ref
-    highlight.font.ref <- xlsx::Font(wb, heightInPoints = 10, color="red", isBold=TRUE,  name = "Courier New")$ref
-    
-    for(cell in xlsx::getCells(xlsx::getRows(sh), colIndex=col.index)){
-      
-      oldval <- xlsx::getCellValue(cell)
-      vv.locs <- str_locate_all(oldval, "VV")
-      
-      if( nrow(vv.locs[[1]]) > 0 ){
-        
-        # Create a rich text string
-        new.value <- rJava::.jnew("org/apache/poi/xssf/usermodel/XSSFRichTextString",
-                                  oldval )
-        
-        # Set entire cell to normal style
-        rJava::.jcall(obj=new.value, returnSig = "V",  # void return
-                      method="applyFont", normal.font.ref)
-        
-        for(r in 1:nrow(vv.locs[[1]])){
-          # Apply the new font to the correct indexes (0-indexed inclusive)
-          rJava::.jcall(obj=new.value,returnSig = "V",  # void return
-                        method="applyFont", 
-                        as.integer(vv.locs[[1]][r,1]-1), # start index
-                        as.integer(vv.locs[[1]][r,2]), # end index
-                        highlight.font.ref)
-        }
-        
-        
-        # Set the new cell value and cast to a rich text string
-        rJava::.jcall(cell, "V", "setCellValue",
-                      rJava::.jcast(new.value, "org/apache/poi/ss/usermodel/RichTextString"))
-      }
-    }
-  }
-  
-  oldOpt = options()
-  options(xlsx.date.format="yyyy-mm-dd") # change date format
-  wb = xlsx::createWorkbook(type = "xlsx")
-  sh = xlsx::createSheet(wb)
-  xlsx::addDataFrame(data, sh, row.names = F)
-  xlsx::createFreezePane(sh, 2, 2, 2, 2) # freeze top row and first column
-  cs <- xlsx::CellStyle(wb) + 
-    xlsx::Font(wb,heightInPoints = 10, isBold = FALSE, name="Courier New")
-  if(!is.null(cols.to.fixed.size.font)){
-    for(i in xlsx::getCells(xlsx::getRows(sh), colIndex=cols.to.fixed.size.font)){
-      xlsx::setCellStyle(i, cs)
-    }
-  }
-  
-  if(!is.null(cols.to.rich.text)) {
-    for(col in cols.to.rich.text) set.rich.text.on.vv(wb, sh, col)
-    
-  }
-  xlsx::autoSizeColumn(sh, 1:ncol(data))
-  xlsx::saveWorkbook(wb, file=file.name)
-  options(oldOpt)
 }
 
 read.time.tree.data <- function(){

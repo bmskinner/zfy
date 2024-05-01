@@ -124,15 +124,20 @@ system2("iqtree", paste("-s ", FILES$combined.nt.aln,
         stdout = gsub(".aln$", ".iqtree.log", FILES$combined.nt.aln), 
         stderr = gsub(".aln$", ".iqtree.log", FILES$combined.nt.aln))
 
+system2("iqtree", paste("-s ", FILES$mammal.nt.aln, 
+                        "-bb 1000", # number of bootstrap replicates
+                        "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+                        "-nt AUTO", # number of threads
+                        "-asr"), # ancestral sequence reconstruction
+        stdout = gsub(".aln$", ".iqtree.log", FILES$mammal.nt.aln), 
+        stderr = gsub(".aln$", ".iqtree.log", FILES$mammal.nt.aln))
+
 #### Make individual mammal exon NT trees ####
 
-# Aim here is to look for signs of gene conversion in the final exon as per other 
-# papers.
-
-create.exon.alignment <- function(i){
-  exon.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt[i]:mouse.exons$end_nt[i]]
+# Aim here is to look for signs of gene conversion in the final exon versus others
+create.exon.alignment <- function(exon.aln, name){
   exon.aln <- ape::del.colgapsonly(exon.aln, threshold = 0.2) # remove columns with >20% gaps
-  exon.aln.file <- paste0("aln/exons/exon_", mouse.exons$exon[i], ".aln")
+  exon.aln.file <- paste0("aln/exons/", name)
   
   ape::write.FASTA(exon.aln, file = exon.aln.file)
   
@@ -144,24 +149,21 @@ create.exon.alignment <- function(i){
           stderr = paste0(exon.aln.file, ".iqtree.log"))
 }
 
-exon.1.7.plots <- lapply(1:nrow(mouse.exons),create.exon.alignment)
+exon.2.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt[2]:mouse.exons$end_nt[2]]
+create.exon.alignment(exon.2.aln, "exon_2.aln")
 
-# We also want to look at all except exon 7
+exon.7.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt[7]:mouse.exons$end_nt[7]]
+create.exon.alignment(exon.7.aln, "exon_7.aln")
 
-# exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset[1]:mouse.exons$end_nt_codon_offset[1], 
-#                     mouse.exons$start_nt_codon_offset[3]:mouse.exons$end_nt_codon_offset[6])
-# exon1.3_6.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,exon1.3_6.locs]
-
+# All except exon 7
 exon.1.6.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt[1]:mouse.exons$end_nt[6]]
-exon.1.6.aln.file <- paste0("aln/exons/exon_1-6.aln")
-ape::write.FASTA(exon.1.6.aln, file = exon.1.6.aln.file)
+create.exon.alignment(exon.1.6.aln, "exon_1-6.aln")
 
-system2("iqtree", paste("-s ", exon.1.6.aln.file,
-                        "-bb 1000", # number of bootstrap replicates
-                        "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT)
-                        "-nt AUTO"), # number of threads
-        stdout = paste0(exon.1.6.aln.file, ".iqtree.log"),
-        stderr = paste0(exon.1.6.aln.file, ".iqtree.log"))
+# All except exon 2 and 7
+exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset[1]:mouse.exons$end_nt_codon_offset[1],
+                    mouse.exons$start_nt_codon_offset[3]:mouse.exons$end_nt_codon_offset[6])
+exon1.3_6.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,exon1.3_6.locs]
+create.exon.alignment(exon1.3_6.aln, "exon_1.3-6.aln")
 
 #### Identify binding motifs of the ZFs in each species ####
 old.wd <- getwd()
@@ -263,7 +265,7 @@ nt.aln.tree <- phytools::reroot(nt.aln.tree, which(nt.aln.tree$tip.label=="Platy
 ape::write.tree(nt.aln.tree, file = paste0(FILES$mammal.nt.aln, ".rooted.treefile"))
 
 # Find the nodes that are ZFY vs ZFX and add to tree
-mammal.gene.groups <- split(metadata.mammal$common.name, metadata.mammal$group)
+mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
 nt.aln.tree <- tidytree::groupOTU(nt.aln.tree, mammal.gene.groups, group_name = "group")
 
 
@@ -299,7 +301,7 @@ write.paml.fg.tree <- function(fg.node, dir.base){
   
   # Create control files for the test and null codeml
   # This control file tests site models With heterogeneous ω across Sites
-  paml.branch.site.file <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
+  control.file.data <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
                                   "treefile  = tree.fg.treefile * tree in Newick format without nodes\n", # 
                                   "outfile   = paml.out.txt\n",
                                   "\n",
@@ -318,11 +320,11 @@ write.paml.fg.tree <- function(fg.node, dir.base){
                                   "clock     = 0 * assume no clock\n",
                                   "fix_omega = 0 * enables option to estimate omega\n",
                                   "omega     = 0.5 * initial omega value\n")
-  write_file(paml.branch.site.file, control.file.null)
+  write_file(control.file.data, control.file)
   
   # Prepare codeml branch-site null model to look for selection specifically in Muroidea
   # This control file tests null branch site model With fixed ω across sites
-  paml.branch.site.null.file <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
+  control.file.data.null <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
                                        "treefile  = tree.fg.treefile * tree in Newick format without nodes\n", # 
                                        "outfile   = paml.out.txt\n",
                                        "\n",
@@ -341,7 +343,7 @@ write.paml.fg.tree <- function(fg.node, dir.base){
                                        "clock     = 0 * assume no clock\n",
                                        "fix_omega = 1 * The value of ω2 for foreground branches will be fixed\n",
                                        "omega     = 1 * The fixed value will be ω2 = 1\n")
-  write_file(paml.branch.site.null.file, "paml/branch-site-null/zfy.branch-site.null.paml.ctl")
+  write_file(control.file.data.null, control.file.null)
 
 }
 
@@ -395,29 +397,60 @@ paml.shell.script <- paste0("#!/bin/bash\n\n",
 )
 write_file(paml.shell.script, "run_paml.sh")
 
-#### Run HyPhy RELAX to test for relaxed selection in Muroidea ####
+#### Run HyPhy RELAX to test for relaxed selection ####
 
-# Newick tree tips and nodes need to be tagged with {Test} and {Reference}
-# Set all branches and nodes to reference
-hyphy.tree <- nt.aln.tree
-hyphy.tree$node.label <- rep("", length(hyphy.tree$node.label)) # remove all node names
-hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
-hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
-hyphy.tree <- treeio::label_branch_paml(hyphy.tree, rodent.node, "{Test}") # now rodents are test
-hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
-hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
-ape::write.tree(hyphy.tree, file = "aln/hyphy/mammal.nt.aln.hyphy.treefile")
+# Create and save a tree in HyPhy format. Set test branches to the given node, all others
+# as reference. 
+create.hyphy.tree.file <- function(fg.node, node.name){
+  # Newick tree tips and nodes need to be tagged with {Test} and {Reference}
+  # Set all branches and nodes to reference
+  hyphy.tree <- nt.aln.tree
+  hyphy.tree$node.label <- rep("", length(hyphy.tree$node.label)) # remove all node names
+  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
+  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
+  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
+  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
+  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
+  
+  tree.file <- paste0("aln/hyphy/", node.name, ".hyphy.treefile")
+  
+  ape::write.tree(hyphy.tree, file = tree.file)
+  
+}
 
-# create an sh file to submit these
-# HyPhy should be installed in a conda environment
-hyphy.sh.data <- paste0("#!/bin/bash\n",
-                        "source activate hyphy\n",
-                        "hyphy relax --alignment paml/exon_1_3-6/exon_1_3-6.aln --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon_1_3-6.relax.json\n",
-                        "hyphy relax --alignment paml/exon_2/exon_2.aln --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon_2.relax.json\n",
-                        "hyphy relax --alignment paml/exon_7/exon_7.aln --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon_7.relax.json\n",
-                        "hyphy relax --alignment  ", FILES$mammal.nt.aln, " --tree aln/hyphy/mammal.nt.aln.hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/mammal.relax.json\n"
-)
-write_file(hyphy.sh.data, "run_hyphy.sh")
+nodes <- c(rodentia.node, eumuroida.node, muridae.node, murinae.node)
+node.names <- c("rodentia", "eumuroida", "muridae", "murinae")
+
+mapply(create.hyphy.tree.file, nodes, node.names)
+
+# Create Hyphy RELAX invokations for shell scripting for the given node names
+create.hyphy.invokation <- function(node.name){
+  paste0(
+    "# All exons for ", node.name, "\n",
+    "hyphy relax --alignment  ", FILES$mammal.nt.aln, " --tree aln/hyphy/", node.name , ".hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/", node.name, ".relax.json\n",
+    
+    "# Exons 1-6 for ", node.name, "\n",
+    "hyphy relax --alignment aln/exons/exon_1-6.aln --tree aln/hyphy/", node.name , ".hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon.1-6.", node.name, ".relax.json\n",
+    
+    "# Exons 1,3-6 for ", node.name, "\n",
+    "hyphy relax --alignment aln/exons/exon_1.3-6.aln --tree aln/hyphy/", node.name , ".hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon.1.3-6.", node.name, ".relax.json\n",
+    
+    "# Exon 2 for ", node.name, "\n",
+    "hyphy relax --alignment aln/exons/exon_2.aln --tree aln/hyphy/", node.name , ".hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon.2.", node.name, ".relax.json\n",
+    
+    "# Exon 7 for ", node.name, "\n",
+    "hyphy relax --alignment aln/exons/exon_7.aln --tree aln/hyphy/", node.name , ".hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon.7.", node.name, ".relax.json\n\n"
+  )
+}
+
+# HyPhy is installed in a conda environment (hence we can't use 'system2' to
+# directly call 'hyphy'). This creates a script to activate the conda
+# environment and run RELAX.
+write_file(paste0("#!/bin/bash\n",
+                  "source activate hyphy\n\n",
+                  paste(sapply(node.names, create.hyphy.invokation), 
+                        collapse = "")),
+           "run_hyphy.sh")
 
 system2("bash", "run_hyphy.sh")
 
