@@ -13,9 +13,13 @@ FILES <- list(
   mammal.nt.fas = "fasta/mammal.nt.fas",
   combined.nt.fas = "fasta/combined.nt.fas",
   combined.nt.aln = "aln/combined/combined.nt.aln",
+  combined.nt.nexus = "aln/combined/combined.nt.nex",
+  combined.nt.partition = "aln/combined/combined.nt.partition",
   combined.aa.fas = "fasta/combined.aa.fas",
   combined.aa.aln = "aln/combined/combined.aa.aln",
   mammal.nt.aln = "aln/mammal/mammal.nt.aln",
+  mammal.nt.nexus = "aln/mammal/mammal.nt.nex",
+  mammal.nt.partition = "aln/mammal/mammal.nt.partition",
   mammal.aa.aln = "aln/mammal/mammal.aa.aln",
   mammal.nt.aln.treefile = "aln/mammal/mammal.nt.aln.treefile",
   combined.nt.aln.treefile = "aln/combined/combined.nt.aln.treefile",
@@ -30,14 +34,14 @@ load.packages <- function(){
   
   install.cran <- function(package){
     if(!require(package, character.only = TRUE, quietly = TRUE)){
-      install.packages(package, repos = "https://cran.ma.imperial.ac.uk")
+      install.packages(package, lib = Sys.getenv("R_LIBS_USER"), repos = "https://cran.ma.imperial.ac.uk")
       library(package, character.only = TRUE, quietly = TRUE)
     }
   }
   
   install.bioconductor <- function(package){
     if(!require(package, character.only = TRUE, quietly = TRUE)){
-      BiocManager::install(package, update = FALSE)
+      BiocManager::install(package, lib = Sys.getenv("R_LIBS_USER"), update = FALSE)
       library(package, character.only = TRUE, quietly = TRUE)
     }
   }
@@ -45,7 +49,7 @@ load.packages <- function(){
   install.github <- function(package){
     pkg.name <- gsub("^.*\\/", "", package)
     if(!require(pkg.name, character.only = TRUE, quietly = TRUE)){
-      remotes::install_github(package)
+      remotes::install_github(package, lib = Sys.getenv("R_LIBS_USER"))
       library(pkg.name, character.only = TRUE, quietly = TRUE)
     }
   }
@@ -58,7 +62,8 @@ load.packages <- function(){
   sapply(cran.packages, install.cran)
   
   github.packages <- c('YuLab-SMU/ggtree', # since ggtree cannot install in Bioconductor 3.15 on cluster
-                       "vmikk/metagMisc"  # for converting distance matrices to data frames
+                       "vmikk/metagMisc",  # for converting distance matrices to data frames
+                       "fmichonneau/chopper" # functions for converting FASTA to NEXUS format
                         )#"vragh/seqvisr"
   sapply(github.packages, install.github)
   

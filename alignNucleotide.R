@@ -67,6 +67,9 @@ writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
 # system2(muscle.path, paste("-align",  FILES$combined.aa.fas,
 #                            "-output", FILES$combined.aa.aln))
 
+# Expect java on the PATH. Macse download from https://www.agap-ge2pop.org/macsee-pipelines/
+# Direct download link:
+# https://www.agap-ge2pop.org/wp-content/uploads/macse/releases/macse_v2.07.jar
 if(!file.exists("bin/macse_v2.07.jar")) stop("MACSE not present in bin directory")
 
 # Use macse to align the nt files for combined species
@@ -80,13 +83,6 @@ system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
 #### Run mammal NT alignment guided by AA #####
 
 # Run a codon aware alignment with MACSE
-# Expect java on the PATH. Macse download from https://www.agap-ge2pop.org/macsee-pipelines/
-
-# Direct download link:
-# https://www.agap-ge2pop.org/wp-content/uploads/macse/releases/macse_v2.07.jar
-if(!file.exists("bin/macse_v2.07.jar")) stop("MACSE not present in bin directory")
-
-# Run the alignment
 system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
                       "-seq",    FILES$mammal.nt.fas, # input
                       "-out_NT", FILES$mammal.nt.aln,  # output nt alignment
@@ -100,6 +96,35 @@ ALIGNMENTS <- read.alignments()
 # Identify the coordinates of the exon boundaries in the gapped alignments
 # Based on the mouse Zfy1 sequence
 mouse.exons <- find.exons()
+
+# Create NEXUS format alignment with partition information
+# We consider three partitions:
+#   Exons 1 & 3-6
+#   Exon 2
+#   Exon 7
+write_file(paste0("BEGIN SETS;\n",
+                  "\tcharset exon13456 = ", mouse.exons$start_nt_codon_offset[1], "-", mouse.exons$end_nt_codon_offset[1],
+                  " ", mouse.exons$start_nt_codon_offset[3], "-", mouse.exons$end_nt_codon_offset[6],";\n",
+                  "\tcharset exon2 = ", mouse.exons$start_nt_codon_offset[2], "-", mouse.exons$end_nt_codon_offset[2],";\n",
+                  "\tcharset exon7 = ", mouse.exons$start_nt_codon_offset[7], "-", mouse.exons$end_nt_codon_offset[7],";\n",
+                  "END;\n"),
+           FILES$mammal.nt.partition)
+
+write_file(paste0("BEGIN SETS;\n",
+                  "\tcharset exon13456 = ", mouse.exons$start_nt_codon_offset[1], "-", mouse.exons$end_nt_codon_offset[1],
+                  " ", mouse.exons$start_nt_codon_offset[3], "-", mouse.exons$end_nt_codon_offset[6],";\n",
+                  "\tcharset exon2 = ", mouse.exons$start_nt_codon_offset[2], "-", mouse.exons$end_nt_codon_offset[2],";\n",
+                  "\tcharset exon7 = ", mouse.exons$start_nt_codon_offset[7], "-", mouse.exons$end_nt_codon_offset[7],";\n",
+                  "END;\n"),
+           FILES$combined.nt.partition)
+
+# Resave the alignment in NEXUS format with the partitions
+alg2nex(FILES$mammal.nt.aln, format = "fasta", interleaved = FALSE, gap = "-",
+        missing = "?", partition.file = FILES$mammal.nt.partition)
+
+alg2nex(FILES$combined.nt.aln, format = "fasta", interleaved = FALSE, gap = "-",
+        missing = "?", partition.file = FILES$combined.nt.partition)
+
 
 #### Create combined mammal/outgroup AA tree ####
 
@@ -397,14 +422,23 @@ paml.shell.script <- paste0("#!/bin/bash\n\n",
 )
 write_file(paml.shell.script, "run_paml.sh")
 
-#### Run HyPhy RELAX to test for relaxed selection ####
+#### Run HyPhy RELAX and MEME to test for relaxed selection ####
 
 # Create and save a tree in HyPhy format. Set test branches to the given node, all others
 # as reference. 
-create.hyphy.tree.file <- function(fg.node, node.name){
+create.mammal.hyphy.relax.tree.file <- function(fg.node, node.name){
   # Newick tree tips and nodes need to be tagged with {Test} and {Reference}
   # Set all branches and nodes to reference
-  hyphy.tree <- nt.aln.tree
+  hyphy.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
+  
+  # Root the tree on platypus
+  # The root is arbitrarily placed in the platypus branch to fit neatly
+  hyphy.tree <- phytools::reroot(hyphy.tree, which(hyphy.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+  
+  # Find the nodes that are ZFY vs ZFX and add to tree
+  mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
+  hyphy.tree <- tidytree::groupOTU(hyphy.tree, mammal.gene.groups, group_name = "group")
+  
   hyphy.tree$node.label <- rep("", length(hyphy.tree$node.label)) # remove all node names
   hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
   hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
@@ -412,86 +446,362 @@ create.hyphy.tree.file <- function(fg.node, node.name){
   hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
   hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
   
-  tree.file <- paste0("aln/hyphy/", node.name, ".hyphy.treefile")
+  tree.file <- paste0("aln/hyphy/mammal.", node.name, ".hyphy.relax.treefile")
   
   ape::write.tree(hyphy.tree, file = tree.file)
+}
+
+create.combined.hyphy.relax.tree.file <- function(fg.node, node.name){
+  # Newick tree tips and nodes need to be tagged with {Test} and {Reference}
+  # Set all branches and nodes to reference
+  hyphy.tree <- ape::read.tree(FILES$combined.nt.aln.treefile)
   
+  # Root on Xenopus
+  xenopus.node <- ape::getMRCA(hyphy.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
+  hyphy.tree <- phytools::reroot(hyphy.tree, xenopus.node, position = 0.01)
+  
+  # Find the nodes that are ZFY vs ZFX and add to tree
+  gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
+  hyphy.tree <- tidytree::groupOTU(hyphy.tree, gene.groups, group_name = "group")
+  
+  hyphy.tree$node.label <- rep("", length(hyphy.tree$node.label)) # remove all node names
+  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
+  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
+  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
+  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
+  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
+  
+  tree.file <- paste0("aln/hyphy/combined.", node.name, ".hyphy.relax.treefile")
+  
+  ape::write.tree(hyphy.tree, file = tree.file)
+}
+
+# MEME cannot handle either / or . in node names. Replace both
+create.mammal.hyphy.meme.tree.file <- function(fg.node, node.name){
+  hyphy.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
+  
+  # Root the tree on platypus
+  # The root is arbitrarily placed in the platypus branch to fit neatly
+  hyphy.tree <- phytools::reroot(hyphy.tree, which(hyphy.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+
+  # Find the nodes that are ZFY vs ZFX and add to tree
+  mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
+  hyphy.tree <- tidytree::groupOTU(hyphy.tree, mammal.gene.groups, group_name = "group")
+  
+  hyphy.tree$node.label <- gsub("\\.", "_", hyphy.tree$node.label)
+  hyphy.tree$node.label <- gsub("/", "_", hyphy.tree$node.label)
+  
+  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
+  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
+  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
+  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
+  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
+
+  tree.file <- paste0("aln/hyphy/mammal.", node.name,".meme.hyphy.treefile")
+  ape::write.tree(hyphy.tree, file = tree.file)
+}
+
+create.combined.hyphy.meme.tree.file <- function(fg.node, node.name){
+  hyphy.tree <- ape::read.tree(FILES$combined.nt.aln.treefile)
+  
+  # Root on Xenopus
+  xenopus.node <- ape::getMRCA(hyphy.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
+  hyphy.tree <- phytools::reroot(hyphy.tree, xenopus.node, position = 0.01)
+  
+  # Find the nodes that are ZFY vs ZFX and add to tree
+  gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
+  hyphy.tree <- tidytree::groupOTU(hyphy.tree, gene.groups, group_name = "group")
+  
+  hyphy.tree$node.label <- gsub("\\.", "_", hyphy.tree$node.label)
+  hyphy.tree$node.label <- gsub("/", "_", hyphy.tree$node.label)
+  
+  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
+  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
+  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
+  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
+  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
+  
+  tree.file <- paste0("aln/hyphy/combined.", node.name,".meme.hyphy.treefile")
+  ape::write.tree(hyphy.tree, file = tree.file)
 }
 
 nodes <- c(rodentia.node, eumuroida.node, muridae.node, murinae.node)
 node.names <- c("rodentia", "eumuroida", "muridae", "murinae")
 
-mapply(create.hyphy.tree.file, nodes, node.names)
+mapply(create.combined.hyphy.relax.tree.file, nodes, node.names)
+mapply(create.mammal.hyphy.relax.tree.file,   nodes, node.names)
+mapply(create.combined.hyphy.meme.tree.file,  nodes, node.names)
+mapply(create.mammal.hyphy.meme.tree.file,    nodes, node.names)
 
 # Create Hyphy RELAX invokations for shell scripting for the given node names
-create.hyphy.invokation <- function(node.name){
+create.hyphy.relax.invokation <- function(node.name){
   paste0(
-    "# All exons for ", node.name, "\n",
-    "hyphy relax --alignment  ", FILES$mammal.nt.aln, " --tree aln/hyphy/", node.name , ".hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/", node.name, ".relax.json\n",
-    
-    "# Exons 1-6 for ", node.name, "\n",
-    "hyphy relax --alignment aln/exons/exon_1-6.aln --tree aln/hyphy/", node.name , ".hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon.1-6.", node.name, ".relax.json\n",
-    
-    "# Exons 1,3-6 for ", node.name, "\n",
-    "hyphy relax --alignment aln/exons/exon_1.3-6.aln --tree aln/hyphy/", node.name , ".hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon.1.3-6.", node.name, ".relax.json\n",
-    
-    "# Exon 2 for ", node.name, "\n",
-    "hyphy relax --alignment aln/exons/exon_2.aln --tree aln/hyphy/", node.name , ".hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon.2.", node.name, ".relax.json\n",
-    
-    "# Exon 7 for ", node.name, "\n",
-    "hyphy relax --alignment aln/exons/exon_7.aln --tree aln/hyphy/", node.name , ".hyphy.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/exon.7.", node.name, ".relax.json\n\n"
+    "# Mammal alignment for ", node.name, "\n",
+    "hyphy relax --alignment  ", FILES$mammal.nt.aln, " --tree aln/hyphy/mammal.", node.name , ".hyphy.relax.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/mammal.", node.name, ".relax.json\n",
+    "# Combined alignment for ", node.name, "\n",
+    "hyphy relax --alignment  ", FILES$combined.nt.aln, " --tree aln/hyphy/combined.", node.name , ".hyphy.relax.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/combined.", node.name, ".relax.json\n"
   )
 }
+
+# Create Hyphy MEME invokations for shell scripting for the given node names
+# Use a partition model to allow three different classes of evolution:
+# Exons 1, 3-6, exon 2 and exon 7
+create.hyphy.meme.invokation <- function(node.name){
+  paste0(
+    "# Mammal partitioned alignment for ", node.name, "\n",
+    "hyphy meme --alignment  ", FILES$mammal.nt.nexus, " --tree aln/hyphy/mammal.", node.name , ".meme.hyphy.treefile --branches Test --output aln/hyphy/mammal.", node.name, ".meme.json\n",
+    "# Combined partitioned alignment for ", node.name, "\n",
+    "hyphy meme --alignment  ", FILES$combined.nt.nexus, " --tree aln/hyphy/combined.", node.name , ".meme.hyphy.treefile --branches Test --output aln/hyphy/combined.", node.name, ".meme.json\n")
+}
+
+
 
 # HyPhy is installed in a conda environment (hence we can't use 'system2' to
 # directly call 'hyphy'). This creates a script to activate the conda
 # environment and run RELAX.
 write_file(paste0("#!/bin/bash\n",
                   "source activate hyphy\n\n",
-                  paste(sapply(node.names, create.hyphy.invokation), 
-                        collapse = "")),
-           "run_hyphy.sh")
+                  "# RELAX test for realxed purifying selection in test branches\n",
+                  paste(sapply(node.names, create.hyphy.relax.invokation), 
+                        collapse = ""), "\n",
+                  "# MEME test for positive selection at individual sites in all branches\n",
+                  paste(sapply(node.names, create.hyphy.meme.invokation), 
+                        collapse = "")
+),
+"run_hyphy.sh")
 
 system2("bash", "run_hyphy.sh")
 
-#### Run HyPhy GARD to test for recombination ####
 
-# Output was entirely unconvincing - drop this from the analysis
-# if(!installr::is.windows()){
-#   
-#   system2("hyphy", " gard --alignment aln/zfxy.nt.aln --type codon --output hyphy/mammal.gard.json")
-#   
-#   # Read the json file and parse results
-#   hyphy.data <- jsonlite::read_json("hyphy/mammal.gard.json")
-#   
-#   siteBreakPointSupport <- data.frame("site" = as.numeric(names(hyphy.data$siteBreakPointSupport)),
-#                                          "support" = unlist(hyphy.data$siteBreakPointSupport))
-#   
-#   ggplot() +
-#     geom_rect(data = mouse.exons,          aes(xmin = start_aa, xmax = end_aa, ymin = 2, ymax = 3, fill = is_even))+
-#     scale_fill_manual(values=c("grey", "white"))+
-#     geom_rect(data = ranges.ZF.common,     aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="grey", alpha=0.5)+
-#     geom_rect(data = ranges.9aaTAD.common, aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="blue", alpha=0.5)+
-#     geom_rect(data = ranges.NLS.common,    aes(xmin=start, xmax=end, ymin=0, ymax=1), fill="green", alpha=0.5)+
-#     geom_vline(xintercept = 488)+
-#     geom_vline(xintercept = 884)+
-#     scale_x_continuous(expand = c(0,0))+
-#     guides(fill = "none")+
-#     # geom_point(data =siteBreakPointSupport, aes(x = site, y = log10(support) ))+
-#     theme_bw()+
-#     theme(axis.text.y = element_blank())
-#   
-#   tree.1.488 <- hyphy.data$breakpointData[[1]]$tree
-#   readr::write_file(tree.1.488, file = "hyphy/tree.1.488.treefile")
-#   tree.1.488 <- read.tree("hyphy/tree.1.488.treefile")
-#   
-#   tree.489.884 <- hyphy.data$breakpointData[[2]]$tree
-#   readr::write_file(tree.489.884, file = "hyphy/tree.489.884.treefile")
-#   tree.489.884 <- read.tree("hyphy/tree.489.884.treefile")
-#     
-#   # Trees are entirely unconvincing, leave this
-#   
-# }
+#### Prepare data for GENECONV analysis ####
+#### Export ZFX and ZFY separately ####
+
+# Write ZFX sequences to file
+zfx.nt.aln <- ALIGNMENTS$nt.mammal.biostrings@unmasked[names(ALIGNMENTS$nt.mammal.biostrings@unmasked) %in% c(METADATA$mammal$common.name[METADATA$mammal$group=="ZFX"], 
+                                                                                                              METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
+Biostrings::writeXStringSet(zfx.nt.aln,  file = "aln/zfx_only/zfx.aln", format = "fasta")
+
+# Write ZFY sequences to file
+zfy.nt.aln <- ALIGNMENTS$nt.mammal.biostrings@unmasked[names(ALIGNMENTS$nt.mammal.biostrings@unmasked) %in% c(METADATA$mammal$common.name[METADATA$mammal$group=="ZFY"], 
+                                                                                                              METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
+Biostrings::writeXStringSet(zfy.nt.aln,  file = "aln/zfy_only/zfy.aln", format = "fasta")
+
+#### Create independent trees for ZFX and ZFY sequences ####
+
+# We can specify the true phylogeny of the sequences for ancestral reconstruction
+zfx.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
+                        "(", # Eutheria
+                        "(Southern_two-toed_sloth_ZFX, African_bush_elephant_ZFX)Atlantogenata, ", # Atlantogenata  
+                        "(", # Boreoeutheria
+                        "(",  # Euarchonoglires
+                        "( ", # Simiiformes
+                        "Common_marmoset_ZFX,", # New world monkeys
+                        "(", # Catarrhini (Old world monkeys & apes)
+                        "(", #Cercopithecidae (Old world monkeys)
+                        "Golden_snub-nosed_monkey_ZFX,",   #Colobinae
+                        "(Olive_baboon_ZFX, Macaque_ZFX)Cercopithecinae", # Cercopithecinae
+                        ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
+                        "(", # Hominidae
+                        "Gorilla_ZFX, (Chimpanzee_ZFX, Human_ZFX)Hominini",
+                        ")Hominidae",  # /Hominidae
+                        ")Catarrhini", # /Catarrhini
+                        ")Simiiformes,",  # /Simiiformes
+                        "(", # Rodentia
+                        "(Gray_squirrel_Zfx,(Arctic_ground_squirrel_Zfx, Alpine_marmot_ZFX)Xerinae)Sciuridae,", # Sciuridae 
+                        "(Beaver_Zfx, (", # Muroidea
+                        "(North_American_deer_mouse_Zfx, Desert_hamster_Zfx)Cricetidae,", # Cricetidae 
+                        "(Mongolian_gerbil_Zfx, (Rat_Zfx, (Mouse_Zfx, African_Grass_Rat_Zfx)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
+                        ")Eumuroida)Muroidea", # /Muroidea
+                        ")Rodentia", # /Rodentia
+                        ")Euarchonoglires,", # /Euarchonoglires
+                        "(", # Laurasiatheria
+                        "(",  # Carnivora
+                        "Cat_ZFX, (Dog_ZFX, (Stoat_ZFX, Polar_bear_ZFX)Arctoidea)Caniformia",
+                        ")Carnivora,",  # /Carnivora
+                        "(",  # Euungulata 
+                        "Horse_ZFX, (Pig_ZFX, (White_tailed_deer_ZFX, (Cattle_ZFX, Goat_ZFX)Bovidae)Pecora)Artiodactyla",
+                        ")Euungulata", # /Euungulata 
+                        ")Laurasiatheria", # /Laurasiatheria
+                        ")Boreoeutheria", # /Boreoeutheria
+                        ")Eutheria", # /Eutheria
+                        ")Theria)Mammalia;") # /Outgroups
+
+write_file(zfx.phylogeny, "aln/zfx_only/zfx.nt.species.nwk")
+
+zfy.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
+                        "(", # Eutheria
+                        "(Southern_two-toed_sloth_ZFY, African_bush_elephant_ZFY)Atlantogenata, ", # Afrotheria & Xenarthra
+                        "(", # Boreoeutheria
+                        "(",  # Euarchonoglires
+                        "( ", # Simiiformes
+                        "Common_marmoset_ZFY,", # New world monkeys
+                        "(", # Catarrhini (Old world monkeys & apes)
+                        "(", #Cercopithecidae (Old world monkeys)
+                        "Golden_snub-nosed_monkey_ZFY,",   #Colobinae
+                        "(Olive_baboon_ZFY, Macaque_ZFY)Cercopithecinae", # Cercopithecinae
+                        ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
+                        "(", # Hominidae
+                        "Gorilla_ZFY, (Chimpanzee_ZFY, Human_ZFY)Hominini",
+                        ")Hominidae",  # /Hominidae
+                        ")Catarrhini", # /Catarrhini
+                        ")Simiiformes,",  # /Simiiformes
+                        "(", # Rodentia
+                        "(Gray_squirrel_Zfy,(Arctic_ground_squirrel_Zfx-like_putative-Zfy, Alpine_marmot_ZFY)Xerinae)Sciuridae,", # Sciuridae 
+                        "(Beaver_Zfx-like_putative-Zfy, (", # Muroidea
+                        "(North_American_deer_mouse_Zfx-like_putative-Zfy, Desert_hamster_Zfx-like_putative-Zfy)Cricetidae,", # Cricetidae 
+                        "(Mongolian_gerbil_Zfx-like_putative-Zfy, (Rat_Zfy2, ((Mouse_Zfy1, Mouse_Zfy2), (African_Grass_Rat_ZFY2-like_1, African_Grass_Rat_ZFY2-like_2))Mus-Arvicanthis)Murinae)Muridae", # Muridae 
+                        ")Eumuroida)Muroidea", # /Muroidea
+                        ")Rodentia", # /Rodentia
+                        ")Euarchonoglires,", # /Euarchonoglires
+                        "(", # Laurasiatheria
+                        "(",  # Carnivora
+                        "Cat_ZFY, (Dog_ZFY, (Stoat_ZFY, Polar_bear_ZFY)Arctoidea)Caniformia",
+                        ")Carnivora,",  # /Carnivora
+                        "(",  # Euungulata 
+                        "Horse_ZFY, (Pig_ZFY, (White_tailed_deer_ZFY, (Cattle_ZFY, Goat_ZFY)Bovidae)Pecora)Artiodactyla",
+                        ")Euungulata", # /Euungulata 
+                        ")Laurasiatheria", # /Laurasiatheria
+                        ")Boreoeutheria", # /Boreoeutheria
+                        ")Eutheria", # /Eutheria
+                        ")Theria)Mammalia;") # /Outgroups
+
+write_file(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
+
+# Run the ancestral reconstructions
+system2("iqtree", paste("-s ", "aln/zfx_only/zfx.aln", 
+                        # "-bb 1000 -alrt 1000", # bootstrapping
+                        "-nt AUTO", # number of threads
+                        "-te aln/zfx_only/zfx.nt.species.nwk", # user tree guide
+                        "-asr")) # ancestral sequence reconstruction
+
+system2("iqtree", paste("-s ", "aln/zfy_only/zfy.aln", 
+                        # "-bb 1000 -alrt 1000", # bootstrapping
+                        "-nt AUTO", # number of threads
+                        "-te aln/zfy_only/zfy.nt.species.nwk", # user tree guide
+                        "-asr")) # ancestral sequence reconstruction
+
+#### Remove duplicate species nodes from the trees  ####
+
+# For a ~species tree, we only need one sequence per species. Either can be dropped,
+# since they give the same branching order
+
+# Read the ML ZFX and ZFY trees 
+zfx.nt.aln.tree <- ape::read.tree("aln/zfx_only/zfx.aln.treefile")
+zfy.nt.aln.tree <- ape::read.tree("aln/zfy_only/zfy.aln.treefile")
+
+# Drop the second ZFYs in mouse and rat
+zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2") 
+zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "African_Grass_Rat_ZFY2-like_1") 
+
+# Root the trees on platypus
+zfx.nt.aln.tree <- phytools::reroot(zfx.nt.aln.tree, which(zfx.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+zfy.nt.aln.tree <- phytools::reroot(zfy.nt.aln.tree, which(zfy.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+
+# Remove gene names so tip labels are comparable
+zfx.nt.aln.tree$tip.label <- str_replace(zfx.nt.aln.tree$tip.label, "_Z[F|f][X|x].*", "")
+zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", "")
+
+
+#### Plot ZFX / ZFY tree comparisons  ####
+
+# Export comparison of the ML trees
+png(filename = "figure/zfx.zfy.nt.ancestral.treediff.png")
+treespace::plotTreeDiff(zfx.nt.aln.tree, zfy.nt.aln.tree, treesFacing=TRUE)
+dev.off()
+
+# Plot the two trees with node labels
+zfx.nt.aln.tree.plot <- plot.tree(zfx.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
+zfy.nt.aln.tree.plot <- plot.tree(zfy.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
+
+save.double.width("figure/ancestral.zfx.png", zfx.nt.aln.tree.plot)
+save.double.width("figure/ancestral.zfy.png", zfy.nt.aln.tree.plot)
+
+#### Find matching nodes in the two trees and get ancestral reconstructions ####
+
+# Nodes with the same branching order will be viable for comparison of ancestral
+# reconstructions
+
+# Find the matching nodes
+zfy.zfx.common.nodes <- ape::comparePhylo(zfx.nt.aln.tree, zfy.nt.aln.tree)$NODES %>%
+  tidyr::separate_wider_delim(cols = zfx.nt.aln.tree, delim = " ", names = c("ZFX_node", "zfx_nnodes") ) %>%
+  tidyr::separate_wider_delim(cols = zfy.nt.aln.tree, delim = " ", names = c("ZFY_node", "zfy_nnodes") ) %>%
+  # Remove booststrap values from node names
+  dplyr::mutate(ZFX_node = str_replace(ZFX_node, "\\/\\d.*", ""),
+                ZFY_node = str_replace(ZFY_node, "\\/\\d.*", "")) %>% 
+  dplyr::filter(ZFX_node!="Mammalia" & ZFX_node!="Root" & ZFX_node!="") 
+
+# Read the ancestral states for the nodes
+ancestral.zfx.seqs <- read.table("aln/zfx_only/zfx.aln.state", header=TRUE)
+ancestral.zfy.seqs <- read.table("aln/zfy_only/zfy.aln.state", header=TRUE)
+
+get.node.sequence <- function(node.name, ancestral.seq.table, type){
+  ancestral.seq.table %>%
+    dplyr::filter(Node==node.name) %>%
+    dplyr::arrange(Site) %>%
+    dplyr::select(State) %>%
+    dplyr::summarise(Seq =  paste0(">", type, "_", node.name, "\n", paste(State, collapse = "")))
+}
+
+# Get the ancestral sequences for these node pairs
+zfy.zfx.common.nodes$anc.zfx <- sapply(zfy.zfx.common.nodes$ZFX_node, 
+                                       get.node.sequence, 
+                                       ancestral.seq.table=ancestral.zfx.seqs, type="ZFX")
+zfy.zfx.common.nodes$anc.zfy <- sapply(zfy.zfx.common.nodes$ZFY_node, 
+                                       get.node.sequence, 
+                                       ancestral.seq.table=ancestral.zfy.seqs, type="ZFY")
+
+# Write the node sequences to fasta
+anc.node.seqs <- paste0(c(zfy.zfx.common.nodes$anc.zfx, zfy.zfx.common.nodes$anc.zfy, "\n"), collapse = "\n")
+write_file(anc.node.seqs, "aln/ancestral.zfx.zfy.nodes.fa")
+
+# Combine with existing ZFX/Y sequence file
+ape::write.dna(ALIGNMENTS$nt.mammal.ape, "aln/ancestral.zfx.zfy.nodes.fa", format="fasta", 
+               append = TRUE, colsep = "", nbcol=-1)
+
+#### Write geneconv configuration file ####
+
+# Zfx and Zfy for each species / node are in the same group
+node.string.names <- zfy.zfx.common.nodes %>% 
+  dplyr::mutate(GroupString= paste0("-group ZFX_", ZFX_node, "_ZFY_",ZFY_node, " ZFX_", ZFX_node, " ZFY_",ZFY_node ))
+node.string <- paste(node.string.names$GroupString, collapse = "\n")
+
+split.gene.names <- METADATA$mammal %>%
+  # Since we're about to split on 'Z', remove secondary instances of the string
+  # keeping whatever - or _ was in the original name
+  dplyr::mutate(common.name = str_replace(common.name, "putative-Zfy", "putative-Y"),
+                common.name = str_replace(common.name, "putative_Zfy", "putative_Y")) %>%
+  separate_wider_delim(common.name, 
+                       delim= "Z", names = c("Species", "Gene"), too_few = "debug") %>%
+  dplyr::mutate(Species = str_replace(Species, "_$", ""),
+                Gene = paste0("Z", Gene)) %>%
+  # Repair gene names following the split earlier
+  dplyr::mutate( Gene = str_replace(Gene, fixed("Zfx-like_putative_Y"), "Zfx-like_putative_Zfy"),
+                 Gene = str_replace(Gene, fixed("ZFX-like_putative_Y"), "ZFX-like_putative_ZFY"),
+                 Gene = str_replace(Gene, fixed("Zfx-like_putative-Y"), "Zfx-like_putative-Zfy"),
+                 Gene = str_replace(Gene, fixed("ZFX-like_putative-Y"), "ZFX-like_putative-ZFY"),
+                 Seq = paste0(Species, "_", Gene)) %>%
+  dplyr::arrange(Species, Gene) %>%
+  dplyr::group_by(Species) %>%
+  dplyr::reframe(GroupString =  paste("-group", Species, paste(Seq, collapse = " "))) %>%
+  dplyr::distinct()
+
+
+group.string <- paste(split.gene.names$GroupString, collapse = "\n")
+
+# Make the geneconv control file
+# e.g 
+#GCONV_CONFIG
+# -Startseed=123   -MaxSimGlobalPval=0.05
+# -group GRPI   S1  S2
+# -group GRPII  H1 C1 I2
+# -group GRPII  O1  O2
+# -group GRPIII G1 G2 R1 R2 
+anc.gene.conv.control <- paste0("#GCONV_CONFIG\n",
+                                "-Startseed=123   -MaxSimGlobalPval=0.05\n",
+                                group.string, "\n", node.string)
+
+write_file(anc.gene.conv.control, "aln/anc.zfx.zfy.geneconv.cfg")
+
 
 
 #### Tar the outputs ####

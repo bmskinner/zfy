@@ -746,7 +746,118 @@ save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 1
 structure.plot <- (hydrophobicity.plot) / (charge.plot) + plot_layout(ncol = 1)
 save.double.width("figure/Figure_xxxx_combined_structure.plot.png", structure.plot, height = 230)
 
-#### Plot HyPhy RELAX test for relaxed selection in Muroidea ####
+
+#### What are the hydrophobic patches in exons 2, 3 and 5 that are not 9aaTADs? ####
+
+# Extract all nt and aa sequences from the MSA for the given region, and calculate the
+# consensus sequence
+extract.alignment.region <- function(nt.start=NULL, nt.end=NULL, aa.start=NULL, aa.end=NULL){
+  
+  if(is.null(nt.start) & is.null(nt.end)){
+    nt.start <- floor(max(1, aa.start*3)-2)
+    nt.end <- ceiling(max(1, aa.end*3))
+  }
+  
+  if(is.null(aa.start) & is.null(aa.end)){
+    aa.start <- floor(max(1, nt.start/3))
+    aa.end <- ceiling(max(1, nt.end/3))
+  }
+  
+  nt.aln <- as.data.frame(as.matrix(ALIGNMENTS$nt.combined.biostrings)[,nt.start:nt.end]) %>%
+    dplyr::mutate(Sequence = rownames(.),
+                  Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+    dplyr::arrange(as.integer(Sequence)) %>%
+    dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+nt.start-1) )
+  
+  aa.aln <- as.data.frame(as.matrix(ALIGNMENTS$aa.combined.biostrings)[,aa.start:aa.end]) %>%
+    dplyr::mutate(Sequence = rownames(.),
+                  Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+    dplyr::arrange(as.integer(Sequence)) %>%
+    dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+aa.start-1) )
+  
+  
+  # find the most common nucleotide in the consensus matrix
+  nt.consensus <- paste(unlist(
+    apply(consensusMatrix(ALIGNMENTS$nt.combined.biostrings)[,(nt.start):(nt.end)], 
+          2, \(x) names( which(x==max(x)) )[1]  ) # Take only the first consensus in case of ties
+  ), 
+  collapse = "")
+  
+  aa.consensus <- paste(unlist(
+    apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(aa.start):(aa.end)], 
+          2, \(x) names( which(x==max(x)) )[1] ) # Take only the first consensus in case of ties
+  ), 
+  collapse = "")
+  
+  list(
+    nt.aln   = nt.aln,
+    aa.aln   = aa.aln,
+    aa.start = aa.start,
+    aa.end   = aa.end,
+    aa.length = aa.end - aa.start + 1,
+    nt.start = nt.start,
+    nt.end   = nt.end,
+    nt.length = nt.end - nt.start + 1,
+    nt.consensus = nt.consensus,
+    aa.consensus = aa.consensus
+  )
+}
+
+plot.hydrophobic.patch <- function(patch.data, patch.start, patch.end, patch.consensus){
+  ggplot()+
+    geom_tile(data=patch.data,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
+    scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
+    labs(fill="Hydrophobicity (per residue)")+
+    geom_text(data = patch.data, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
+    
+    # Overlay diversifying selection from MEME
+    new_scale_fill()+
+    labs(fill="Diversifying selection")+
+    geom_tile(data = meme.cols, aes(x = site, y = 65, fill = `p-value`<0.1))+
+    
+    scale_y_discrete(labels = gsub("_", " ", rev(combined.taxa.name.order)))+
+    coord_cartesian(xlim = c(patch.start,patch.end),  ylim = c(0, 65), clip = 'on')+
+    annotate("text", label=s2c(patch.consensus), size=2, x=(patch.start):(patch.start+nchar(patch.consensus)-1), 
+             y=64.2, hjust=0.5, family="mono", fontface="bold")
+}
+
+
+exon2.patch <- extract.alignment.region(mouse.exons$start_aa[2]+95,
+                                        mouse.exons$start_aa[2]+118)
+
+exon3.patch <- extract.alignment.region(mouse.exons$start_aa[3]+25,
+                                        mouse.exons$end_aa[3])
+
+exon5.patch <- extract.alignment.region(mouse.exons$start_aa[5]+28,
+                                        mouse.exons$end_aa[5]+1)
+
+# Export to file
+merge(exon2.patch$patch.table, exon3.patch$patch.table, by=c("Sequence")) %>%
+  merge(., exon5.patch$patch.table, by=c("Sequence")) %>%
+  create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:4)
+
+
+exon2.hydro.plot <-plot.hydrophobic.patch(exon2.patch$patch, exon2.patch$start, exon2.patch$end, exon2.patch$consensus)
+exon3.hydro.plot <-plot.hydrophobic.patch(exon3.patch$patch, exon3.patch$start, exon3.patch$end, exon3.patch$consensus)
+exon5.hydro.plot <-plot.hydrophobic.patch(exon5.patch$patch, exon5.patch$start, exon5.patch$end, exon5.patch$consensus)
+
+# Collect the plots
+
+patch.plot.complete <- exon2.hydro.plot + exon3.hydro.plot + exon5.hydro.plot +
+  plot_layout(nrow=1, guides = "collect", axes = "collect") &
+  theme_bw()+
+  theme(legend.position = "top",
+        axis.text = element_text(size=6),
+        axis.title = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=8))
+save.double.width(filename = "figure/hydrophobic.patch.all.png", patch.plot.complete)
+
+
+
+
+
+#### Plot HyPhy RELAX test for relaxed selection ####
 
 create.relax.k.tree <- function(json.file){
   # Read the json file and parse results
@@ -777,6 +888,9 @@ create.relax.k.tree <- function(json.file){
   
   hyphy.input.tree <- phytools::reroot(hyphy.input.tree, which(hyphy.input.tree$tip.label=="Platypus_ZFX"), position = 0.015)
   
+  cat(json.file, "K=", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2), 
+      "p=", round(hyphy.data$`test results`$`p-value`, digits = 2), "\n")
+  
   p <- ggtree(hyphy.input.tree) + 
     geom_tiplab(size=2)
   p <- p %<+% k.vals + aes(colour=adj.k) + 
@@ -799,31 +913,320 @@ create.relax.k.tree <- function(json.file){
   p
 }
 
-if(file.exists("hyphy/mammal.relax.json")){
-  relax.tree.all <- create.relax.k.tree("hyphy/mammal.relax.json")
-  save.double.width("figure/Figure_xxxx_RELAX_mammal.png", relax.tree.all)
+if(file.exists("hyphy/combined.rodentia.relax.json")){
   
-  relax.tree.e1_3_6 <- create.relax.k.tree("hyphy/exon_1_3-6.relax.json")
-  relax.tree.e2 <- create.relax.k.tree("hyphy/exon_2.relax.json")
-  relax.tree.e7 <- create.relax.k.tree("hyphy/exon_7.relax.json")
+  node.names <- c("rodentia", "eumuroida", "muridae", "murinae")
+  
+  make.tree <- \(name){
+    relax.tree <- create.relax.k.tree(paste0("aln/hyphy/combined.", name, ".relax.json"))
+    save.double.width(paste0("figure/RELAX.combined.", name, ".png"), relax.tree)
+    
+    relax.mammal.tree <- create.relax.k.tree(paste0("aln/hyphy/mammal.", name, ".relax.json"))
+    save.double.width(paste0("figure/RELAX.mammal.", name, ".png"), relax.mammal.tree)
+  } 
+  
+  sapply(node.names, make.tree)
+}
 
-  # Combine the exon trees into one figure
-  exon.relax.tree <- relax.tree.e1_3_6 + relax.tree.e2 + relax.tree.e7 + 
-    plot_annotation(tag_levels = list(c("Exons 1,3-6", "Exon 2", "Exon 7"))) +
-    plot_layout(guides = "collect") &
-    theme(legend.position='bottom', 
-          plot.tag = element_text(size=6),
-          plot.tag.position = c(0.2, 1))
-  save.double.width("figure/exons.relax.K.png", exon.relax.tree)
+#### Plot HyPhy MEME test for directional selection ####
+
+
+# Given an alignment region produced by `extract.alignment.region`, plot it
+plot.alignment.region <- function(region.data, meme.overview){
+  
+  meme.overview$site.nt <- meme.overview$site*3-1
+  
+  tidy.region.nt.data <- region.data$nt.aln %>%
+    tidyr::pivot_longer( -Sequence, names_to = "Site", values_to = "Base") %>%
+    dplyr::mutate(Site = as.integer(gsub("Site_", "", Site)))
+  
+  tidy.region.aa.data <- region.data$aa.aln %>%
+    tidyr::pivot_longer( -Sequence, names_to = "Site", values_to = "Residue") %>%
+    dplyr::mutate(Site = as.integer(gsub("Site_", "", Site))*3-1) %>%
+    dplyr::mutate(isSignificant = Site %in% (meme.overview$site*3-1)) %>%
+    merge(., meme.overview, by.x = "Site", by.y = "site.nt", all.x=T) %>%
+    dplyr::mutate(sequenceInt = as.integer(Sequence),
+                  clade = case_when(str_detect(Sequence, "Grass_Rat_ZFY") ~ "murinae",
+                                    str_detect(Sequence, "Mouse_Zfy") ~ "murinae",
+                                    str_detect(Sequence, "Rat_Zfy") ~ "murinae",
+                                    str_detect(Sequence, "Mongolian_gerbil_Zfx-like") ~ "muridae",
+                                    str_detect(Sequence, "deer_mouse_Zfx-like") ~ "eumuroida",
+                                    str_detect(Sequence, "hamster_Zfx-like") ~ "eumuroida",
+                                    str_detect(Sequence, "marmot_ZFY") ~ "rodentia",
+                                    str_detect(Sequence, "squirrel_Zfx-like") ~ "rodentia",
+                                    str_detect(Sequence, "squirrel_Zfy") ~ "rodentia",
+                                    str_detect(Sequence, "Beaver_Zfx-like") ~ "rodentia",
+                                    .default = "other"
+                  ),
+                  isSignificantSite = case_when( (clade %in% c("rodentia")) & rodentia<0.01 ~ T,
+                                                 (clade %in% c("eumuroida")) & eumuroida<0.01 ~ T,
+                                                 (clade %in% c("muridae")) & muridae<0.01 ~ T,
+                                                 (clade %in% c("murinae")) & murinae<0.01 ~ T,
+                                                 .default = F)
+                  
+    )
+  
+  
+  
+  
+  p <- ggplot()+
+    geom_tile(data=tidy.region.nt.data,  aes(x = Site, y = Sequence, fill=Base))+
+    scale_fill_manual(values = c("G"="#EB413C", "C"="#FFB340", "T"="#3C88EE", "A"="#64F73F", "-"="grey"))+ # Jalview colours
+    labs(fill="Base")+
+    
+    new_scale_fill()+
+    geom_tile(data=tidy.region.aa.data,  aes(x = Site, y = Sequence, fill=Residue, width=0.5, height=1))+
+    # geom_text(data = tidy.region.aa.data, aes(x = Site, y = Sequence, label=Residue), size=2, family="mono", col="black")+
+    geom_text(data = tidy.region.aa.data, aes(x = Site, y = Sequence, label=Residue, col=isSignificantSite), 
+              size=2, family="mono", )+
+    scale_color_manual(values = c("white", "black"))+
+    guides(col = FALSE)+
+    guides(fill = FALSE)+
+    
+    # Overlay diversifying selection from MEME
+    new_scale_fill()+
+    labs(fill="Diversifying selection")+
+    geom_tile(data = tidy.region.aa.data, aes(x = Site, y = 64.5, width=3, height=2, fill = isSignificant))+
+    scale_fill_manual(values = c(`TRUE`="lightblue", `FALSE`="grey"))+
+    guides(fill = FALSE)+
+
+    scale_x_continuous(breaks = seq(region.data$nt.start, region.data$nt.end, 3))+
+    coord_cartesian(xlim = c(region.data$nt.start,region.data$nt.end),  ylim = c(0, 66), clip = 'on')+
+    # NT consensus
+    annotate("text", label=s2c(region.data$nt.consensus), size=2, x=(region.data$nt.start):(region.data$nt.start+nchar(region.data$nt.consensus)-1),
+             y=64.2, hjust=0.5, family="mono", fontface="bold")+
+    # # AA consensus
+    annotate("text", label=s2c(region.data$aa.consensus), size=2,
+             x=seq((region.data$nt.start)+1,
+                   (region.data$nt.start+nchar(region.data$nt.consensus)),
+                   3),
+             y=65.2, hjust=0.5, family="mono", fontface="bold")+
+    theme_bw()
+  
+  list(plot = p,
+       region = region.data)
 }
 
 
+# Read the json file of meme results for a given node
+# Filter to those of interest at p<0.05
+# outgroup.type: combined or mammal
+read.meme.results <- function(node.name="rodentia", outgroup.type="combined"){
+  
+  json.file <- paste0("aln/hyphy/", outgroup.type, ".", node.name, ".meme.json")
+  meme.data <- jsonlite::read_json(json.file)
+  
+  # Read a given partition
+  read.partition <- function(partition){
+    
+    # Extract the values for the given partition
+    meme.cols <- as_tibble(do.call(rbind, meme.data$MLE$content[[as.name(partition)]])) %>% 
+      unnest_longer(everything())
+
+    # Extract the sites covered by the partition
+    meme.cols$site <- unlist(meme.data$`data partitions`[[as.name(partition)]]$coverage)
+    meme.cols$partition <- partition
+    
+    # Extract column names
+    colnames(meme.cols) <- c(unlist(lapply(meme.data$MLE$headers, \(i) i[[1]])), "site", "partition")
+    meme.cols
+  }
+  
+  # Read all partitions and combine
+  meme.data <-  do.call(rbind, lapply(0:2, read.partition))
+  
+  meme.data$node <- node.name
+  meme.data$outgroup.type <- outgroup.type
+  
+  # Plot the MEME results - window around each site
+  meme.sites <- meme.data %>%
+    dplyr::filter(`p-value`<0.01) %>%
+    dplyr::mutate(start = site-1,
+                  end = site+1)
+  
+  list(meme.data = meme.data,
+       meme.sites = meme.sites)
+}
 
 
-#### codeml site model to check for site-specific selection ####
+combined.meme.results <- lapply(node.names, read.meme.results)
 
-# Only run this section if the codeml analysis has completed
-if(file.exists("paml/site-specific/site.specific.paml.out.txt")){
+mammal.meme.results <- lapply(node.names, read.meme.results, outgroup.type="mammal")
+
+# Create plots of the MSA around the sites of interest
+plot.individual.meme.sites <- function(meme.results, outgroup.type){
+  
+  create.meme.overview.plot <- function(meme.overview){
+    
+    p.value.threshold <- 0.01
+    
+    # Annotate MEME sites over the exons
+    meme.location.plot <- ggplot()+
+      # Draw the structures
+      add.track(ranges.NLS.common,    1.95, 2.55, fill=NLS.COLOUR, alpha = 1)+ # +8.5
+      add.track(ranges.ZF.common,     2, 2.5, fill=ZF.COLOUR)+ # 9 - 11
+      add.track.labels(ranges.ZF.common, 2, 2.5, col="white", label_col = "motif_number")+   # Label the ZFs
+      add.track(ranges.9aaTAD.common, 2, 2.5, fill=TAD.COLOUR,  alpha = 0.9)+  #9
+      add.track.labels(ranges.9aaTAD.common, 2, 2.5, col="white")+   # Label the 9aaTADs
+      
+      annotate("rect", xmin = exon2.patch$start, xmax = exon2.patch$end, 
+               ymin = 2, ymax = 2.5, fill = "pink")+
+      annotate("rect", xmin = exon3.patch$start, xmax = exon3.patch$end, 
+               ymin = 2, ymax = 2.5, fill = "pink")+
+      annotate("rect", xmin = exon5.patch$start, xmax = exon5.patch$end, 
+               ymin = 2, ymax = 2.5, fill = "pink")+
+      
+      new_scale_fill()+
+      scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
+      scale_pattern_color_manual(values=c("white", "white"))+
+      
+      scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
+      guides(fill = "none", pattern="none")+
+      add.exon.track(y.start = 2.6, y.end = 3, col="black")+
+      add.exon.labels(y.start = 2.6, y.end = 3)+
+      
+      # Show which test clades the sites show up in
+      geom_point(data = meme.overview, aes(x=site, y = 3.1, alpha = rodentia<p.value.threshold), col="black",size = 0.2)+
+      geom_point(data = meme.overview, aes(x=site, y = 3.2, alpha = eumuroida<p.value.threshold), col="black",size = 0.2)+
+      geom_point(data = meme.overview, aes(x=site, y = 3.3, alpha = muridae<p.value.threshold), col="black",size = 0.2)+
+      geom_point(data = meme.overview, aes(x=site, y = 3.4, alpha = murinae<p.value.threshold), col="black", size = 0.2)+
+      scale_alpha_manual(values=c(0, 1))+
+      
+      geom_tile(data = meme.overview, aes(x=site, y = 2.5, height = 1, width=1), fill = "brown")+
+      annotate("text", x= 750, y=3.1, label = "rodentia", hjust=0, size = 2)+
+      annotate("text", x= 750, y=3.2, label = "eumuroida", hjust=0, size = 2)+
+      annotate("text", x= 750, y=3.3, label = "muridae", hjust=0, size = 2)+
+      annotate("text", x= 750, y=3.4, label = "murinae", hjust=0, size = 2)+
+      
+      
+      scale_x_continuous(breaks = seq(0, 885, 50), expand = c(0, 0.05))+
+      coord_cartesian(xlim = c(0, 885))+
+      theme_bw()+
+      theme(axis.text.y = element_blank(),
+            axis.title = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.text.x = element_text(size=6),
+            legend.position = "none",
+            legend.title = element_text(size = 6, vjust = 0.85),
+            legend.text = element_text(size = 6),
+            legend.key.height = unit(3, "mm"),
+            legend.spacing.y = unit(2, "mm"),
+            legend.box.spacing = unit(2, "mm"),
+            panel.border = element_blank(),
+            axis.line.x.bottom = element_line(),
+            panel.grid = element_blank())
+    
+    save.double.width(filename = paste0("figure/meme.",outgroup.type,".site.locations.png"), meme.location.plot, height = 45)
+  }
+  
+  # Find the unique set of sites in the meme data
+  meme.overview <- do.call(rbind, lapply(meme.results, \(x) x$meme.data)) %>%
+    tidyr::pivot_wider(id_cols = c(site, partition), names_from = node, values_from = `p-value`) %>%
+    dplyr::filter(if_any(.cols= rodentia:murinae, ~.<0.01)) # filter to sites significant in any node
+  
+  create.meme.overview.plot(meme.overview)
+  
+  site.ranges <- with(meme.overview, IRanges(start=site-2, end=site+2))
+  collapsed.ranges <- as.data.frame(IRanges::reduce(site.ranges))
+  unique.regions <- mapply(extract.alignment.region, aa.start = collapsed.ranges$start+1, 
+                           aa.end =collapsed.ranges$end-1, SIMPLIFY = FALSE)
+  
+  site.plots <- lapply(unique.regions, plot.alignment.region, meme.overview=meme.overview)
+  
+  
+  lapply(site.plots, \(x){ x$plot+theme(legend.position = "top",
+                                        axis.text = element_text(size=6),
+                                        axis.title = element_blank(),
+                                        legend.text = element_text(size=6),
+                                        legend.title = element_text(size=8))
+    save.double.width(filename = paste0("figure/meme.", outgroup.type, ".", x$region$aa.start,"-",x$region$aa.end,".png"), plot = last_plot())
+  } )
+}
+
+plot.individual.meme.sites(mammal.meme.results, "mammal")
+plot.individual.meme.sites(combined.meme.results, "combined")
+
+plot.meme.sites <- function(plots.to.save){
+  meme.site.plots <- patchwork::wrap_plots( lapply(plots.to.save, \(x)x$plot), nrow = 1) + plot_layout(guides = "collect", axes = "collect") &
+    theme_bw()+
+    theme(legend.position = "none",
+          axis.text = element_text(size=6),
+          axis.title = element_blank(),
+          legend.text = element_text(size=6),
+          legend.title = element_text(size=8))
+  save.double.width(filename = paste("figure/meme.site.plots.combined.png"),
+                    meme.site.plots, height = 120)
+}
+
+plot.meme.sites(site.plots[1:4])
+plot.meme.sites(site.plots[5:8])
+plot.meme.sites(site.plots[9:11])
+
+#### codeml site models to check for site-specific and branch-site selection ####
+
+# Read the test and null codeml outputs
+# These were created with a foreground node name
+read.branch.site.codeml.output <- function(fg.node.name){
+  
+  calc.LRT <- function(lnl0, lnl1, np0, np1){
+    lrt <- 2 * (lnl1-lnl0)
+    df <- abs(np1-np0)
+    crit.value =  qchisq(p=0.05, df=df, lower.tail = FALSE)
+    list("crit.value" = crit.value,
+         "p.value" = pchisq(lrt, df, lower.tail = FALSE),
+         "lrt" = lrt)
+  }
+  
+  test.output <- paste0("paml/branch-site-", fg.node.name, "/paml.out.txt")
+  null.output <- paste0("paml/branch-site-", fg.node.name, "-null/paml.out.txt")
+  
+  if(!file.exists(test.output) || !file.exists(null.output)){
+    return()
+  }
+  
+  test.lines <- read_lines(test.output) %>%
+    as.data.frame %>%
+    dplyr::rename_with(.fn = function(i) "line") %>%
+    dplyr::filter(grepl("lnL", lead(line, n=5)) | grepl("lnL", line))
+  
+  null.lines <- read_lines(null.output) %>%
+    as.data.frame %>%
+    dplyr::rename_with(.fn = function(i) "line") %>%
+    dplyr::filter(grepl("lnL", lead(line, n=5)) | grepl("lnL", line))
+  
+  
+  test.data <- data.frame(model = test.lines[seq(1, 9, 2),],
+                     value = test.lines[seq(2, 10, 2),]) %>%
+    dplyr::mutate(lnL = str_extract(value, "-\\d+\\.\\d+"),
+                  np = str_replace(str_extract(value, "np:\\d+"), "np:", ""),
+                  across(lnL:np, as.numeric)) %>%
+    na.omit()
+  
+  null.data <- data.frame(model = null.lines[seq(1, 9, 2),],
+                          value = null.lines[seq(2, 10, 2),]) %>%
+    dplyr::mutate(lnL = str_extract(value, "-\\d+\\.\\d+"),
+                  np = str_replace(str_extract(value, "np:\\d+"), "np:", ""),
+                  across(lnL:np, as.numeric)) %>%
+    na.omit()
+  
+  lrt.data <- calc.LRT(test.data$lnL, null.data$lnL, test.data$np, null.data$np)
+  
+  cat(fg.node.name, ": p=", lrt.data$p.value, "; LRT=", lrt.data$lrt, "\n")
+}
+
+read.branch.site.codeml.output("rodentia")
+read.branch.site.codeml.output("eumuroida")
+read.branch.site.codeml.output("muridae")
+read.branch.site.codeml.output("murinae")
+
+# Test if any sites are evolving in a non-neutral manner
+read.site.specific.codeml.output <- function(){
+  
+  # Only run this section if the codeml analysis has completed
+  if(!file.exists("paml/site-specific/site.specific.paml.out.txt")){
+    return()
+  }
+  
   # Extract lnl from output
   lines <- read_lines("paml/site-specific/site.specific.paml.out.txt") %>%
     as.data.frame %>%
@@ -882,274 +1285,25 @@ if(file.exists("paml/site-specific/site.specific.paml.out.txt")){
   # M0,indicating that the selective pressure reflected by ω
   # varies hugely among sites.
   cat("M0 vs. M1a\n")
-  cat(paste(lrts[[1]], collapse = " | "), "\n")
+  cat("p=", lrts[[1]]$p.value, "lrt=", lrts[[1]]$lrt, "\n")
   
   # Compared with M1a, M2a adds a class of sites under positive selection with ω2
   # > 1 (in proportion p2). This does not improve the fit of the model
   # significantly
   # (nearly neutral vs. positive selection)
   cat("M1a, M2a\n")
-  cat(paste(lrts[[2]], collapse = " | "), "\n")
+  cat("p=", lrts[[2]]$p.value, "lrt=", lrts[[2]]$lrt, "\n")
   
   # Additional test for positive selection by comparing M7 (beta, null model)
   # against M8 (beta&ω, alternative model).
   # (positive selection vs null model)
   # Evidence for sites under positive selection 
   cat("M7, M8\n")
-  cat(paste(lrts[[3]], collapse = " | "), "\n")
-  
-  
-  #### codeml branch-site model to look for selection specifically in Muroidea ####
-  
-  # Bayes Empirical Bayes (BEB) analysis (Yang, Wong & Nielsen 2005. Mol. Biol. Evol. 22:1107-1118)
-  # Extract sites under positive selection
-  positive.sites <- read_lines("paml/branch-site/branch-site.paml.out.txt") %>%
-    as.data.frame %>%
-    dplyr::rename_with(.fn = function(i) "line") %>%
-    dplyr::filter(grepl("^ {2,5} \\d{1,3} [A-Z\\-]", line)  ) %>%
-    dplyr::mutate(line = str_trim(line)) %>%
-    tidyr::separate_wider_delim(line, delim = " ", names = c("site", "aa", "p")) %>%
-    dplyr::mutate(p = str_replace_all(p, "\\*", ""),
-                  site = as.numeric(site),
-                  p = as.numeric(p))
-  
-  positive.sites.y <- 1
-  
-  positive.sites.plot <- ggplot()+
-    geom_rect(data = positive.sites,   aes(xmin=site-0.5, xmax=site+0.5, ymin=positive.sites.y, ymax=positive.sites.y+2, fill=p))+
-    geom_rect(data = positive.sites[positive.sites$p>0.9,],   aes(xmin=site-0.5, xmax=site+0.5, ymin=positive.sites.y+3, ymax=positive.sites.y+5, fill=p))+
-    labs(x = "Site", fill = "p(ω>1)")+
-    scale_fill_viridis_c()+
-    theme_bw()
-  
-  # msa.aa.aln.tidy.frog.conservation    <- calculate.conservation(ALIGNMENTS$aa.combined.biostrings,"Xenopus_ZFX.S" )
-  # msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(ALIGNMENTS$aa.combined.biostrings,"Chicken_ZFX" )
-  # msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(ALIGNMENTS$aa.combined.biostrings,"Opossum_ZFX" )
-  
-  n.taxa <- 2
-  positive.sites.plot <-  positive.sites.plot+
-    # Draw the conservation with Xenopus, chicken and opossum
-    new_scale_fill()+
-    scale_fill_viridis_c(limits = c(0, 1))+
-    labs(fill="Conservation (5 site average)")+
-    # add.conservation.track(msa.aa.aln.tidy.frog.conservation,    n.taxa,   n.taxa+2)+
-    # add.conservation.track(msa.aa.aln.tidy.chicken.conservation, n.taxa+3, n.taxa+5)+
-    # add.conservation.track(msa.aa.aln.tidy.opossum.conservation, n.taxa+6, n.taxa+8)+
-    add.track(ranges.NLS.common,    n.taxa+4.5, n.taxa+7.5, fill=NLS.COLOUR, alpha = 1)+
-    # Draw the structures
-    add.track(ranges.ZF.common,     n.taxa+5, n.taxa+7, fill=ZF.COLOUR)+
-    add.track.labels(ranges.ZF.common, n.taxa+5, n.taxa+7, col="white", label_col = "motif_number")+
-    
-    add.track(ranges.9aaTAD.common, n.taxa+5, n.taxa+7, fill=TAD.COLOUR,  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
-    add.track.labels(ranges.9aaTAD.common, n.taxa+3, n.taxa+7, col="white")+   # Label the 9aaTADs
-    
-    new_scale_fill()+
-    scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
-    scale_pattern_color_manual(values=c("white", "white"))+
-    
-    scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
-    guides(fill = "none", pattern="none")+
-    add.exon.track(n.taxa+8, n.taxa+10, col = "black")+ # color of border
-    add.exon.labels(n.taxa+8, n.taxa+10)+
-    
-    scale_x_continuous(expand = c(0, 0), breaks = seq(0, 950, 50))+
-    coord_cartesian(xlim = c(0, max(msa.aa.aln.tidy.frog.conservation$position)))+
-    theme_bw()+
-    theme(axis.text.y = element_blank(),
-          axis.title = element_blank(),
-          axis.ticks.y = element_blank(),
-          axis.text.x = element_text(size=6),
-          legend.position = "top",
-          legend.title = element_text(size = 6, vjust = 0.85),
-          legend.text = element_text(size = 6),
-          legend.key.height = unit(3, "mm"),
-          legend.spacing.y = unit(2, "mm"),
-          legend.box.spacing = unit(2, "mm"),
-          panel.border = element_blank(),
-          axis.line.x.bottom = element_line(),
-          panel.grid = element_blank())
-  
-  save.double.width("figure/positive.sites.png", positive.sites.plot, height = 85)
-  
-  
-  # Plot the fraction of sites under possible selection in a 9-base window
-  sites <- data.frame(site = 1:max(mouse.exons$end_aa))
-  sites$isSelected <- sapply(sites$site, \(i) nrow(positive.sites[positive.sites$site==i,"p"])>0)
-  sites$isSelected.0.9 <- sapply(sites$site, \(i) ifelse(nrow(positive.sites[positive.sites$site==i,"p"])>0, positive.sites[positive.sites$site==i,"p"]>0.9, FALSE))
-  
-  
-  sites %<>% dplyr::mutate(
-    smoothSelected = slider::slide_dbl(isSelected, sum, .before=4, .after = 4),
-    smoothSelected0.9 = slider::slide_dbl(isSelected.0.9, sum, .before=4, .after = 4),
-  )
-  
-  sites.plot <- ggplot()+
-    
-    annotate("segment", x=0, xend=0, y=0, yend=8, linewidth=1)+
-    new_scale_fill()+
-    scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
-    scale_pattern_color_manual(values=c("white", "white"))+
-    
-    scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
-    guides(fill = "none", pattern="none")+
-    add.exon.track(-2, -1, col = "black")+ # color of border
-    add.exon.labels(-2, -1)+
-    
-    add.track(ranges.NLS.common, -0.75, 7.25, fill=NLS.COLOUR, alpha = 1)+
-    # Draw the structures
-    add.track(ranges.ZF.common,    -0.5, 7,, fill=ZF.COLOUR)+
-    add.track.labels(ranges.ZF.common, -0.5, 0, col="white", label_col = "motif_number")+
-    
-    add.track(ranges.9aaTAD.common, -0.5, 7, fill=TAD.COLOUR,  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
-    add.track.labels(ranges.9aaTAD.common, -0.5, 0, col="white")+  # Label the 9aaTADs
-    geom_line(data=sites,aes(x=site, y=smoothSelected0.9), linewidth=0.5 )+
-    coord_cartesian(xlim = c(0, max(sites$site)))+
-    scale_x_continuous(expand = c(0, 0), breaks = seq(0, 950, 50))+
-    scale_y_continuous(breaks= c(0, 2, 4, 6, 8), labels = round(c(0, 2/9, 4/9, 6/9, 8/9), digits=2))+
-    labs(y = "Fraction of bases under selection")+
-    theme_bw()+
-    theme(
-      axis.text.y = element_text(size=7),
-      axis.title.x = element_blank(),
-      axis.title.y = element_text(size=6),
-      # axis.ticks.y = element_blank(),
-      axis.text.x = element_text(size=6),
-      legend.position = "top",
-      legend.title = element_text(size = 6, vjust = 0.85),
-      legend.text = element_text(size = 6),
-      legend.key.height = unit(3, "mm"),
-      legend.spacing.y = unit(2, "mm"),
-      legend.box.spacing = unit(2, "mm"),
-      panel.border = element_blank(),
-      axis.line.x.bottom = element_line(),
-      panel.grid = element_blank())
-  
-  save.double.width("figure/positive.sites.filt.png", sites.plot, height = 35)
+  cat("p=", lrts[[3]]$p.value, "lrt=", lrts[[3]]$lrt, "\n")
 }
 
-#### What are the hydrophobic patches in exons 2, 3 and 5 that are not 9aaTADs? ####
+read.site.specific.codeml.output()
 
-exon2.patch.start <- mouse.exons$start_aa[2]+95
-exon2.patch.end   <- mouse.exons$start_aa[2]+118
-exon2.patch <- msa.aa.aln.hydrophobicity %>%
-  dplyr::filter(position_gapped>exon2.patch.start & position_gapped<exon2.patch.end)
-
-exon2.patch.table <- do.call(rbind, 
-                             lapply(METADATA$combined$common.name,  
-                                    \(i) list("Sequence" = i, 
-                                              as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon2.patch.start:exon2.patch.end])))) %>%
-  as.data.frame %>%
-  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
-  dplyr::arrange(as.integer(Sequence)) 
-colnames(exon2.patch.table) <- c("Sequence", paste0("exon_2_",exon2.patch.start,"-", 
-                                                    exon2.patch.end))
-
-
-exon3.patch.start <- mouse.exons$start_aa[3]+25
-exon3.patch.end   <- mouse.exons$end_aa[3]
-exon3.patch <- msa.aa.aln.hydrophobicity %>%
-  dplyr::filter(position_gapped>exon3.patch.start & position_gapped<exon3.patch.end)
-
-# Get the region from the msa
-
-exon3.patch.table <- do.call(rbind, 
-                             lapply(METADATA$combined$common.name,  
-                                    \(i) list("Sequence" = i, 
-                                              as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon3.patch.start:exon3.patch.end])))) %>%
-  as.data.frame %>%
-  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
-  dplyr::arrange(as.integer(Sequence)) 
-colnames(exon3.patch.table) <- c("Sequence", paste0("exon_3_",exon3.patch.start,"-", 
-                                                    exon3.patch.end))
-
-exon5.patch.start <- mouse.exons$start_aa[5]+28
-exon5.patch.end   <- mouse.exons$end_aa[5]+1
-exon5.patch <- msa.aa.aln.hydrophobicity %>%
-  dplyr::filter(position_gapped>exon5.patch.start & position_gapped<exon5.patch.end)
-
-exon5.patch.table <- do.call(rbind, lapply(METADATA$combined$common.name,  
-                                           \(i) list("Sequence" = i,
-                                                     as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[i]][exon5.patch.start:exon5.patch.end])))) %>%
-  as.data.frame %>%
-  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
-  dplyr::arrange(as.integer(Sequence))
-colnames(exon5.patch.table)<-c("Sequence", paste0("exon_5_",exon5.patch.start,"-", 
-                                                  exon5.patch.end))
-
-exon.patch.table <- merge(exon2.patch.table, exon3.patch.table, by=c("Sequence")) %>%
-  merge(., exon5.patch.table, by=c("Sequence")) %>%
-  create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:4)
-
-
-
-
-
-# Get consensus strings for the patches
-# Note Biostrings::consensusString will fail if there are non-standard / ambiguity characters
-try({
-  # Get the consensus matrix and find the most frequent value per site
-  exon.2.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon2.patch.start+1):(exon2.patch.end-1)], 
-                                               2, 
-                                               \(x) names(which(x==max(x))))), 
-                                  collapse = "")
-  
-  exon.3.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon3.patch.start+1):(exon3.patch.end-1)], 
-                                               2, 
-                                               \(x) names(which(x==max(x))))), 
-                                  collapse = "")
-  
-  exon.5.patch.consensus <- paste(unlist(apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(exon5.patch.start+1):(exon5.patch.end-1)], 
-                                               2, 
-                                               \(x) names(which(x==max(x))))), 
-                                  collapse = "")
-  
-  cat("Exon 2 patch consensus: ", exon.2.patch.consensus, "\n")
-  cat("Exon 3 patch consensus: ", exon.3.patch.consensus, "\n")
-  cat("Exon 5 patch consensus: ", exon.5.patch.consensus, "\n")
-})
-
-exon2.hydro.plot <- ggplot()+
-  geom_tile(data=exon2.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
-  geom_text(data = exon2.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
-  geom_tile(data = sites, aes(x = site, y = 65, fill = as.integer(isSelected.0.9)))+
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
-  scale_y_discrete(labels = gsub("_", " ", rev(combined.taxa.name.order)))+
-  labs(fill="Hydrophobicity (per residue)")+
-  coord_cartesian(xlim = c(exon2.patch.start,exon2.patch.end),  ylim = c(0, 65), clip = 'on')+
-  annotate("text", label=s2c(exon.2.patch.consensus), size=2, x=(exon2.patch.start+1):(exon2.patch.end-1), 
-           y=64.2, hjust=0.5, family="mono", fontface="bold")
-
-exon3.hydro.plot <- ggplot()+
-  geom_tile(data=exon3.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
-  geom_text(data = exon3.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
-  scale_y_discrete(labels = gsub("_", " ", rev(combined.taxa.name.order)))+
-  labs(fill="Hydrophobicity (per residue)")+
-  coord_cartesian(xlim = c(exon3.patch.start,exon3.patch.end),  ylim = c(0, 63), clip = 'off')+
-  annotate("text", label=s2c(exon.3.patch.consensus), size=2, x=(exon3.patch.start+1):(exon3.patch.end-1), 
-           y=64.2, hjust=0.5, family="mono", fontface="bold")
-
-exon5.hydro.plot <- ggplot()+
-  geom_tile(data=exon5.patch,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
-  geom_text(data = exon5.patch, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
-  scale_y_discrete(labels = gsub("_", " ", rev(combined.taxa.name.order)))+
-  labs(fill="Hydrophobicity (per residue)")+
-  coord_cartesian(xlim = c(exon5.patch.start,exon5.patch.end),  ylim = c(0, 63), clip = 'off')+
-  annotate("text", label=s2c(exon.5.patch.consensus), size=2, x=(exon5.patch.start+1):(exon5.patch.end-1), 
-           y=64.2, hjust=0.5, family="mono", fontface="bold")
-
-# Collect the plots
-
-patch.plot.complete <- exon2.hydro.plot + exon3.hydro.plot + exon5.hydro.plot +
-  plot_layout(nrow=1, guides = "collect", axes = "collect") &
-  theme_bw()+
-  theme(legend.position = "top",
-        axis.text = element_text(size=6),
-        axis.title = element_blank(),
-        legend.text = element_text(size=6),
-        legend.title = element_text(size=8))
-save.double.width(filename = "figure/hydrophobic.patch.all.png", patch.plot.complete)
 
 
 
