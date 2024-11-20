@@ -1,35 +1,7 @@
-# Common functions across scripts
+# Common functions used across scripts
 
-#### Global variables #####
-ZFY.TREE.COLOUR <- "#860086"  #3B4992
-ZFX.TREE.COLOUR <- "#3CB22D" #EE0000
-OUT.TREE.COLOUR <- "#303030"
-TAD.COLOUR      <- "#00366C" # fill color max from "grDevices::Blues 3"
-NLS.COLOUR      <- "#3CB22D"  #60CC52 #2CA02C
-ZF.COLOUR       <- "grey"
+#### Load all R packages installing if needed #####
 
-# Common file paths
-FILES <- list(
-  mammal.nt.fas = "fasta/mammal.nt.fas",
-  combined.nt.fas = "fasta/combined.nt.fas",
-  combined.nt.aln = "aln/combined/combined.nt.aln",
-  combined.nt.nexus = "aln/combined/combined.nt.nex",
-  combined.nt.partition = "aln/combined/combined.nt.partition",
-  combined.aa.fas = "fasta/combined.aa.fas",
-  combined.aa.aln = "aln/combined/combined.aa.aln",
-  mammal.nt.aln = "aln/mammal/mammal.nt.aln",
-  mammal.nt.nexus = "aln/mammal/mammal.nt.nex",
-  mammal.nt.partition = "aln/mammal/mammal.nt.partition",
-  mammal.aa.aln = "aln/mammal/mammal.aa.aln",
-  mammal.nt.aln.treefile = "aln/mammal/mammal.nt.aln.treefile",
-  combined.nt.aln.treefile = "aln/combined/combined.nt.aln.treefile",
-  combined.aa.aln.treefile = "aln/combined/combined.aa.aln.treefile",
-  paml.branch.site.output = "paml/branch-site/zfy.branch-site.positive.sites.txt"
-)
-
-#### Core functions needed to load data files #####
-
-# Load all R packages installing if needed
 load.packages <- function(){
   
   install.cran <- function(package){
@@ -64,14 +36,133 @@ load.packages <- function(){
   github.packages <- c('YuLab-SMU/ggtree', # since ggtree cannot install in Bioconductor 3.15 on cluster
                        "vmikk/metagMisc",  # for converting distance matrices to data frames
                        "fmichonneau/chopper" # functions for converting FASTA to NEXUS format
-                        )#"vragh/seqvisr"
+  )#"vragh/seqvisr"
   sapply(github.packages, install.github)
   
   bioconductor.packages <- c("msa", "ggmsa", "treeio")
   sapply(bioconductor.packages, install.bioconductor)
   return()
 }
-load.packages() # load on source
+load.packages()
+
+#### Global variables #####
+ZFY.TREE.COLOUR <- "#860086"  #3B4992
+ZFX.TREE.COLOUR <- "#3CB22D" #EE0000
+OUT.TREE.COLOUR <- "#303030"
+TAD.COLOUR      <- "#00366C" # fill color max from "grDevices::Blues 3"
+NLS.COLOUR      <- "#3CB22D"  #60CC52 #2CA02C
+ZF.COLOUR       <- "grey"
+
+MUSCLE.PATH   <- ifelse(installr::is.windows(), "bin/muscle5.1.win64.exe", "bin/muscle5.1.linux_intel64")
+MACSE.PATH    <- "bin/macse_v2.07.jar"
+CLUSTALO.PATH <- ifelse(installr::is.windows(), "bin/clustal-omega-1.2.2-win64/clustalo.exe", "clustalo") 
+
+# Common file paths
+FILES <- list(
+  mammal.nt.fas = "fasta/mammal.nt.fas",
+  combined.nt.fas = "fasta/combined.nt.fas",
+  combined.nt.aln = "aln/combined/combined.nt.aln",
+  combined.nt.nexus = "aln/combined/combined.nt.nex",
+  combined.nt.partition = "aln/combined/combined.nt.partition",
+  combined.aa.fas = "fasta/combined.aa.fas",
+  combined.aa.aln = "aln/combined/combined.aa.aln",
+  mammal.nt.aln = "aln/mammal/mammal.nt.aln",
+  mammal.nt.nexus = "aln/mammal/mammal.nt.nex",
+  mammal.nt.partition = "aln/mammal/mammal.nt.partition",
+  mammal.aa.aln = "aln/mammal/mammal.aa.aln",
+  mammal.nt.aln.treefile = "aln/mammal/mammal.nt.aln.treefile",
+  combined.nt.aln.treefile = "aln/combined/combined.nt.aln.treefile",
+  combined.aa.aln.treefile = "aln/combined/combined.aa.aln.treefile",
+  paml.branch.site.output = "paml/branch-site/zfy.branch-site.positive.sites.txt",
+  
+  cox1.nt.fas = "fasta/cox1.nt.fas",
+  cox1.nt.aln = "aln/cox1/cox1.nt.aln",
+  cox1.aa.aln = "aln/cox1/cox1.aa.aln",
+  
+  final.intron.nt.fas     = "fasta/final.intron.nt.fas", # combined Zfx and Zfy
+  final.intron.nt.aln     = "aln/final.intron/final.intron.nt.aln", # combined Zfx and Zfy
+  final.intron.zfy.nt.fas = "fasta/final.intron.zfy.nt.fas",
+  final.intron.zfx.nt.fas = "fasta/final.intron.zfx.nt.fas",
+  final.intron.zfy.nt.aln = "aln/final.intron.zfy/final.intron.zfy.nt.aln",
+  final.intron.zfx.nt.aln = "aln/final.intron.zfx/final.intron.zfx.nt.aln"
+  
+  
+)
+
+#### Invokations of external binaries #####
+
+# Run muscle on the given input FASTA and output to the given alignment file base name
+run.macse <- function(fa.file, aln.file){
+  if(!file.exists(MACSE.PATH)) stop("MACSE not present in bin directory")
+  
+  aa.out <- paste0(aln.file, ".aa.aln")
+  nt.out <- paste0(aln.file, ".nt.aln")
+  # Run a codon aware alignment with MACSE
+  system2("java", paste("-jar ", MACSE.PATH, 
+                        " -prog alignSequences",
+                        "-seq",    fa.file, # input
+                        "-out_NT", nt.out,  # output nt alignment
+                        "-out_AA", aa.out), # output aa alignment
+          stdout = paste0(aln.file, ".macse.log"),  # logs
+          stderr = paste0(aln.file, ".macse.log"))  # error logs
+  
+  # Return output file names
+  list("aa" = aa.out, "nt" = nt.out)
+}
+
+# Create a alignment of two existing alignments (or an alignment and a single sequence FASTA)
+# This preserves the structure of the existing alignments
+run.clustalo.dual.profile <- function(aln.file.1, aln.file.2, out.file){
+  if(!file.exists(CLUSTALO.PATH)) stop("ClustalO not found")
+  system2(CLUSTALO.PATH, paste("--profile1", aln.file.1,
+                               "--profile2", aln.file.2,
+                               "-o", out.file,
+                               "--force")) # overwrite existing alignments
+}
+
+# Run muscle on the given input FASTA and output to the given alignment file
+run.muscle <- function(fa.file, aln.file){
+  if(!file.exists(MUSCLE.PATH)) stop("Muscle not present in bin directory")
+  cat(aln.file, "\n")
+  system2(MUSCLE.PATH, paste("-align",  fa.file,
+                             "-output", aln.file))
+}
+
+# Run IQTREE on the given alignment file (should end .aln)
+run.iqtree <- function(aln.file, ...){
+  system2("iqtree", paste("-s ", aln.file, 
+                          "-redo", # always overwrite existing files
+                          "-bb 1000", # number of bootstrap replicates
+                          "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+                          "-nt 6",  # number of threads
+                          ...), # any other arguments to iqtree
+          stdout = gsub(".aln$", ".iqtree.log", aln.file), 
+          stderr = gsub(".aln$", ".iqtree.log", aln.file))
+  
+  # Return file with tree
+  paste0(aln.file, ".treefile")
+}
+
+# Run HyPhy MEME on the given alignment and tree. Returns the output file path
+run.hyphy.meme <- function(nex.file, tree.file){
+  
+  json.file <- paste0( tree.file, ".json")
+  bash.file <- paste0( tree.file, ".sh")
+  # Create control script for MEME
+  write_file(paste0("#!/bin/bash\n",
+                    "source activate hyphy\n\n",
+                    
+                    "# MEME test for positive selection at individual sites\n",
+                    "hyphy meme --alignment  ", nex.file, " --tree ", tree.file, " --branches Test --output ", json.file, "\n"
+                    
+  ),
+  bash.file)
+  system2("bash", bash.file)
+  json.file
+}
+
+
+#### Functions needed to load data files #####
 
 # Read the given FASTA file and extract metadata
 # Returns as a list containing FA sequence and metadata dataframe
@@ -112,6 +203,22 @@ read.metadata <- function(read.fasta.output){
                                                        "Xenopus_ZFX.S", "Xenopus_ZFX.L", "Chicken_ZFX") ~ "Outgroup",
                                     T ~ "ZFX"))
   metadata
+}
+
+# Read all alignments and return as a list
+read.alignments <- function(){
+  list(
+    aa.combined.ape = ape::read.FASTA(FILES$combined.aa.aln, type="AA"),
+    # Read in Biostrings format for exon detection also
+    aa.combined.biostrings = Biostrings::readAAMultipleAlignment(FILES$combined.aa.aln, format="fasta"),
+    
+    nt.combined.ape = ape::read.FASTA(FILES$combined.nt.aln, type="DNA"),
+    # Read in Biostrings format for exon detection also
+    nt.combined.biostrings = Biostrings::readAAMultipleAlignment(FILES$combined.nt.aln, format="fasta"),
+    
+    nt.mammal.ape = ape::read.FASTA(FILES$mammal.nt.aln),
+    nt.mammal.biostrings = Biostrings::readDNAMultipleAlignment(FILES$mammal.nt.aln, format="fasta")
+  )
 }
 
 # Create an Excel file with column filtering
@@ -236,114 +343,12 @@ prepare.fas.files <- function(){
 
 METADATA <- prepare.fas.files() # run on source
 
-#### Other functions #####
-
-# Read all alignments and return as a list
-read.alignments <- function(){
-  list(
-    aa.combined.ape = ape::read.FASTA(FILES$combined.aa.aln, type="AA"),
-    # Read in Biostrings format for exon detection also
-    aa.combined.biostrings = Biostrings::readAAMultipleAlignment(FILES$combined.aa.aln, format="fasta"),
-    
-    nt.combined.ape = ape::read.FASTA(FILES$combined.nt.aln, type="DNA"),
-    # Read in Biostrings format for exon detection also
-    nt.combined.biostrings = Biostrings::readAAMultipleAlignment(FILES$combined.nt.aln, format="fasta"),
-    
-    nt.mammal.ape = ape::read.FASTA(FILES$mammal.nt.aln),
-    nt.mammal.biostrings = Biostrings::readDNAMultipleAlignment(FILES$mammal.nt.aln, format="fasta")
-  )
-}
-
-
+#### Plotting functions ####
 
 save.double.width <- function(filename, plot, height=170){ 
   ggsave(filename, plot, dpi = 600, units = "mm", width = 170, height = height)
   ggsave(str_replace(filename, ".png$", ".svg"), plot,dpi = 300, 
          units = "mm", width = 170, height = height)
-}
-
-# Translate ungapped coordinates back to gapped
-# site.no.gap - the integer site in an ungapped sequence to convert
-# gapped.seq - the sequence with gaps from an alignment
-convert.to.gapped.coordinate <- function(site.no.gap, gapped.seq){
-  
-  if(is.na(site.no.gap)) return(NA)
-  gapped.seq.char <- as.character(gapped.seq)
-  # find gaps and stop codons
-  gaps <- str_locate_all(gapped.seq.char, "-|\\*")[[1]][,1]
-  n <- site.no.gap
-  for(i in gaps){
-    if(i<=n) n <- n + 1
-  }
-  n
-}
-
-# Exon by exon coordinates of the alignment will be needed for clear
-# testing of selection. Match these in the final alignment via mouse Zfy1
-find.exons <- function(){
-  
-  # Mammal only NT alignment
-  mouse.zfy1.nt <- as.character(ALIGNMENTS$nt.mammal.biostrings@unmasked$Mouse_Zfy1)
-  mouse.zfy1.nt.ungapped <- str_remove_all(mouse.zfy1.nt, "-|\\*")
-  
-  # Combined NT alignment
-  mouse.zfy1.nt.combined <- as.character(ALIGNMENTS$nt.combined.biostrings@unmasked$Mouse_Zfy1)
-  mouse.zfy1.nt.combined.ungapped <- str_remove_all(mouse.zfy1.nt.combined, "-|\\*")
-  
-  # Combined AA alignment
-  mouse.zfy1.aa <- as.character(ALIGNMENTS$aa.combined.biostrings@unmasked$Mouse_Zfy1)
-  mouse.zfy1.aa.ungapped <- str_remove_all(mouse.zfy1.aa, "-|\\*")
-  
-  mouse.exons <- data.frame("exon"     = c("1", "2", "3",  "4", "5", "6",  "7"),
-                            "start_nt" = c("ATGGATGAA", "GAGCTGATGCA", "TGGATGAACC", 
-                                           "GAGAAACTAT", "AAGTAATTGT", "ATAATAATTCT", "CAATATTTGTT"),
-                            "end_nt"   = c("TGGAATAG", "ATGATGTCTT", "GGATGAATTAG", 
-                                           "GAAGAAGATACTG", "GACAGCAGCTTATG", "CAGTACCAGTCAG", "CCTGCCC"),
-                            "start_aa" = c("MDEDEIEL", "GADAVHMD", "LDEPSKADL", "LGETIHAVE",
-                                           "EVIVGDED", "DNNSDEIE", "AIFVAPDGQ"),
-                            "end_aa"   = c("KSFFDGIG", "INCEDYLMMSL","ADSEVDEL", "SQKEEEDTE",
-                                           "PIAWTAAYD", "PESKQYQSA", "RHHKVGLP"))
-  
-  start.nt <- sapply(mouse.exons$start_nt, str_locate, string=mouse.zfy1.nt.ungapped)[1,]
-  end.nt   <- sapply(mouse.exons$end_nt,   str_locate, string=mouse.zfy1.nt.ungapped)[2,]
-  
-  start.nt.combined <- sapply(mouse.exons$start_nt, str_locate, string=mouse.zfy1.nt.combined.ungapped)[1,]
-  end.nt.combined   <- sapply(mouse.exons$end_nt,   str_locate, string=mouse.zfy1.nt.combined.ungapped)[2,]
-  
-  start.aa <- sapply(mouse.exons$start_aa, str_locate, string=mouse.zfy1.aa.ungapped)[1,]
-  end.aa   <- sapply(mouse.exons$end_aa,   str_locate, string=mouse.zfy1.aa.ungapped)[2,]
-  
-  # Note that the aa and nt positions are not from equivalent alignments!
-  # NT is from mammals, AA is from mammals + outgroups
-  data <- data.frame("exon"     = mouse.exons$exon,
-                     "start_nt"    = sapply(start.nt, convert.to.gapped.coordinate, mouse.zfy1.nt),
-                     "end_nt"      = sapply(end.nt,   convert.to.gapped.coordinate, mouse.zfy1.nt),
-                     "start_nt_combined"    = sapply(start.nt.combined, convert.to.gapped.coordinate, mouse.zfy1.nt),
-                     "end_nt_combined"      = sapply(end.nt.combined,   convert.to.gapped.coordinate, mouse.zfy1.nt),
-                     "start_aa" = sapply(start.aa, convert.to.gapped.coordinate, mouse.zfy1.aa),
-                     "end_aa"   = sapply(end.aa,   convert.to.gapped.coordinate, mouse.zfy1.aa),
-                     "is_even"  = sapply(mouse.exons$exon, function(i) as.numeric(i)%%2==0)) %>%
-    dplyr::mutate(
-      # Correct for gaps in the alignment affecting exon boundaries
-      # Extend the next exon to start at the end of the current
-      start_nt = ifelse(lag(end_nt)+1!=start_nt & !is.na(lag(end_nt)), lag(end_nt)+1, start_nt),
-      
-      length_nt = end_nt - start_nt + 1,
-      length_aa = end_aa - start_aa + 1,
-      # fix the offsets to get ORF of each exon
-      start_nt_codon_offset = case_when(exon==1 ~ start_nt, # hardcode the codon offsets for subsetting
-                                        exon>=2 ~ start_nt-1),
-      end_nt_codon_offset   = case_when(exon<7 ~ end_nt-1,
-                                        exon==7 ~ end_nt),
-      corrected_offset_length = (end_nt_codon_offset - start_nt_codon_offset +1)%%3) %>%
-    dplyr::rowwise() %>%
-    dplyr::mutate(exon_orf = subset.sequence(ALIGNMENTS$nt.combined.biostrings, "Mouse_Zfy1", start_nt_codon_offset, end_nt_codon_offset),
-                  exon_orf_length = nchar(exon_orf),
-                  exon_orf_triplet = exon_orf_length/3) # check divisible by 3
-  
-  
-  data
-  
 }
 
 plot.tree <- function(tree.data, tiplab.font.size = 2, ...){
@@ -417,62 +422,11 @@ make.outgroup.mini.tree <-function(combined.outgroup.tree, text.labels){
                                 label=text.labels[i], size=2, hjust=1, vjust=0.5)
     curr.y <- curr.y + 3
   }
-
+  
   result + theme(legend.position = "none",
                  plot.margin = margin(r=0))
 }
 
-# Convert FASTA format to clustal style format
-# alignment - seqinr alignment format
-# names - optional character vector of names (if null, alignment names are used)
-# names.length - override the default width of the names column (if na, default is used)
-# chunksize - number of letters per row
-printMultipleAlignment <- function(alignment, names=NULL, names.length=NA, chunksize=60){
-  # this function requires the Biostrings package
-  # find the number of sequences in the alignment
-  numseqs <- alignment$nb
-  
-  if(is.null(names)){
-    names <- alignment$nam
-  }
-  
-  if(is.na(names.length)){
-    names.length <- max(nchar(names))
-  }
-  
-  # find the length of the alignment
-  alignmentlen <- nchar(alignment$seq[[1]])
-  
-  # Calculate the start position of each line
-  line.starts <- seq(1, alignmentlen, by=chunksize)
-  
-  # How many blocks are needed
-  n.blocks <- length(line.starts)
-  
-  # get the alignment for each  sequences
-  aln <- unlist(alignment$seq)
-  lettersprinted <- rep(0, numseqs)
-  
-  create.block <- function(start){
-    block.lines <- rep("", numseqs+1)
-    block.lines[numseqs+1] <- "\n"
-    for (j in 1:numseqs){
-      alnj <- aln[j]
-      chunkseq <- toupper(substring(alnj, start, start+chunksize-1))
-      
-      # Calculate how many residues of the sequence we have printed so far in the alignment
-      # Total minus gaps
-      lettersprinted[j] <<- lettersprinted[j] + chunksize - Biostrings::countPattern("-",chunkseq)
-      block.lines[j] <- paste0(sprintf( paste0("%", names.length,"s"), names[j]), "\t", chunkseq, " ", lettersprinted[j])
-    }
-    
-    paste0(block.lines, "\n")
-  }
-  
-  result <- unlist(lapply(line.starts, create.block))
-  cat(paste0(result, "\n"))
-  result
-}
 
 # Add a rectangle track to a plot
 add.track <- function(ranges, y.start, y.end, start_col = "start", end_col = "end", ...){
@@ -508,7 +462,7 @@ add.exon.track <- function(y.start, y.end, start_col = "start_aa", end_col = "en
                     pattern_density = 0.5, # equal stripe widths
                     pattern_spacing = 0.05, # enough space for text label
                     pattern_fill = "grey", # match background color of exon
-                     ...)
+                    ...)
 }
 # Add exon labels track to a plot
 add.exon.labels <- function(y.start, y.end, start_col = "start_aa", end_col = "end_aa", ...){
@@ -542,7 +496,7 @@ annotate.structure.plot <- function(plot, n.taxa){
     new_scale_fill()+
     scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
     scale_pattern_color_manual(values=c("white", "white"))+
-
+    
     scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
     guides(fill = "none", pattern="none")+
     add.exon.track(n.taxa+12, n.taxa+14, col = "black")+ # color of border
@@ -573,6 +527,62 @@ annotate.structure.plot <- function(plot, n.taxa){
     patchwork::plot_layout(widths = c(0.1, 0.9))
 }
 
+# Given an alignment and order of species, calculate KaKs and make a pairwise plot
+# nt.aln.file - the nucleotide alignment
+# species.order - a vector with the plotting order for species in the file
+plot.kaks <- function(nt.aln.file, species.order, kaks.limits=c(0, 1)){
+  
+  seqin.aln <- seqinr::read.alignment(nt.aln.file, format = "fasta")
+  kaks.data <- seqinr::kaks(seqin.aln)
+  
+  kaks.ratio <- kaks.data$ka / kaks.data$ks
+  
+  # Convert to long format and remove pairwise diagonal
+  kaks.pairwise <- metagMisc::dist2list(kaks.ratio, tri = F)
+  
+  # Ensure spaces are converted to underscores in the species names
+  # species.order <- gsub(" ", "_", species.order)
+  
+  kaks.pairwise %<>%
+    dplyr::mutate(col = gsub("_", " ", col),
+                  row = gsub("_", " ", row),
+                  col = factor(col, levels = species.order, ordered = T),
+                  row = factor(row, levels = species.order, ordered = T),
+                  colnum = as.integer(col),
+                  rownum = as.integer(row)) %>%
+    dplyr::filter(rownum > colnum)
+  
+  max.y <- max(kaks.pairwise$value, na.rm = TRUE)
+  
+  y.limit = ifelse(is.infinite(max.y), 1, max.y)
+  
+  palette.choice <- scale_fill_viridis_c(limits = kaks.limits, direction = -1)
+  # # If there are values above 1, use a diverging palette. Otherwise, viridis
+  # if(y.limit>1){
+  #   palette.choice <- scale_fill_paletteer_c("ggthemes::Classic Red-Blue", 
+  #                                            direction = -1, 
+  #                                            limits = c(0, ceiling(y.limit)))
+  #   
+  # } else {
+  #   palette.choice <- scale_fill_viridis_c(limits = c(0, 1), direction = -1)
+  # }
+  
+  ggplot(kaks.pairwise, aes(x = col, y = row))+
+    geom_tile(aes(fill=value))+
+    palette.choice+
+    labs(fill="dNdS")+
+    theme_bw()+
+    theme(axis.text.x = element_text(size = 6, angle = 45, hjust = 1),
+          axis.text.y = element_text(size = 6),
+          axis.title = element_blank(),
+          legend.position = c(0.9, 0.2),
+          legend.background = element_blank(),
+          legend.title = element_text(size = 8),
+          legend.text = element_text(size = 8))
+}
+
+
+#### Finding structural features #####
 locate.zfs.in.alignment <- function(taxa.order){
   
   taxa.order <- gsub(" ", "_", taxa.order) # in case _ had previously been replaced
@@ -660,7 +670,7 @@ locate.9aaTADs.in.alignment <- function(aa.alignment.file, nt.alignment.file, ta
   nt.aln <- Biostrings::readDNAMultipleAlignment(nt.alignment.file, format="fasta")
   
   # Find ZFs in each aa sequence, then find the gapped coordinates in the nt alignment
- do.call(rbind, mapply(find.9aaTAD, aa=aa.aln@unmasked, 
+  do.call(rbind, mapply(find.9aaTAD, aa=aa.aln@unmasked, 
                         sequence.name = names(aa.aln@unmasked),
                         rc.threshold=0, SIMPLIFY = FALSE)) %>%
     dplyr::rename(aa_motif = hit) %>%
@@ -727,6 +737,145 @@ locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
                   end_nt_gapped = ifelse( sequence %in% names(nt.aln@unmasked), # we have the nt alignment
                                           convert.to.gapped.coordinate(end_nt_ungapped,  nt.aln@unmasked[[sequence]]),
                                           NA))
+}
+
+
+#### Other functions #####
+
+# Translate ungapped coordinates back to gapped
+# site.no.gap - the integer site in an ungapped sequence to convert
+# gapped.seq - the sequence with gaps from an alignment
+convert.to.gapped.coordinate <- function(site.no.gap, gapped.seq){
+  
+  if(is.na(site.no.gap)) return(NA)
+  gapped.seq.char <- as.character(gapped.seq)
+  # find gaps and stop codons
+  gaps <- str_locate_all(gapped.seq.char, "-|\\*")[[1]][,1]
+  n <- site.no.gap
+  for(i in gaps){
+    if(i<=n) n <- n + 1
+  }
+  n
+}
+
+# Exon by exon coordinates of the alignment will be needed for clear
+# testing of selection. Match these in the final alignment via mouse Zfy1
+find.exons <- function(){
+  
+  # Mammal only NT alignment
+  mouse.zfy1.nt <- as.character(ALIGNMENTS$nt.mammal.biostrings@unmasked$Mouse_Zfy1)
+  mouse.zfy1.nt.ungapped <- str_remove_all(mouse.zfy1.nt, "-|\\*")
+  
+  # Combined NT alignment
+  mouse.zfy1.nt.combined <- as.character(ALIGNMENTS$nt.combined.biostrings@unmasked$Mouse_Zfy1)
+  mouse.zfy1.nt.combined.ungapped <- str_remove_all(mouse.zfy1.nt.combined, "-|\\*")
+  
+  # Combined AA alignment
+  mouse.zfy1.aa <- as.character(ALIGNMENTS$aa.combined.biostrings@unmasked$Mouse_Zfy1)
+  mouse.zfy1.aa.ungapped <- str_remove_all(mouse.zfy1.aa, "-|\\*")
+  
+  mouse.exons <- data.frame("exon"     = c("1", "2", "3",  "4", "5", "6",  "7"),
+                            "start_nt" = c("ATGGATGAA", "GAGCTGATGCA", "TGGATGAACC", 
+                                           "GAGAAACTAT", "AAGTAATTGT", "ATAATAATTCT", "CAATATTTGTT"),
+                            "end_nt"   = c("TGGAATAG", "ATGATGTCTT", "GGATGAATTAG", 
+                                           "GAAGAAGATACTG", "GACAGCAGCTTATG", "CAGTACCAGTCAG", "CCTGCCC"),
+                            "start_aa" = c("MDEDEIEL", "GADAVHMD", "LDEPSKADL", "LGETIHAVE",
+                                           "EVIVGDED", "DNNSDEIE", "AIFVAPDGQ"),
+                            "end_aa"   = c("KSFFDGIG", "INCEDYLMMSL","ADSEVDEL", "SQKEEEDTE",
+                                           "PIAWTAAYD", "PESKQYQSA", "RHHKVGLP"))
+  
+  start.nt <- sapply(mouse.exons$start_nt, str_locate, string=mouse.zfy1.nt.ungapped)[1,]
+  end.nt   <- sapply(mouse.exons$end_nt,   str_locate, string=mouse.zfy1.nt.ungapped)[2,]
+  
+  start.nt.combined <- sapply(mouse.exons$start_nt, str_locate, string=mouse.zfy1.nt.combined.ungapped)[1,]
+  end.nt.combined   <- sapply(mouse.exons$end_nt,   str_locate, string=mouse.zfy1.nt.combined.ungapped)[2,]
+  
+  start.aa <- sapply(mouse.exons$start_aa, str_locate, string=mouse.zfy1.aa.ungapped)[1,]
+  end.aa   <- sapply(mouse.exons$end_aa,   str_locate, string=mouse.zfy1.aa.ungapped)[2,]
+  
+  # Note that the aa and nt positions are not from equivalent alignments!
+  # NT is from mammals, AA is from mammals + outgroups
+  data <- data.frame("exon"     = mouse.exons$exon,
+                     "start_nt"    = sapply(start.nt, convert.to.gapped.coordinate, mouse.zfy1.nt),
+                     "end_nt"      = sapply(end.nt,   convert.to.gapped.coordinate, mouse.zfy1.nt),
+                     "start_nt_combined"    = sapply(start.nt.combined, convert.to.gapped.coordinate, mouse.zfy1.nt),
+                     "end_nt_combined"      = sapply(end.nt.combined,   convert.to.gapped.coordinate, mouse.zfy1.nt),
+                     "start_aa" = sapply(start.aa, convert.to.gapped.coordinate, mouse.zfy1.aa),
+                     "end_aa"   = sapply(end.aa,   convert.to.gapped.coordinate, mouse.zfy1.aa),
+                     "is_even"  = sapply(mouse.exons$exon, function(i) as.numeric(i)%%2==0)) %>%
+    dplyr::mutate(
+      # Correct for gaps in the alignment affecting exon boundaries
+      # Extend the next exon to start at the end of the current
+      start_nt = ifelse(lag(end_nt)+1!=start_nt & !is.na(lag(end_nt)), lag(end_nt)+1, start_nt),
+      
+      length_nt = end_nt - start_nt + 1,
+      length_aa = end_aa - start_aa + 1,
+      # fix the offsets to get ORF of each exon
+      start_nt_codon_offset = case_when(exon==1 ~ start_nt, # hardcode the codon offsets for subsetting
+                                        exon>=2 ~ start_nt-1),
+      end_nt_codon_offset   = case_when(exon<7 ~ end_nt-1,
+                                        exon==7 ~ end_nt),
+      corrected_offset_length = (end_nt_codon_offset - start_nt_codon_offset +1)%%3) %>%
+    dplyr::rowwise() %>%
+    dplyr::mutate(exon_orf = subset.sequence(ALIGNMENTS$nt.combined.biostrings, "Mouse_Zfy1", start_nt_codon_offset, end_nt_codon_offset),
+                  exon_orf_length = nchar(exon_orf),
+                  exon_orf_triplet = exon_orf_length/3) # check divisible by 3
+  
+  
+  data
+  
+}
+
+# Convert FASTA format to clustal style format
+# alignment - seqinr alignment format
+# names - optional character vector of names (if null, alignment names are used)
+# names.length - override the default width of the names column (if na, default is used)
+# chunksize - number of letters per row
+printMultipleAlignment <- function(alignment, names=NULL, names.length=NA, chunksize=60){
+  # this function requires the Biostrings package
+  # find the number of sequences in the alignment
+  numseqs <- alignment$nb
+  
+  if(is.null(names)){
+    names <- alignment$nam
+  }
+  
+  if(is.na(names.length)){
+    names.length <- max(nchar(names))
+  }
+  
+  # find the length of the alignment
+  alignmentlen <- nchar(alignment$seq[[1]])
+  
+  # Calculate the start position of each line
+  line.starts <- seq(1, alignmentlen, by=chunksize)
+  
+  # How many blocks are needed
+  n.blocks <- length(line.starts)
+  
+  # get the alignment for each  sequences
+  aln <- unlist(alignment$seq)
+  lettersprinted <- rep(0, numseqs)
+  
+  create.block <- function(start){
+    block.lines <- rep("", numseqs+1)
+    block.lines[numseqs+1] <- "\n"
+    for (j in 1:numseqs){
+      alnj <- aln[j]
+      chunkseq <- toupper(substring(alnj, start, start+chunksize-1))
+      
+      # Calculate how many residues of the sequence we have printed so far in the alignment
+      # Total minus gaps
+      lettersprinted[j] <<- lettersprinted[j] + chunksize - Biostrings::countPattern("-",chunkseq)
+      block.lines[j] <- paste0(sprintf( paste0("%", names.length,"s"), names[j]), "\t", chunkseq, " ", lettersprinted[j])
+    }
+    
+    paste0(block.lines, "\n")
+  }
+  
+  result <- unlist(lapply(line.starts, create.block))
+  cat(paste0(result, "\n"))
+  result
 }
 
 # Given a Biostrings alignment, extract the sequence string at the given coordinates
@@ -799,9 +948,24 @@ find.common.nt.overlaps <- function(locations.data){
     dplyr::rename(start_nt = start, end_nt = end, width_nt = width)
 }
 
-
-
 find.matching.range <-function(start.col, end.col, start, end, ranges){
   hit <- ranges[ranges[[start.col]]<=start & ranges[[end.col]]>=end,]$motif_number
   if(length(hit)==0) 0 else hit
 }
+
+# Reroot the given tree to the given nodes. If node labels contains more than one node,
+# their MRCA will be used as the root.
+reroot.tree <- function(tree, node.labels, position=0.01){
+  if(!all(node.labels %in% tree$tip.label)){
+    cat("Not all nodes (", node.labels, ") are in the tree, cannot reroot, not changing tree\n")
+    return(tree)
+  }
+  if(length(node.labels)==1){
+    
+    return(phytools::reroot(tree, which(tree$tip.label==node.labels), position = position))
+  }
+  root.node <- ape::getMRCA(tree, node.labels)
+  return(phytools::reroot(tree, root.node, position = position))
+}
+
+#### ####

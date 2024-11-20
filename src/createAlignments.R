@@ -60,35 +60,16 @@ writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
 
 #### Run combined mammal/outgroup AA alignment ####
 
-# Use muscle to align the aa files and save out for iqtree
-# Cluster has muscle 3.8.31 on path., so specify the binary directly
-# muscle.path <- ifelse(installr::is.windows(), "bin/muscle5.1.win64.exe", "bin/muscle5.1.linux_intel64")
-# if(!file.exists(muscle.path)) stop("Muscle5.1 not present in bin directory")
-# system2(muscle.path, paste("-align",  FILES$combined.aa.fas,
-#                            "-output", FILES$combined.aa.aln))
-
 # Expect java on the PATH. Macse download from https://www.agap-ge2pop.org/macsee-pipelines/
 # Direct download link:
 # https://www.agap-ge2pop.org/wp-content/uploads/macse/releases/macse_v2.07.jar
-if(!file.exists("bin/macse_v2.07.jar")) stop("MACSE not present in bin directory")
-
 # Use macse to align the nt files for combined species
-system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
-                      "-seq",    FILES$combined.nt.fas, # input
-                      "-out_NT", FILES$combined.nt.aln,  # output nt alignment
-                      "-out_AA", FILES$combined.aa.aln), # output aa alignment
-        stdout = paste0(FILES$combined.nt.aln, ".macse.log"),  # logs
-        stderr = paste0(FILES$combined.nt.aln, ".macse.log"))  # error logs
+run.macse(FILES$combined.nt.fas, "aln/combined/combined")
 
 #### Run mammal NT alignment guided by AA #####
 
 # Run a codon aware alignment with MACSE
-system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
-                      "-seq",    FILES$mammal.nt.fas, # input
-                      "-out_NT", FILES$mammal.nt.aln,  # output nt alignment
-                      "-out_AA", FILES$mammal.aa.aln), # output aa alignment
-        stdout = paste0(FILES$mammal.nt.aln, ".macse.log"),  # logs
-        stderr = paste0(FILES$mammal.nt.aln, ".macse.log"))  # error logs
+run.macse(FILES$mammal.nt.fas, "aln/mammal/mammal")
 
 # Read all alignments in ape and Biostrings formats
 ALIGNMENTS <- read.alignments()
@@ -128,12 +109,7 @@ alg2nex(FILES$combined.nt.aln, format = "fasta", interleaved = FALSE, gap = "-",
 
 #### Create combined mammal/outgroup AA tree ####
 
-system2("iqtree", paste("-s ", FILES$combined.aa.aln, 
-                        "-bb 1000", # number of bootstrap replicates
-                        "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
-                        "-nt AUTO"), # number of threads
-        stdout = gsub(".aln$", ".iqtree.log", FILES$combined.aa.aln), 
-        stderr = gsub(".aln$", ".iqtree.log", FILES$combined.aa.aln))
+FILES$combined.aa.aln.treefile <- run.iqtree(FILES$combined.aa.aln)
 
 #### Create mammal CDS NT tree #####
 
@@ -141,21 +117,24 @@ system2("iqtree", paste("-s ", FILES$combined.aa.aln,
 # Expect iqtree on the PATH.
 # Note model testing is automatically performed in v1.5.4 onwards
 # Note: we can use a partition model if we specify exon coordinates
-system2("iqtree", paste("-s ", FILES$combined.nt.aln, 
-                        "-bb 1000", # number of bootstrap replicates
-                        "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
-                        "-nt AUTO", # number of threads
-                        "-asr"), # ancestral sequence reconstruction
-        stdout = gsub(".aln$", ".iqtree.log", FILES$combined.nt.aln), 
-        stderr = gsub(".aln$", ".iqtree.log", FILES$combined.nt.aln))
+FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln, "-asr")
+FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln, "-asr")
 
-system2("iqtree", paste("-s ", FILES$mammal.nt.aln, 
-                        "-bb 1000", # number of bootstrap replicates
-                        "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
-                        "-nt AUTO", # number of threads
-                        "-asr"), # ancestral sequence reconstruction
-        stdout = gsub(".aln$", ".iqtree.log", FILES$mammal.nt.aln), 
-        stderr = gsub(".aln$", ".iqtree.log", FILES$mammal.nt.aln))
+# system2("iqtree", paste("-s ", FILES$combined.nt.aln, 
+#                         "-bb 1000", # number of bootstrap replicates
+#                         "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+#                         "-nt AUTO", # number of threads
+#                         "-asr"), # ancestral sequence reconstruction
+#         stdout = gsub(".aln$", ".iqtree.log", FILES$combined.nt.aln), 
+#         stderr = gsub(".aln$", ".iqtree.log", FILES$combined.nt.aln))
+# 
+# system2("iqtree", paste("-s ", FILES$mammal.nt.aln, 
+#                         "-bb 1000", # number of bootstrap replicates
+#                         "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+#                         "-nt AUTO", # number of threads
+#                         "-asr"), # ancestral sequence reconstruction
+#         stdout = gsub(".aln$", ".iqtree.log", FILES$mammal.nt.aln), 
+#         stderr = gsub(".aln$", ".iqtree.log", FILES$mammal.nt.aln))
 
 #### Make individual mammal exon NT trees ####
 

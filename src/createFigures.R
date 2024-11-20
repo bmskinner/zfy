@@ -126,33 +126,12 @@ save.double.width("figure/Figure_Sxxxx_exons_tree.png", exon.joint.tree, height=
 
 #### Test selection globally in mammals ####
 
-# ape::dnds(ALIGNMENTS$nt.mammal.ape) # errors
-seqin.aln <- seqinr::read.alignment(FILES$mammal.nt.aln, format = "fasta")
-kaks.data <- seqinr::kaks(seqin.aln)
-
-kaks.ratio <- kaks.data$ka / kaks.data$ks
-kaks.pairwise <- metagMisc::dist2list(kaks.ratio, tri = F) %>%
-  dplyr::mutate(col = str_replace_all(col, "_", " "),
-                row = str_replace_all(row, "_", " "),
-                col = factor(col, levels = mammal.taxa.name.order),
-                row = factor(row, levels = mammal.taxa.name.order),
-                colnum = as.integer(col),
-                rownum = as.integer(row)) %>%
-  dplyr::filter(rownum > colnum)
-
-kaks.pairwise.plot <- ggplot(kaks.pairwise, aes(x = col, y = row))+
-  geom_tile(aes(fill=value))+
-  scale_fill_viridis_c(limits = c(0, 1), direction = -1)+
-  labs(fill="dNdS")+
-  theme_bw()+
-  theme(axis.text.x = element_text(size = 6, angle = 45, hjust = 1),
-        axis.text.y = element_text(size = 6),
-        axis.title = element_blank(),
-        legend.position = c(0.9, 0.15),
-        legend.background = element_blank(),
-        legend.title = element_text(size = 8),
-        legend.text = element_text(size = 8))
+kaks.pairwise.plot <- plot.kaks(FILES$mammal.nt.aln, 
+                                species.order = mammal.taxa.name.order,
+                                kaks.limits = c(0, 1.5))
 save.double.width("figure/dnds.png", kaks.pairwise.plot)
+
+
 
 # Strong purifying selection in all pairs, but weaker in rodents
 #### Test selection globally partition by partition in mammals ####
@@ -891,7 +870,7 @@ create.relax.k.tree <- function(json.file){
   cat(json.file, "K=", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2), 
       "p=", round(hyphy.data$`test results`$`p-value`, digits = 2), "\n")
   
-  p <- ggtree(hyphy.input.tree) + 
+  p <- ggtree(hyphy.input.tree, size=1.5) + 
     geom_tiplab(size=2)
   p <- p %<+% k.vals + aes(colour=adj.k) + 
     scale_color_paletteer_c("ggthemes::Classic Red-Blue",
@@ -913,7 +892,7 @@ create.relax.k.tree <- function(json.file){
   p
 }
 
-if(file.exists("hyphy/combined.rodentia.relax.json")){
+if(file.exists("aln/hyphy/combined.rodentia.relax.json")){
   
   node.names <- c("rodentia", "eumuroida", "muridae", "murinae")
   
@@ -1306,6 +1285,204 @@ read.site.specific.codeml.output()
 
 
 
+
+
+#### How do substitution rates compare to the divergence times? ####
+# We want to calculate the number of substitutions per million years
+# Combine the branch lengths with the TimeTree dates
+
+pairwise.times <- read.time.tree.data()
+mammal.nt.tree.data <- tidytree::as_tibble(zfy.nt.aln.tree)
+
+# Manually match the divergence times from the TimeTree data
+divergence.point.data <- c(
+  "Mammalia" = 180.06610,
+  "Theria" = 160,
+  "Eutheria" = 99.18870,
+  "Atlantogenata" = 97,
+  "Boreoeutheria" = 94.00000,
+  "Laurasiatheria" = 76.00000,
+  "Carnivora" = 55.36164,
+  "Caniformia" = 45.10000,
+  "Arctoidea" = 40.12000,
+  "Euungulata" = 72.7,
+  "Artiodactyla" = 61.84265,
+  "Pecora" = 23.7,
+  "Bovidae" = 21.62563,
+  "Euarchonoglires" = 87.20000,
+  "Simiiformes" = 42.90000,
+  "Catarrhini" = 28.82000,
+  "Hominidae" = 8.60000,
+  "Hominini" = 6.40000,
+  "Cercopithecidae" = 17.75500,
+  "Cercopithecinae" = 10.45400,
+  "Rodentia" = 70.20250,
+  "Sciuridae" = 34.46259,
+  "Xerinae" = 11.38264,
+  "Muroidea" = 68.31756,
+  "Eumuroida" = 26.2,
+  "Cricetidae" = 18.6,
+  "Muridae" = 12.44458,
+  "Murinae" = 11.64917,
+  "Mus-Arvicanthis" = 10.05224
+)
+
+divergence.point.species <- rep(0, length(zfy.nt.aln.tree$tip.label))
+names(divergence.point.species) <- zfy.nt.aln.tree$tip.label
+divergence.point.data <- c(divergence.point.data, divergence.point.species)
+
+# TODO - Use these times to create weights for each edge - plot like the relax K trees
+zfy.nt.aln.tree$node.label[1] <- "Mammalia" # replace default 'Root' label
+zfy.nt.aln.tree$tip.label <- str_replace_all(zfy.nt.aln.tree$tip.label, "_", " ")
+
+get.edge.time <- function(node, tree){
+  nodelabel <- treeio::nodelab(tree, node)
+  parentnode <- tree$edge[tree$edge[,2]==node,1] # parent of edge leading to node
+  parentlabel <- treeio::nodelab(tree, parentnode) # label of the parent
+  
+  v1 = max(divergence.point.data[parentlabel], divergence.point.data[nodelabel])
+  v2 = min(divergence.point.data[parentlabel], divergence.point.data[nodelabel])
+  time = v1 - v2
+  edge.row <-  ifelse(length(parentnode)==0,0, which(tree$edge[,2]==node))
+  
+  edgelength <- ifelse(length(parentnode)==0,0, tree$edge.length[edge.row])
+  subsPerMyr <- ifelse(length(parentnode)==0,0, edgelength / time)
+  
+  return(data.frame(parentnode = ifelse(length(parentnode)==0, NA, parentnode),
+                    parentlabel =ifelse(length(parentnode)==0, NA, parentlabel),
+                    node = node,
+                    nodelabel = nodelabel,
+                    name = paste0(parentlabel, "-", nodelabel),
+                    parent.time = v1,
+                    node.time = v2,
+                    time = time,
+                    edge.row,
+                    subsPerSite = edgelength,
+                    subsPerMyr = subsPerMyr))
+}
+
+time.vals <- do.call(rbind, lapply(1:59, get.edge.time, tree=zfy.nt.aln.tree))
+
+subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
+  time.vals +
+  aes(colour = log(subsPerMyr)) +
+  scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                          direction = -1, limits =c(-9, -3))+
+  labs(color = "Log substitutions per site\nper million years")+
+  geom_nodelab(size=2, nudge_x = -0.005, nudge_y = 0.5, hjust = 1, color = "black")+
+  geom_tiplab(size=2, color = "black")+
+  geom_treescale(fontsize =2, y = -1) +
+  coord_cartesian(xlim = c(-0.05, 0.4))+
+  
+  # ZF* moves to sex chromosomes
+  annotate("rect", xmin=0.02, ymin=7.8, xmax=0.04, ymax=9.2, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=0.02, y=8.6,label="ZF* to\nX/Y", size=2, hjust=0)+
+  # Ssty box
+  annotate("rect", xmin=0.12, ymin=25.8, xmax=0.19, ymax=27.5, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=0.13, y=27, label="Ssty appears", size=2, hjust=0)+
+  # Zfy testis specific box
+  annotate("text", x=0.13, y=26.2, label="Zfy testis specific", size=2, hjust=0)+
+  annotate("rect", xmin=0.29, ymin=29.5, xmax=0.34, ymax=31, fill="darkgreen", alpha=0.4)+
+  # Sly amplifies box
+  annotate("text", x=0.295, y=30.5, label="Sly amplifies", size=2, hjust=0)+
+  annotate("rect", xmin=0.24, ymin=27.4, xmax=0.27, ymax=29, fill="darkgreen", alpha=0.4)+
+  # Slxl1 acquired box
+  annotate("text", x=0.242, y=28, label="Slxl1\nacquired?", size=2, hjust=0)+
+  theme_tree() +
+  theme(legend.position = c(0.2, 0.8),
+        legend.background = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))
+save.double.width("figure/subs.per.site.per.Myr.png", subs.site.mya.plot)
+
+# Redraw the tree with branch lengths from the actual dates. Confirm it adds up
+# to about the same length per species.
+
+zfy.nt.aln.tree.time <- zfy.nt.aln.tree
+get.time.for.node <- function(node) time.vals[time.vals$node==node,"time"]
+zfy.nt.aln.tree.time$edge.length <- sapply(zfy.nt.aln.tree.time$edge[,2], get.time.for.node)
+
+time.plot <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
+  time.vals +
+  aes(colour = log(subsPerMyr)) +
+  scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                          direction = -1, limits =c(-9, -3))+
+  labs(color = "Log substitutions per site\nper million years")+
+  geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
+  geom_tiplab(size=2, color = "black")+
+  geom_treescale(fontsize =2, y = -1, width = 10) +
+  coord_cartesian(xlim = c(-5, 210))+
+  theme_tree() +
+  theme(legend.position = c(0.2, 0.8),
+        legend.background = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))
+save.double.width("figure/subs.per.site.time.png", time.plot)
+
+# Make figures for presentations
+
+# Scaled timetree view, no colours
+time.plot.base <- ggtree(zfy.nt.aln.tree.time, size = 1, color="black") %<+%
+  time.vals +
+  geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
+  geom_tiplab(size=2, color = "black")+
+  geom_treescale(fontsize =2, y = -1, width = 10) +
+  coord_cartesian(xlim = c(-5, 210), ylim=c(-1, 32))+
+  theme_tree() +
+  theme(legend.position = "none",
+        legend.background = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))
+save.double.width("figure/subs.per.site.time.base.png", time.plot.base)
+
+# Scaled timetree view, with colours
+time.plot.colours <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
+  time.vals +
+  aes(colour = log(subsPerMyr)) +
+  scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                          direction = -1, limits =c(-9, -3))+
+  labs(color = "Log substitutions per site\nper million years")+
+  geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
+  geom_tiplab(size=2, color = "black")+
+  geom_treescale(fontsize =2, y = -1, width = 10) +
+  coord_cartesian(xlim = c(-5, 210), ylim=c(-1, 32))+
+  theme_tree() +
+  theme(legend.position = c(0.2, 0.8),
+        legend.background = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))
+save.double.width("figure/subs.per.site.time.colours.png", time.plot.colours)
+
+# Annotate with labels
+time.plot.annotated <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
+  time.vals +
+  # ZF* moves to sex chromosomes
+  annotate("rect", xmin=30, ymin=7.8, xmax=60, ymax=9.5, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=40, y=9,label="ZF* to X/Y", size=2, hjust=0)+
+  # Ssty box
+  annotate("rect", xmin=113, ymin=25.8, xmax=138, ymax=27.5, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=115, y=27, label="Ssty appears", size=2, hjust=0)+
+  # Zfy testis specific
+  annotate("text", x=115, y=26.2, label="Zfy testis specific", size=2, hjust=0)+
+  # Sly amplifies box
+  annotate("text", x=170, y=30.7, label="Sly\namplifies", size=2, hjust=0)+
+  annotate("rect", xmin=170, ymin=29.8, xmax=180, ymax=31.5, fill="darkgreen", alpha=0.4)+
+  # Slxl1 acquired box
+  # annotate("text", x=0.242, y=28, label="Slxl1\nacquired?", size=2, hjust=0)+
+  aes(colour = log(subsPerMyr)) +
+  scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                          direction = -1, limits =c(-9, -3))+
+  labs(color = "Log substitutions per site\nper million years")+
+  geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
+  geom_tiplab(size=2, color = "black")+
+  geom_treescale(fontsize =2, y = -1, width = 10) +
+  coord_cartesian(xlim = c(-5, 210), ylim=c(-1, 32))+
+  theme_tree() +
+  theme(legend.position = c(0.2, 0.8),
+        legend.background = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))
+save.double.width("figure/subs.per.site.time.annotated.png", time.plot.annotated)
 
 #### Tar the outputs ####
 system2("tar", "czf figure.tar.gz figure")
