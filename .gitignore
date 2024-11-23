@@ -4,7 +4,8 @@
 .Ruserdata
 *.Rproj
 
-fasta/*.*
+fasta/*.fas
+fasta/*.txt
 fasta/aa/*.old
 aln/*
 bin/*
