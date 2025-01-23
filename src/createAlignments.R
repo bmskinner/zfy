@@ -117,24 +117,9 @@ FILES$combined.aa.aln.treefile <- run.iqtree(FILES$combined.aa.aln)
 # Expect iqtree on the PATH.
 # Note model testing is automatically performed in v1.5.4 onwards
 # Note: we can use a partition model if we specify exon coordinates
-FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln, "-asr")
-FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln, "-asr")
-
-# system2("iqtree", paste("-s ", FILES$combined.nt.aln, 
-#                         "-bb 1000", # number of bootstrap replicates
-#                         "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
-#                         "-nt AUTO", # number of threads
-#                         "-asr"), # ancestral sequence reconstruction
-#         stdout = gsub(".aln$", ".iqtree.log", FILES$combined.nt.aln), 
-#         stderr = gsub(".aln$", ".iqtree.log", FILES$combined.nt.aln))
-# 
-# system2("iqtree", paste("-s ", FILES$mammal.nt.aln, 
-#                         "-bb 1000", # number of bootstrap replicates
-#                         "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
-#                         "-nt AUTO", # number of threads
-#                         "-asr"), # ancestral sequence reconstruction
-#         stdout = gsub(".aln$", ".iqtree.log", FILES$mammal.nt.aln), 
-#         stderr = gsub(".aln$", ".iqtree.log", FILES$mammal.nt.aln))
+# -st to use codon model rather than pure DNA model
+FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln, "-asr -st -alninfo")
+FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln, "-asr -st -alninfo")
 
 #### Make individual mammal exon NT trees ####
 
@@ -576,10 +561,10 @@ zfx.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
                         "( ", # Simiiformes
                         "Common_marmoset_ZFX,", # New world monkeys
                         "(", # Catarrhini (Old world monkeys & apes)
-                        "(", #Cercopithecidae (Old world monkeys)
-                        "Golden_snub-nosed_monkey_ZFX,",   #Colobinae
-                        "(Olive_baboon_ZFX, Macaque_ZFX)Cercopithecinae", # Cercopithecinae
-                        ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
+                          "(", #Cercopithecidae (Old world monkeys)
+                          "Golden_snub-nosed_monkey_ZFX,",   #Colobinae
+                          "(Olive_baboon_ZFX, Macaque_ZFX)Cercopithecinae", # Cercopithecinae
+                          ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
                         "(", # Hominidae
                         "Gorilla_ZFX, (Chimpanzee_ZFX, Human_ZFX)Hominini",
                         ")Hominidae",  # /Hominidae
@@ -587,10 +572,11 @@ zfx.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
                         ")Simiiformes,",  # /Simiiformes
                         "(", # Rodentia
                         "(Gray_squirrel_Zfx,(Arctic_ground_squirrel_Zfx, Alpine_marmot_ZFX)Xerinae)Sciuridae,", # Sciuridae 
-                        "(Beaver_Zfx, (", # Muroidea
-                        "(North_American_deer_mouse_Zfx, Desert_hamster_Zfx)Cricetidae,", # Cricetidae 
-                        "(Mongolian_gerbil_Zfx, (Rat_Zfx, (Mouse_Zfx, African_Grass_Rat_Zfx)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-                        ")Eumuroida)Muroidea", # /Muroidea
+                          "(Damara_mole-rat_Zfx,", 
+                            "(Beaver_Zfx, (", # Muroidea
+                              "(North_American_deer_mouse_Zfx, Desert_hamster_Zfx)Cricetidae,", # Cricetidae 
+                              "(Mongolian_gerbil_Zfx, (Rat_Zfx, (Mouse_Zfx, African_Grass_Rat_Zfx)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
+                            ")Eumuroida)Muroidea)", # /Muroidea
                         ")Rodentia", # /Rodentia
                         ")Euarchonoglires,", # /Euarchonoglires
                         "(", # Laurasiatheria
@@ -626,10 +612,11 @@ zfy.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
                         ")Simiiformes,",  # /Simiiformes
                         "(", # Rodentia
                         "(Gray_squirrel_Zfy,(Arctic_ground_squirrel_Zfx-like_putative-Zfy, Alpine_marmot_ZFY)Xerinae)Sciuridae,", # Sciuridae 
+                        "(Damara_mole-rat_Zfy,", 
                         "(Beaver_Zfx-like_putative-Zfy, (", # Muroidea
                         "(North_American_deer_mouse_Zfx-like_putative-Zfy, Desert_hamster_Zfx-like_putative-Zfy)Cricetidae,", # Cricetidae 
                         "(Mongolian_gerbil_Zfx-like_putative-Zfy, (Rat_Zfy2, ((Mouse_Zfy1, Mouse_Zfy2), (African_Grass_Rat_ZFY2-like_1, African_Grass_Rat_ZFY2-like_2))Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-                        ")Eumuroida)Muroidea", # /Muroidea
+                        ")Eumuroida)Muroidea)", # /Muroidea
                         ")Rodentia", # /Rodentia
                         ")Euarchonoglires,", # /Euarchonoglires
                         "(", # Laurasiatheria
@@ -648,13 +635,11 @@ write_file(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
 
 # Run the ancestral reconstructions
 system2("iqtree", paste("-s ", "aln/zfx_only/zfx.aln", 
-                        # "-bb 1000 -alrt 1000", # bootstrapping
                         "-nt AUTO", # number of threads
                         "-te aln/zfx_only/zfx.nt.species.nwk", # user tree guide
                         "-asr")) # ancestral sequence reconstruction
 
 system2("iqtree", paste("-s ", "aln/zfy_only/zfy.aln", 
-                        # "-bb 1000 -alrt 1000", # bootstrapping
                         "-nt AUTO", # number of threads
                         "-te aln/zfy_only/zfy.nt.species.nwk", # user tree guide
                         "-asr")) # ancestral sequence reconstruction

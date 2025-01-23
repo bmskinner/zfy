@@ -27,9 +27,9 @@ load.packages <- function(){
   }
   
   cran.packages <- c("tidyverse", "ape", "filesstrings", "seqinr", "phangorn",
-                     "installr","treespace", "httr", "seqLogo", "assertthat", "aplot",
+                     "installr","treespace", "httr", "assertthat", "aplot",
                      "paletteer", "ggnewscale", "slider", "BiocManager",
-                     "remotes", "patchwork", "ggpattern", "xlsx")
+                     "remotes", "patchwork", "ggpattern", "xlsx", "svglite")
   
   sapply(cran.packages, install.cran)
   
@@ -39,7 +39,7 @@ load.packages <- function(){
   )#"vragh/seqvisr"
   sapply(github.packages, install.github)
   
-  bioconductor.packages <- c("msa", "ggmsa", "treeio")
+  bioconductor.packages <- c("msa", "ggmsa", "treeio", "seqLogo")
   sapply(bioconductor.packages, install.bioconductor)
   return()
 }
@@ -159,6 +159,24 @@ run.hyphy.meme <- function(nex.file, tree.file){
   bash.file)
   system2("bash", bash.file)
   json.file
+}
+
+run.divvier <- function(aln.file){
+  bash.file <- paste0(aln.file, ".sh")
+  write_file(paste0("#!/bin/bash\n",
+                    "source activate divvier\n\n",
+                    
+                    "# Identify phylogenetically informatve sites with indels\n",
+                    "divvier -divvygap ", aln.file,  "\n",
+                    
+                    "# Ensure file extension is aln for use in IQTREE",
+                    "mv ", paste0(aln.file, ".divvy.fas"), " ", paste0(aln.file, ".divvy.aln"), "\n"
+                    
+  ),
+  bash.file)
+  system2("bash", bash.file)
+  # Return the divvied file
+  paste0(aln.file, ".divvy.aln")
 }
 
 
