@@ -50,26 +50,36 @@ run.muscle(FILES$final.intron.nt.fas,     FILES$final.intron.nt.aln)
 
 #### Make ML tree with distances #####
 
-final.intron.zfy.nt.aln.tree <- run.iqtree(FILES$final.intron.zfy.nt.aln) %>%
+# -alninfo: print information about the number of informative sites
+# -lmap 2000: use 2000 quartets for likelihood mapping. How treelike is the data?
+final.intron.zfy.nt.aln.tree <- run.iqtree(FILES$final.intron.zfy.nt.aln, "-alninfo -lmap 2000") %>%
         ape::read.tree(.) %>%
-        reroot.tree(.,"Platypus", position = 0.015)
+        reroot.tree(., c("African_bush_elephant_ZFY"), position = 0.015)
 
-final.intron.zfx.nt.aln.tree <- run.iqtree(FILES$final.intron.zfx.nt.aln) %>%
+final.intron.zfx.nt.aln.tree <- run.iqtree(FILES$final.intron.zfx.nt.aln, "-alninfo -lmap 2000") %>%
         ape::read.tree(.) %>%
-        reroot.tree(.,"Platypus", position = 0.015)
+        reroot.tree(.,"African_bush_elephant_ZFX", position = 0.015)
 
-final.intron.nt.aln.tree <- run.iqtree(FILES$final.intron.nt.aln) %>%
+final.intron.nt.aln.tree <- run.iqtree(FILES$final.intron.nt.aln, "-alninfo -lmap 2000") %>%
         ape::read.tree(.) %>%
-        reroot.tree(., "Platypus", position = 0.015)
+        reroot.tree(., "African_bush_elephant_ZFX", position = 0.015)
 
 #### Plot the trees ####
 
-final.intron.zfy.nt.aln.tree.plot <- plot.tree(final.intron.zfy.nt.aln.tree)  + xlim(0, 1.5) + labs(title = "ZFY")
+final.intron.zfy.nt.aln.tree.plot <- plot.tree(final.intron.zfy.nt.aln.tree)  + xlim(0, 2) + labs(title = "ZFY")
 
-final.intron.zfx.nt.aln.tree.plot <- plot.tree(final.intron.zfx.nt.aln.tree) + xlim(0, 1.5)+ labs(title = "ZFX")
+final.intron.zfx.nt.aln.tree.plot <- plot.tree(final.intron.zfx.nt.aln.tree) + xlim(0, 2)+ labs(title = "ZFX")
 save.double.width("figure/final.intron.tree.png", final.intron.zfx.nt.aln.tree.plot/final.intron.zfy.nt.aln.tree.plot)
 
-final.intron.nt.aln.tree.plot <- plot.tree(final.intron.nt.aln.tree)  + xlim(0, 1.5) + labs(title = "Combined")
+final.intron.nt.aln.tree.plot <- plot.tree(final.intron.nt.aln.tree)  + xlim(0, 3) + labs(title = "Combined")
 save.double.width("figure/final.intron.combined.tree.png", final.intron.nt.aln.tree.plot)
 
+#### Plot unrooted fan trees ####
 
+ggtree(final.intron.zfy.nt.aln.tree, layout="equal_angle")  +
+  geom_tiplab(size=2)+
+  geom_treescale(fontsize =2, width = 0.05) 
+
+ggtree(final.intron.zfx.nt.aln.tree, layout="equal_angle")  +
+  geom_tiplab(size=2)+
+  geom_treescale(fontsize =2, width = 0.05) 

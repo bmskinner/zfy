@@ -118,8 +118,8 @@ FILES$combined.aa.aln.treefile <- run.iqtree(FILES$combined.aa.aln)
 # Note model testing is automatically performed in v1.5.4 onwards
 # Note: we can use a partition model if we specify exon coordinates
 # -st to use codon model rather than pure DNA model
-FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln, "-asr -st -alninfo")
-FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln, "-asr -st -alninfo")
+FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln, "-asr -st CODON -alninfo")
+FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln, "-asr -st CODON -alninfo")
 
 #### Make individual mammal exon NT trees ####
 
