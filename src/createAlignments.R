@@ -20,7 +20,7 @@
 #### Imports #####
 
 source("src/functions.R")
-load.packages()
+# load.packages() - automatically loaded by functions.R
 
 source("src/find9aaTADs.R")
 source("src/findZF.R")
@@ -31,31 +31,38 @@ cat("Packages loaded\n")
 
 #### Create output directory structure #####
 
-# Clear previous analyses
-filesstrings::dir.remove("aln")
-filesstrings::dir.remove("figure")
-filesstrings::dir.remove("nls")
-filesstrings::dir.remove("pwm")
-
-# Create missing dirs if needed
-filesstrings::create_dir("aln")
-filesstrings::create_dir("aln/mammal")
-filesstrings::create_dir("aln/combined")
-filesstrings::create_dir("aln/exons")
-filesstrings::create_dir("aln/hyphy")
-filesstrings::create_dir("aln/nls")
-filesstrings::create_dir("aln/pwm")
-filesstrings::create_dir("aln/zfx_only")
-filesstrings::create_dir("aln/zfy_only")
+# Create directories that remain constant
 filesstrings::create_dir("bin")
-filesstrings::create_dir("figure")
 filesstrings::create_dir("paml")
 filesstrings::create_dir("paml/site-specific")
 filesstrings::create_dir("paml/exon_1_3-6")
 filesstrings::create_dir("paml/exon_2")
 filesstrings::create_dir("paml/exon_7")
 
+# Clear previous analyses if present
+cat("Removing existing output directories\n")
+filesstrings::remove_dir(c("aln", "figure"))
+
+# Create missing dirs if needed
+cat("Creating output directories\n")
+create.output.dir <- function(dir.path){
+  if(!filesstrings::create_dir(dir.path)) stop(paste0("Could not create output directory '", dir.path, "'"))
+}
+
+create.output.dir("aln")
+create.output.dir("aln/mammal")
+create.output.dir("aln/combined")
+create.output.dir("aln/exons")
+create.output.dir("aln/hyphy")
+create.output.dir("aln/nls")
+create.output.dir("aln/pwm")
+create.output.dir("aln/zfx_only")
+create.output.dir("aln/zfy_only")
+create.output.dir("figure")
+
 writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
+
+METADATA <- prepare.fas.files() # load FASTA files and write metadata table
 
 
 #### Run combined mammal/outgroup AA alignment ####

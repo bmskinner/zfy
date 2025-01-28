@@ -373,7 +373,7 @@ prepare.fas.files <- function(){
   metadata
 }
 
-METADATA <- prepare.fas.files() # run on source
+
 
 #### Plotting functions ####
 
