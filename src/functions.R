@@ -43,7 +43,7 @@ load.packages <- function(){
   sapply(bioconductor.packages, install.bioconductor)
   return()
 }
-load.packages()
+load.packages() # Must be run on source so that FASTA files prepare automatically
 
 #### Global variables #####
 ZFY.TREE.COLOUR <- "#860086"  #3B4992
@@ -177,6 +177,19 @@ run.divvier <- function(aln.file){
   system2("bash", bash.file)
   # Return the divvied file
   paste0(aln.file, ".divvy.aln")
+}
+
+# Run pwm_predict on the combined aa fasta file
+run.pwm.predict <- function(){
+  old.wd <- getwd()
+  setwd("./bin/pwm_predict")
+  system2("./pwm_predict", "-l 20 ../../fasta/combined.aa.fas") # ensure all ZFs linked
+  setwd(old.wd)
+  filesstrings::move_files(files = c("fasta/combined.aa.pwm"),
+                           destinations = c("aln/pwm"),
+                           overwrite = TRUE)
+  # Remove header and split the output PWMs to separate files
+  system2("cat", "aln/pwm/combined.aa.pwm | grep -v ';' | split -l 5 - aln/pwm/zf_")
 }
 
 
@@ -350,6 +363,7 @@ prepare.fas.files <- function(){
   ape::write.FASTA(combined.aa.raw, file = FILES$combined.aa.fas)
   
   # Create supplementary table with all accessions and sequence info
+  cat("Writing metadata in Excel format\n")
   metadata$combined %>%
     dplyr::rename(Accession = accession, Species = species, Group = group,
                   Name_in_figures = common.name,Description = original.name  ) %>%

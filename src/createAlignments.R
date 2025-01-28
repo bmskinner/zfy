@@ -118,8 +118,8 @@ FILES$combined.aa.aln.treefile <- run.iqtree(FILES$combined.aa.aln)
 # Note model testing is automatically performed in v1.5.4 onwards
 # Note: we can use a partition model if we specify exon coordinates
 # -st to use codon model rather than pure DNA model
-FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln, "-asr -st CODON -alninfo")
-FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln, "-asr -st CODON -alninfo")
+FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln, "-asr")
+FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln, "-asr")
 
 #### Make individual mammal exon NT trees ####
 
@@ -155,15 +155,9 @@ exon1.3_6.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,exon1.3_6.locs]
 create.exon.alignment(exon1.3_6.aln, "exon_1.3-6.aln")
 
 #### Identify binding motifs of the ZFs in each species ####
-old.wd <- getwd()
-setwd("./bin/pwm_predict")
-system2("./pwm_predict", "-l 20 ../../fasta/combined.aa.fas") # ensure all ZFs linked
-setwd(old.wd)
-filesstrings::move_files(files = c("fasta/combined.aa.pwm"),
-                         destinations = c("aln/pwm"),
-                         overwrite = TRUE)
-# Remove header and split the output PWMs to separate files
-system2("cat", "aln/pwm/combined.aa.pwm | grep -v ';' | split -l 5 - aln/pwm/zf_")
+
+run.pwm.predict()
+
 #### Fetch divergence times to highlight the rapid evolution in the rodents ####
 
 get.time.tree <- function(tax.a, tax.b){
