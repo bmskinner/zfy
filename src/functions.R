@@ -438,13 +438,13 @@ make.outgroup.mini.tree <-function(combined.outgroup.tree, text.labels){
   result <- result + annotate(geom="text", x=0.05, y = 20, size = 2,
                               angle = 90, label="ZFX", col = ZFX.TREE.COLOUR)
   
-  result <- result + annotate(geom="segment", x=0.05, y = 6, size = 0.5,
+  result <- result + annotate(geom="segment", x=0.05, y = 6, linewidth = 0.5,
                               xend = 0.05, yend=18, col = ZFX.TREE.COLOUR)
-  result <- result + annotate(geom="segment", x=0.05, y = 22, size = 0.5,
+  result <- result + annotate(geom="segment", x=0.05, y = 22, linewidth = 0.5,
                               xend = 0.05, yend=33, col = ZFX.TREE.COLOUR)
-  result <- result + annotate(geom="segment", x=0.05, y = 34, size = 0.5,
+  result <- result + annotate(geom="segment", x=0.05, y = 34, linewidth = 0.5,
                               xend = 0.05, yend=47, col = ZFY.TREE.COLOUR)
-  result <- result + annotate(geom="segment", x=0.05, y = 51, size = 0.5,
+  result <- result + annotate(geom="segment", x=0.05, y = 51, linewidth = 0.5,
                               xend = 0.05, yend=63, col = ZFY.TREE.COLOUR)
   
   # Whare is the top of the tree?

@@ -673,7 +673,7 @@ save.double.width("figure/Figure_2_aa.structure.confident.png", aa.structure.con
 
 
 #### Plot the conservation of hydrophobicity across mammal/outgroup AA MSA ####
-
+cat("Plotting conservation of hydrophobicity\n")
 msa.aa.aln.hydrophobicity <- do.call(rbind, mapply(calc.hydrophobicity, aa=ALIGNMENTS$aa.combined.biostrings@unmasked, 
                                                    sequence.name = names(ALIGNMENTS$aa.combined.biostrings@unmasked), 
                                                    window.size = 9,
@@ -701,7 +701,7 @@ hydrophobicity.plot <- annotate.structure.plot(hydrophobicity.plot, n.taxa)
 save.double.width("figure/hydrophobicity.convervation.tree.png", hydrophobicity.plot, height = 120)
 
 #### Plot conservation of charge across mammal/outgroup AA MSA ####
-
+cat("Plotting conservation of charge\n")
 msa.aa.aln.charge <- do.call(rbind, mapply(calc.charge, aa=ALIGNMENTS$aa.combined.biostrings@unmasked, 
                                            sequence.name = names(ALIGNMENTS$aa.combined.biostrings@unmasked), 
                                            window.size = 9,
@@ -720,14 +720,14 @@ charge.plot <- annotate.structure.plot(charge.plot, n.taxa)
 save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 120)
 
 #### Combine all structure plots ####
-
+cat("Plotting combined hydrophobicity and charge\n")
 # To test spacing and balance
 structure.plot <- (hydrophobicity.plot) / (charge.plot) + plot_layout(ncol = 1)
 save.double.width("figure/Figure_xxxx_combined_structure.plot.png", structure.plot, height = 230)
 
 
 #### What are the hydrophobic patches in exons 2, 3 and 5 that are not 9aaTADs? ####
-
+cat("Identifying hydrophobic patches\n")
 # Extract all nt and aa sequences from the MSA for the given region, and calculate the
 # consensus sequence
 extract.alignment.region <- function(nt.start=NULL, nt.end=NULL, aa.start=NULL, aa.end=NULL){
@@ -837,7 +837,7 @@ save.double.width(filename = "figure/hydrophobic.patch.all.png", patch.plot.comp
 
 
 #### Plot HyPhy RELAX test for relaxed selection ####
-
+cat("Plotting RELAX result\n")
 create.relax.k.tree <- function(json.file){
   # Read the json file and parse results
   hyphy.data <- jsonlite::read_json(json.file)
@@ -909,7 +909,7 @@ if(file.exists("aln/hyphy/combined.rodentia.relax.json")){
 
 #### Plot HyPhy MEME test for directional selection ####
 
-
+cat("Plotting MEME result\n")
 # Given an alignment region produced by `extract.alignment.region`, plot it
 plot.alignment.region <- function(region.data, meme.overview){
   
@@ -1142,7 +1142,7 @@ plot.meme.sites(site.plots[5:8])
 plot.meme.sites(site.plots[9:11])
 
 #### codeml site models to check for site-specific and branch-site selection ####
-
+cat("Reading codeml results\n")
 # Read the test and null codeml outputs
 # These were created with a foreground node name
 read.branch.site.codeml.output <- function(fg.node.name){
@@ -1290,7 +1290,7 @@ read.site.specific.codeml.output()
 #### How do substitution rates compare to the divergence times? ####
 # We want to calculate the number of substitutions per million years
 # Combine the branch lengths with the TimeTree dates
-
+cat("Comparing branch lengths with divergence times\n")
 pairwise.times <- read.time.tree.data()
 mammal.nt.tree.data <- tidytree::as_tibble(zfy.nt.aln.tree)
 
