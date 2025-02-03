@@ -11,7 +11,7 @@ source("src/calcCharge.R")
 source("src/calcHydrophobicity.R")
 
 cat("Packages loaded\n")
-filesstrings::create_dir("figure")
+METADATA <- prepare.fas.files() # load FASTA files and write metadata table
 ALIGNMENTS <- read.alignments()
 
 # Identify the coordinates of the exon boundaries in the gapped alignments
