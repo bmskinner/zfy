@@ -31,16 +31,16 @@ load.packages <- function(){
                      "paletteer", "ggnewscale", "slider", "BiocManager",
                      "remotes", "patchwork", "ggpattern", "xlsx", "svglite")
   
-  sapply(cran.packages, install.cran)
+  suppressPackageStartupMessages(sapply(cran.packages, install.cran))
   
   github.packages <- c('YuLab-SMU/ggtree', # since ggtree cannot install in Bioconductor 3.15 on cluster
                        "vmikk/metagMisc",  # for converting distance matrices to data frames
                        "fmichonneau/chopper" # functions for converting FASTA to NEXUS format
   )#"vragh/seqvisr"
-  sapply(github.packages, install.github)
+  suppressPackageStartupMessages(sapply(github.packages, install.github))
   
   bioconductor.packages <- c("msa", "ggmsa", "treeio", "seqLogo")
-  sapply(bioconductor.packages, install.bioconductor)
+  suppressPackageStartupMessages(sapply(bioconductor.packages, install.bioconductor))
   return()
 }
 load.packages() # Must be run on source so that FASTA files prepare automatically

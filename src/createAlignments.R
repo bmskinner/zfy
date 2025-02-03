@@ -202,6 +202,7 @@ if(!file.exists( "time.tree.data.tsv")){
 
 #### Prepare codeml site model to check for site-specific selection ####
 
+cat("Creating CODEML site model control files\n")
 # Adapted from Beginner's Guide on the Use of PAML to Detect Positive Selection
 # https://academic.oup.com/mbe/article/40/4/msad041/7140562 for details
 
@@ -246,8 +247,8 @@ write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
 
 #### Prepare codeml branch-site model to look for selection specifically in Muroidea ####
 
+cat("Creating CODEML branch-site model control files\n")
 # To look at the rodent clade, we need a rooted tree
-
 nt.aln.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
 # Root the tree on platypus and resave
 # The root is arbitrarily placed in the platypus branch to fit neatly
@@ -356,7 +357,7 @@ write.paml.fg.tree(murinae.node,
                    "paml/branch-site-murinae")
 
 # Add a script to submit these jobs to the cluster
-# Run the commands manually
+# Run the commands manually - this takes a long time to run, so only invoke when needed
 paml.shell.script <- paste0("#!/bin/bash\n\n",
                             "# qsubme is an alias to submit the job to the cluster\n",
                             "shopt -s expand_aliases\n",
@@ -389,6 +390,7 @@ write_file(paml.shell.script, "run_paml.sh")
 
 #### Run HyPhy RELAX and MEME to test for relaxed selection ####
 
+cat("Creating HyPhy RELAX and MEME control files\n")
 # Create and save a tree in HyPhy format. Set test branches to the given node, all others
 # as reference. 
 create.mammal.hyphy.relax.tree.file <- function(fg.node, node.name){
@@ -534,7 +536,7 @@ write_file(paste0("#!/bin/bash\n",
                         collapse = "")
 ),
 "run_hyphy.sh")
-
+cat("Running HyPhy RELAX and MEME across nodes", paste(node.names, collapse=";"), "\n")
 system2("bash", "run_hyphy.sh")
 
 
@@ -577,7 +579,7 @@ zfx.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
                             "(Beaver_Zfx, (", # Muroidea
                               "(North_American_deer_mouse_Zfx, Desert_hamster_Zfx)Cricetidae,", # Cricetidae 
                               "(Mongolian_gerbil_Zfx, (Rat_Zfx, (Mouse_Zfx, African_Grass_Rat_Zfx)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-                            ")Eumuroida)Muroidea)", # /Muroidea
+                            ")Eumuroida)Muroidea)Muroidea-Mole-rat", # /Muroidea
                         ")Rodentia", # /Rodentia
                         ")Euarchonoglires,", # /Euarchonoglires
                         "(", # Laurasiatheria
@@ -617,7 +619,7 @@ zfy.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
                         "(Beaver_Zfx-like_putative-Zfy, (", # Muroidea
                         "(North_American_deer_mouse_Zfx-like_putative-Zfy, Desert_hamster_Zfx-like_putative-Zfy)Cricetidae,", # Cricetidae 
                         "(Mongolian_gerbil_Zfx-like_putative-Zfy, (Rat_Zfy2, ((Mouse_Zfy1, Mouse_Zfy2), (African_Grass_Rat_ZFY2-like_1, African_Grass_Rat_ZFY2-like_2))Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-                        ")Eumuroida)Muroidea)", # /Muroidea
+                        ")Eumuroida)Muroidea)Muroidea-Mole-rat", # /Muroidea
                         ")Rodentia", # /Rodentia
                         ")Euarchonoglires,", # /Euarchonoglires
                         "(", # Laurasiatheria
@@ -670,7 +672,7 @@ zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "(_putative)
 #### Plot ZFX / ZFY tree comparisons  ####
 
 # Export comparison of the ML trees
-png(filename = "figure/zfx.zfy.nt.ancestral.treediff.png")
+png(filename = "figure/zfx.zfy.nt.species.tree.treediff.png")
 treespace::plotTreeDiff(zfx.nt.aln.tree, zfy.nt.aln.tree, treesFacing=TRUE)
 dev.off()
 
@@ -678,8 +680,8 @@ dev.off()
 zfx.nt.aln.tree.plot <- plot.tree(zfx.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
 zfy.nt.aln.tree.plot <- plot.tree(zfy.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
 
-save.double.width("figure/ancestral.zfx.png", zfx.nt.aln.tree.plot)
-save.double.width("figure/ancestral.zfy.png", zfy.nt.aln.tree.plot)
+save.double.width("figure/species.tree.zfx.png", zfx.nt.aln.tree.plot)
+save.double.width("figure/species.tree.zfy.png", zfy.nt.aln.tree.plot)
 
 #### Find matching nodes in the two trees and get ancestral reconstructions ####
 
