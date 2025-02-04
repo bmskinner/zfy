@@ -579,7 +579,7 @@ zfx.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
                             "(Beaver_Zfx, (", # Muroidea
                               "(North_American_deer_mouse_Zfx, Desert_hamster_Zfx)Cricetidae,", # Cricetidae 
                               "(Mongolian_gerbil_Zfx, (Rat_Zfx, (Mouse_Zfx, African_Grass_Rat_Zfx)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-                            ")Eumuroida)Muroidea)Muroidea-Mole-rat", # /Muroidea
+                            ")Eumuroida)Muroidea)Muroidea-Fukomys", # /Muroidea
                         ")Rodentia", # /Rodentia
                         ")Euarchonoglires,", # /Euarchonoglires
                         "(", # Laurasiatheria
@@ -619,7 +619,7 @@ zfy.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
                         "(Beaver_Zfx-like_putative-Zfy, (", # Muroidea
                         "(North_American_deer_mouse_Zfx-like_putative-Zfy, Desert_hamster_Zfx-like_putative-Zfy)Cricetidae,", # Cricetidae 
                         "(Mongolian_gerbil_Zfx-like_putative-Zfy, (Rat_Zfy2, ((Mouse_Zfy1, Mouse_Zfy2), (African_Grass_Rat_ZFY2-like_1, African_Grass_Rat_ZFY2-like_2))Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-                        ")Eumuroida)Muroidea)Muroidea-Mole-rat", # /Muroidea
+                        ")Eumuroida)Muroidea)Muroidea-Fukomys", # /Muroidea
                         ")Rodentia", # /Rodentia
                         ")Euarchonoglires,", # /Euarchonoglires
                         "(", # Laurasiatheria

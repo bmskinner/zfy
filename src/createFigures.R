@@ -800,7 +800,8 @@ plot.hydrophobic.patch <- function(patch.data, patch.start, patch.end, patch.con
              y=64.2, hjust=0.5, family="mono", fontface="bold")
 }
 
-
+# TODO - coordinates are hard coded from the alignments. Will need updating if more
+# sequences are added
 exon2.patch <- extract.alignment.region(mouse.exons$start_aa[2]+95,
                                         mouse.exons$start_aa[2]+118)
 
@@ -831,10 +832,6 @@ patch.plot.complete <- exon2.hydro.plot + exon3.hydro.plot + exon5.hydro.plot +
         legend.text = element_text(size=6),
         legend.title = element_text(size=8))
 save.double.width(filename = "figure/hydrophobic.patch.all.png", patch.plot.complete)
-
-
-
-
 
 #### Plot HyPhy RELAX test for relaxed selection ####
 cat("Plotting RELAX result\n")
@@ -1319,6 +1316,7 @@ divergence.point.data <- c(
   "Rodentia" = 70.20250,
   "Sciuridae" = 34.46259,
   "Xerinae" = 11.38264,
+  "Muroidea-Fukomys" = 70.0, 
   "Muroidea" = 68.31756,
   "Eumuroida" = 26.2,
   "Cricetidae" = 18.6,
