@@ -697,7 +697,7 @@ hydrophobicity.plot <- ggplot()+
                                                    y = sequence,
                                                    fill=hydrophobicity_smoothed),
                                                    hjust = 0, vjust = 0)+ 
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Black", direction = -1, limits = c(0, 1))+
   labs(fill="Hydrophobicity (9 site average)")
 hydrophobicity.plot <- annotate.structure.plot(hydrophobicity.plot, n.taxa)
 save.double.width("figure/hydrophobicity.convervation.tree.png", hydrophobicity.plot, height = 120)
@@ -716,7 +716,7 @@ charge.plot <- ggplot()+
                                                    y = sequence,
                                                    fill=charge_smoothed),
               hjust = 0, vjust = 0)+ 
-  scale_fill_paletteer_c("ggthemes::Classic Red-Black", direction = -1, limits = c(-1, 1))+
+  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = 1, limits = c(-1, 1))+
   labs(fill="Charge (9 site average)")
 charge.plot <- annotate.structure.plot(charge.plot, n.taxa)
 save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 120)
@@ -785,38 +785,36 @@ extract.alignment.region <- function(nt.start=NULL, nt.end=NULL, aa.start=NULL, 
 }
 
 plot.hydrophobic.patch <- function(patch.data, patch.start, patch.end, patch.consensus){
+  
+  y.max <- length(unique(patch.data$sequence)) + 2 # scale plot height to number of sequences
+  y.consensus.label <- y.max - 0.8 # the consensus logo should be at the top
+  
   ggplot()+
     geom_tile(data=patch.data,  aes(x = position_gapped, y = sequence, fill=hydrophobicity))+
-    scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = -1, limits = c(0, 1))+
+    scale_fill_paletteer_c("ggthemes::Classic Red-Black", direction = -1, limits = c(0, 1))+
     labs(fill="Hydrophobicity (per residue)")+
     geom_text(data = patch.data, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
-    
-    # # Overlay diversifying selection from MEME
-    # new_scale_fill()+
-    # labs(fill="Diversifying selection")+
-    # geom_tile(data = meme.cols, aes(x = site, y = 65, fill = `p-value`<0.1))+
-    
     scale_y_discrete(labels = gsub("_", " ", rev(combined.taxa.name.order)))+
-    coord_cartesian(xlim = c(patch.start,patch.end),  ylim = c(0, 65), clip = 'on')+
+    coord_cartesian(xlim = c(patch.start,patch.end),  ylim = c(0, y.max), clip = 'on')+
     annotate("text", label=s2c(patch.consensus), size=2, x=(patch.start):(patch.start+nchar(patch.consensus)-1), 
-             y=64.2, hjust=0.5, family="mono", fontface="bold")
+             y=y.consensus.label, hjust=0.5, family="mono", fontface="bold")
 }
 
 # TODO - coordinates are hard coded from the alignments. Will need updating if more
 # sequences are added
-exon2.patch <- extract.alignment.region(mouse.exons$start_aa[2]+95,
-                                        mouse.exons$start_aa[2]+118)
+exon2.patch <- extract.alignment.region(aa.start = mouse.exons$start_aa[2]+95,
+                                        aa.end   = mouse.exons$start_aa[2]+115)
 
-exon3.patch <- extract.alignment.region(mouse.exons$start_aa[3]+25,
-                                        mouse.exons$end_aa[3])
+exon3.patch <- extract.alignment.region(aa.start = mouse.exons$start_aa[3]+28,
+                                        aa.end   = mouse.exons$end_aa[3])
 
-exon5.patch <- extract.alignment.region(mouse.exons$start_aa[5]+28,
-                                        mouse.exons$end_aa[5]+1)
+exon5.patch <- extract.alignment.region(aa.start = mouse.exons$start_aa[5]+25,
+                                        aa.end   = mouse.exons$end_aa[5]+1)
 
 # Export to file
 merge(exon2.patch$aa.aln, exon3.patch$aa.aln, by=c("Sequence")) %>%
   merge(., exon5.patch$aa.aln, by=c("Sequence")) %>%
-  create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:4)
+  create.xlsx(., "figure/hydrophobic_patches.xlsx")
 
 
 exon2.hydro.plot <-plot.hydrophobic.patch(msa.aa.aln.hydrophobicity, exon2.patch$aa.start, exon2.patch$aa.end, exon2.patch$aa.consensus)
