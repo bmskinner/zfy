@@ -66,7 +66,7 @@ METADATA <- prepare.fas.files() # load FASTA files and write metadata table
 
 
 #### Run combined mammal/outgroup AA alignment ####
-
+cat("Creating mammal plus outgroup alignments\n")
 # Expect java on the PATH. Macse download from https://www.agap-ge2pop.org/macsee-pipelines/
 # Direct download link:
 # https://www.agap-ge2pop.org/wp-content/uploads/macse/releases/macse_v2.07.jar
@@ -74,7 +74,7 @@ METADATA <- prepare.fas.files() # load FASTA files and write metadata table
 run.macse(FILES$combined.nt.fas, "aln/combined/combined")
 
 #### Run mammal NT alignment guided by AA #####
-
+cat("Creating mammal alignments\n")
 # Run a codon aware alignment with MACSE
 run.macse(FILES$mammal.nt.fas, "aln/mammal/mammal")
 
@@ -115,7 +115,7 @@ alg2nex(FILES$combined.nt.aln, format = "fasta", interleaved = FALSE, gap = "-",
 
 
 #### Create combined mammal/outgroup AA tree ####
-
+cat("Creating trees\n")
 FILES$combined.aa.aln.treefile <- run.iqtree(FILES$combined.aa.aln)
 
 #### Create mammal CDS NT tree #####

@@ -789,10 +789,10 @@ plot.hydrophobic.patch <- function(patch.data, patch.start, patch.end, patch.con
     labs(fill="Hydrophobicity (per residue)")+
     geom_text(data = patch.data, aes(x = position_gapped, y = sequence, label=character), size=2, family="mono", col="white")+
     
-    # Overlay diversifying selection from MEME
-    new_scale_fill()+
-    labs(fill="Diversifying selection")+
-    geom_tile(data = meme.cols, aes(x = site, y = 65, fill = `p-value`<0.1))+
+    # # Overlay diversifying selection from MEME
+    # new_scale_fill()+
+    # labs(fill="Diversifying selection")+
+    # geom_tile(data = meme.cols, aes(x = site, y = 65, fill = `p-value`<0.1))+
     
     scale_y_discrete(labels = gsub("_", " ", rev(combined.taxa.name.order)))+
     coord_cartesian(xlim = c(patch.start,patch.end),  ylim = c(0, 65), clip = 'on')+
@@ -812,14 +812,14 @@ exon5.patch <- extract.alignment.region(mouse.exons$start_aa[5]+28,
                                         mouse.exons$end_aa[5]+1)
 
 # Export to file
-merge(exon2.patch$patch.table, exon3.patch$patch.table, by=c("Sequence")) %>%
-  merge(., exon5.patch$patch.table, by=c("Sequence")) %>%
+merge(exon2.patch$aa.aln, exon3.patch$aa.aln, by=c("Sequence")) %>%
+  merge(., exon5.patch$aa.aln, by=c("Sequence")) %>%
   create.xlsx(., "figure/hydrophobic_patches.xlsx", cols.to.fixed.size.font = 2:4)
 
 
-exon2.hydro.plot <-plot.hydrophobic.patch(exon2.patch$patch, exon2.patch$start, exon2.patch$end, exon2.patch$consensus)
-exon3.hydro.plot <-plot.hydrophobic.patch(exon3.patch$patch, exon3.patch$start, exon3.patch$end, exon3.patch$consensus)
-exon5.hydro.plot <-plot.hydrophobic.patch(exon5.patch$patch, exon5.patch$start, exon5.patch$end, exon5.patch$consensus)
+exon2.hydro.plot <-plot.hydrophobic.patch(msa.aa.aln.hydrophobicity, exon2.patch$aa.start, exon2.patch$aa.end, exon2.patch$aa.consensus)
+exon3.hydro.plot <-plot.hydrophobic.patch(msa.aa.aln.hydrophobicity, exon3.patch$aa.start, exon3.patch$aa.end, exon3.patch$aa.consensus)
+exon5.hydro.plot <-plot.hydrophobic.patch(msa.aa.aln.hydrophobicity, exon5.patch$aa.start, exon5.patch$aa.end, exon5.patch$aa.consensus)
 
 # Collect the plots
 
@@ -1045,11 +1045,11 @@ plot.individual.meme.sites <- function(meme.results, outgroup.type){
       add.track(ranges.9aaTAD.common, 2, 2.5, fill=TAD.COLOUR,  alpha = 0.9)+  #9
       add.track.labels(ranges.9aaTAD.common, 2, 2.5, col="white")+   # Label the 9aaTADs
       
-      annotate("rect", xmin = exon2.patch$start, xmax = exon2.patch$end, 
+      annotate("rect", xmin = exon2.patch$nt.start, xmax = exon2.patch$nt.end, 
                ymin = 2, ymax = 2.5, fill = "pink")+
-      annotate("rect", xmin = exon3.patch$start, xmax = exon3.patch$end, 
+      annotate("rect", xmin = exon3.patch$nt.start, xmax = exon3.patch$nt.end, 
                ymin = 2, ymax = 2.5, fill = "pink")+
-      annotate("rect", xmin = exon5.patch$start, xmax = exon5.patch$end, 
+      annotate("rect", xmin = exon5.patch$nt.start, xmax = exon5.patch$nt.end, 
                ymin = 2, ymax = 2.5, fill = "pink")+
       
       new_scale_fill()+
@@ -1121,22 +1121,6 @@ plot.individual.meme.sites <- function(meme.results, outgroup.type){
 
 plot.individual.meme.sites(mammal.meme.results, "mammal")
 plot.individual.meme.sites(combined.meme.results, "combined")
-
-plot.meme.sites <- function(plots.to.save){
-  meme.site.plots <- patchwork::wrap_plots( lapply(plots.to.save, \(x)x$plot), nrow = 1) + plot_layout(guides = "collect", axes = "collect") &
-    theme_bw()+
-    theme(legend.position = "none",
-          axis.text = element_text(size=6),
-          axis.title = element_blank(),
-          legend.text = element_text(size=6),
-          legend.title = element_text(size=8))
-  save.double.width(filename = paste("figure/meme.site.plots.combined.png"),
-                    meme.site.plots, height = 120)
-}
-
-plot.meme.sites(site.plots[1:4])
-plot.meme.sites(site.plots[5:8])
-plot.meme.sites(site.plots[9:11])
 
 #### codeml site models to check for site-specific and branch-site selection ####
 cat("Reading codeml results\n")
@@ -1288,7 +1272,24 @@ read.site.specific.codeml.output()
 # We want to calculate the number of substitutions per million years
 # Combine the branch lengths with the TimeTree dates
 cat("Comparing branch lengths with divergence times\n")
-pairwise.times <- read.time.tree.data()
+
+# Read the ML ZFX and ZFY trees 
+zfx.nt.aln.tree <- ape::read.tree("aln/zfx_only/zfx.aln.treefile")
+zfy.nt.aln.tree <- ape::read.tree("aln/zfy_only/zfy.aln.treefile")
+
+# Drop the second ZFYs in mouse and rat
+zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2") 
+zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "African_Grass_Rat_ZFY2-like_1") 
+
+# Root the trees on platypus
+zfx.nt.aln.tree <- phytools::reroot(zfx.nt.aln.tree, which(zfx.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+zfy.nt.aln.tree <- phytools::reroot(zfy.nt.aln.tree, which(zfy.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+
+# Remove gene names so tip labels are comparable
+zfx.nt.aln.tree$tip.label <- str_replace(zfx.nt.aln.tree$tip.label, "_Z[F|f][X|x].*", "")
+zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", "")
+
+# pairwise.times <- read.time.tree.data() # used manually to determine divergence times
 mammal.nt.tree.data <- tidytree::as_tibble(zfy.nt.aln.tree)
 
 # Manually match the divergence times from the TimeTree data
