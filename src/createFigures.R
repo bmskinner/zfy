@@ -1289,6 +1289,9 @@ zfy.nt.aln.tree <- phytools::reroot(zfy.nt.aln.tree, which(zfy.nt.aln.tree$tip.l
 zfx.nt.aln.tree$tip.label <- str_replace(zfx.nt.aln.tree$tip.label, "_Z[F|f][X|x].*", "")
 zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", "")
 
+# Replace underscores for tidy names
+zfy.nt.aln.tree$tip.label <- str_replace_all(zfy.nt.aln.tree$tip.label, "_", " ")
+
 # pairwise.times <- read.time.tree.data() # used manually to determine divergence times
 mammal.nt.tree.data <- tidytree::as_tibble(zfy.nt.aln.tree)
 
@@ -1326,22 +1329,27 @@ divergence.point.data <- c(
   "Mus-Arvicanthis" = 10.05224
 )
 
+# Create an zero vector for each tip (time for extant species is 0Mya)
 divergence.point.species <- rep(0, length(zfy.nt.aln.tree$tip.label))
 names(divergence.point.species) <- zfy.nt.aln.tree$tip.label
+# Combine edge lengths with tips for complete weighted edges
 divergence.point.data <- c(divergence.point.data, divergence.point.species)
 
-# TODO - Use these times to create weights for each edge - plot like the relax K trees
+# Use these times to create weights for each edge
 zfy.nt.aln.tree$node.label[1] <- "Mammalia" # replace default 'Root' label
-zfy.nt.aln.tree$tip.label <- str_replace_all(zfy.nt.aln.tree$tip.label, "_", " ")
 
+# Find the length of the edge from a node to its parent in Mya
 get.edge.time <- function(node, tree){
-  nodelabel <- treeio::nodelab(tree, node)
+  nodelabel <- treeio::nodelab(tree, node) # label of the node
   parentnode <- tree$edge[tree$edge[,2]==node,1] # parent of edge leading to node
   parentlabel <- treeio::nodelab(tree, parentnode) # label of the parent
   
+  # Find the divergence time of the node and it's parent
   v1 = max(divergence.point.data[parentlabel], divergence.point.data[nodelabel])
   v2 = min(divergence.point.data[parentlabel], divergence.point.data[nodelabel])
   time = v1 - v2
+  
+  # If no parent node was found, zero. Otherwise, the row index in the tree containing this edge
   edge.row <-  ifelse(length(parentnode)==0,0, which(tree$edge[,2]==node))
   
   edgelength <- ifelse(length(parentnode)==0,0, tree$edge.length[edge.row])
@@ -1360,8 +1368,10 @@ get.edge.time <- function(node, tree){
                     subsPerMyr = subsPerMyr))
 }
 
-time.vals <- do.call(rbind, lapply(1:59, get.edge.time, tree=zfy.nt.aln.tree))
+# Calculate the length of each branch in Myr
+time.vals <- do.call(rbind, lapply(zfy.nt.aln.tree$edge[,2], get.edge.time, tree=zfy.nt.aln.tree))
 
+# Plot the Zfy tree, with edge lengths replaced by Myr
 subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
   time.vals +
   aes(colour = log(subsPerMyr)) +
@@ -1377,16 +1387,16 @@ subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
   annotate("rect", xmin=0.02, ymin=7.8, xmax=0.04, ymax=9.2, fill="darkgreen", alpha=0.4)+
   annotate("text", x=0.02, y=8.6,label="ZF* to\nX/Y", size=2, hjust=0)+
   # Ssty box
-  annotate("rect", xmin=0.12, ymin=25.8, xmax=0.19, ymax=27.5, fill="darkgreen", alpha=0.4)+
-  annotate("text", x=0.13, y=27, label="Ssty appears", size=2, hjust=0)+
+  annotate("rect", xmin=0.12, ymin=26.8, xmax=0.19, ymax=28.5, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=0.13, y=28, label="Ssty appears", size=2, hjust=0)+
   # Zfy testis specific box
-  annotate("text", x=0.13, y=26.2, label="Zfy testis specific", size=2, hjust=0)+
-  annotate("rect", xmin=0.29, ymin=29.5, xmax=0.34, ymax=31, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=0.13, y=27.2, label="Zfy testis specific", size=2, hjust=0)+
+  annotate("rect", xmin=0.29, ymin=30.5, xmax=0.34, ymax=32, fill="darkgreen", alpha=0.4)+
   # Sly amplifies box
-  annotate("text", x=0.295, y=30.5, label="Sly amplifies", size=2, hjust=0)+
-  annotate("rect", xmin=0.24, ymin=27.4, xmax=0.27, ymax=29, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=0.295, y=31.5, label="Sly amplifies", size=2, hjust=0)+
+  annotate("rect", xmin=0.24, ymin=28.4, xmax=0.27, ymax=30, fill="darkgreen", alpha=0.4)+
   # Slxl1 acquired box
-  annotate("text", x=0.242, y=28, label="Slxl1\nacquired?", size=2, hjust=0)+
+  annotate("text", x=0.242, y=29, label="Slxl1\nacquired?", size=2, hjust=0)+
   theme_tree() +
   theme(legend.position = c(0.2, 0.8),
         legend.background = element_blank(),
@@ -1397,10 +1407,14 @@ save.double.width("figure/subs.per.site.per.Myr.png", subs.site.mya.plot)
 # Redraw the tree with branch lengths from the actual dates. Confirm it adds up
 # to about the same length per species.
 
-zfy.nt.aln.tree.time <- zfy.nt.aln.tree
+zfy.nt.aln.tree.time <- zfy.nt.aln.tree # copy the original tree
+
+# For a given child node, find the branch time to its parent
 get.time.for.node <- function(node) time.vals[time.vals$node==node,"time"]
+# Get the branch times from every child node in the tree to replace edge lengths
 zfy.nt.aln.tree.time$edge.length <- sapply(zfy.nt.aln.tree.time$edge[,2], get.time.for.node)
 
+# Make fully annotated time tree
 time.plot <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
   time.vals +
   aes(colour = log(subsPerMyr)) +
@@ -1410,7 +1424,7 @@ time.plot <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
   geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
   geom_tiplab(size=2, color = "black")+
   geom_treescale(fontsize =2, y = -1, width = 10) +
-  coord_cartesian(xlim = c(-5, 210))+
+  coord_cartesian(xlim = c(-5, 210))+ # Mya
   theme_tree() +
   theme(legend.position = c(0.2, 0.8),
         legend.background = element_blank(),
@@ -1418,7 +1432,7 @@ time.plot <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
         legend.title = element_text(size=6))
 save.double.width("figure/subs.per.site.time.png", time.plot)
 
-# Make figures for presentations
+# Make figures for presentations. These build up the tree and colors
 
 # Scaled timetree view, no colours
 time.plot.base <- ggtree(zfy.nt.aln.tree.time, size = 1, color="black") %<+%
