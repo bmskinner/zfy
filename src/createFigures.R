@@ -38,7 +38,7 @@ combined.outgroup.tree <- read.combined.outgroup.tree(FILES$combined.aa.aln.tree
 
 combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")+
   coord_cartesian(clip="off", xlim = c(0, 0.7), ylim= c(-2, length(combined.outgroup.tree$tip.label)))+
-  annotate("text", x = 0.32, y = 58.5, label = "Eumuroida", size=2)
+  annotate("text", x = 0.3, y = 60.5, label = "Eumuroida", size=2)
 
 save.double.width("figure/Figure_1_aa_tree.png", combined.aa.tree)
 
@@ -60,7 +60,8 @@ ape::write.tree(nt.aln.tree, file = paste0(FILES$combined.nt.aln, ".rooted.treef
 mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
 nt.aln.tree <- tidytree::groupOTU(nt.aln.tree, mammal.gene.groups, group_name = "group")
 
-plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off", xlim = c(0, 0.5))
+plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off", xlim = c(0, 0.6)) + 
+  annotate("text", x = 0.3, y = 60.5, label = "Eumuroida", size=2)
 
 # Emphasise the ZFX / ZFY splits more by rotating the Laurasiatheria node
 laurasiatheria.node <- ape::getMRCA(nt.aln.tree, c("Cat_ZFY", "Cat_ZFX"))
@@ -77,14 +78,14 @@ mammal.taxa.name.order <- get_taxa_name(plot.zfx.zfy)
 tree.zfx <- ape::drop.tip(nt.aln.tree, mammal.gene.groups$ZFY)
 tree.zfx <- groupOTU(tree.zfx, mammal.gene.groups, group_name = "group")
 ape::write.tree(tree.zfx, file = paste0(FILES$mammal.nt.aln, ".zfx.treefile"))
-plot.zfx <- plot.tree(tree.zfx)
+plot.zfx <- plot.tree(tree.zfx) + coord_cartesian(clip="off", xlim = c(0, 0.6))
 save.double.width("figure/mammal.zfx.tree.png", plot.zfx)
 
 # Keep Zfy and outgroups, drop other tips
 tree.zfy <- ape::keep.tip(nt.aln.tree, c(mammal.gene.groups$ZFY, mammal.gene.groups$Outgroup))
 tree.zfy <- groupOTU(tree.zfy, mammal.gene.groups, group_name = "group")
 ape::write.tree(tree.zfy, file = paste0(FILES$mammal.nt.aln, ".zfy.treefile"))
-plot.zfy <- plot.tree(tree.zfy)
+plot.zfy <- plot.tree(tree.zfy) + coord_cartesian(clip="off", xlim = c(0, 0.6))
 save.double.width("figure/mammal.zfy.tree.png", plot.zfy)
 
 #### Plot mammal exon NT trees ####
@@ -105,9 +106,6 @@ create.exon.plot <- function(name){
   
   plot.exon.tree <- plot.tree(exon.tree, tiplab.font.size = 1.5,  col="group")  + 
     coord_cartesian(clip="off", xlim = c(0.16, 0.83))
-  # exon.fig.file <- paste0("figure/exon_", mouse.exons$exon[i], ".zfx.zfy.tree.png")
-  # save.double.width(exon.fig.file, plot.exon.tree)
-  
   # Return for playing
   plot.exon.tree
 }
@@ -118,8 +116,8 @@ exon.plots <- lapply(c("exon_1-6.aln", "exon_2.aln",
                      create.exon.plot)
 
 # Create a joint figure of exons 1-6, exon 2, and exon 7
-exon.joint.tree <- exon.plots[[1]] + exon.plots[[2]] + exon.plots[[3]] + 
-  patchwork::plot_annotation(tag_levels = list(c("Exons 1-6", "Exon 2", "Exon 7"))) &
+exon.joint.tree <- exon.plots[[4]] + exon.plots[[2]] + exon.plots[[3]] + 
+  patchwork::plot_annotation(tag_levels = list(c("Exons 1,3-6", "Exon 2", "Exon 7"))) &
   theme(plot.tag = element_text(size = 6),
         plot.margin = margin(t=0, l=0, r=0, b=0))
 save.double.width("figure/Figure_Sxxxx_exons_tree.png", exon.joint.tree, height=120)
@@ -130,8 +128,6 @@ kaks.pairwise.plot <- plot.kaks(FILES$mammal.nt.aln,
                                 species.order = mammal.taxa.name.order,
                                 kaks.limits = c(0, 1.5))
 save.double.width("figure/dnds.png", kaks.pairwise.plot)
-
-
 
 # Strong purifying selection in all pairs, but weaker in rodents
 #### Test selection globally partition by partition in mammals ####
@@ -165,22 +161,23 @@ create.pairwise.kaks.data <- function(seqinr.aln){
                   row = factor(row, levels = mammal.taxa.name.order),
                   colnum = as.integer(col),
                   rownum = as.integer(row),
-                  value  = ifelse(value==1, NA, value)) %>%  # values of exactly 1 are from missing data)
-    dplyr::filter(rownum > colnum)
+                  kaks  = ifelse(value==1, NA, value)) %>%  # values of exactly 1 are from missing data)
+    dplyr::filter(rownum > colnum) %>%
+    dplyr::select(-value)
 }
 
 kaks.exon.1.3_6 <- create.pairwise.kaks.data(seqin.aln.exon.1.3_6)
 kaks.exon.2 <- create.pairwise.kaks.data(seqin.aln.exon.2)
 kaks.exon.7 <- create.pairwise.kaks.data(seqin.aln.exon.7)
 
-plot.kaks <- function(kaks.pairwise){
+plot.pairwise.kaks <- function(kaks.pairwise){
   ggplot(kaks.pairwise, aes(x = col, y = row))+
-    geom_tile(aes(fill=value))+
+    geom_tile(aes(fill=kaks))+
     scale_fill_viridis_c(limits = c(0, 1), direction = -1, na.value="white")+
     labs(fill="dNdS")+
     theme_bw()+
-    theme(axis.text.x = element_text(size = 4, angle = 90, vjust = 0.5, hjust=1),
-          axis.text.y = element_text(size = 4),
+    theme(axis.text.x = element_text(size = 3, angle = 90, vjust = 0.5, hjust=1),
+          axis.text.y = element_text(size = 3.5),
           axis.title = element_blank(),
           legend.position = c(0.8, 0.3),
           legend.background = element_blank(),
@@ -188,14 +185,19 @@ plot.kaks <- function(kaks.pairwise){
           legend.text = element_text(size = 5))
 }
 
-exon.1.3_6.kaks.pairwise.plot <- plot.kaks(kaks.exon.1.3_6)
-exon.2.kaks.pairwise.plot <- plot.kaks(kaks.exon.2)
-exon.7.kaks.pairwise.plot <- plot.kaks(kaks.exon.7)
+exon.1.3_6.kaks.pairwise.plot <- plot.pairwise.kaks(kaks.exon.1.3_6)
+exon.2.kaks.pairwise.plot <- plot.pairwise.kaks(kaks.exon.2)
+exon.7.kaks.pairwise.plot <- plot.pairwise.kaks(kaks.exon.7)
 
 exon.kaks.plot <- exon.1.3_6.kaks.pairwise.plot + exon.2.kaks.pairwise.plot + exon.7.kaks.pairwise.plot +
   patchwork::plot_annotation(tag_levels = c("A")) + plot_layout(axes="collect")
 
 save.double.width("figure/exon.1_3-6.2.7.dnds.png", exon.kaks.plot, height=110)
+
+# Create supplementary data tables with the pairwise values
+create.xlsx(kaks.exon.1.3_6, "figure/kaks.exon.1.3-6.xlsx")
+create.xlsx(kaks.exon.2, "figure/kaks.exon.2.xlsx")
+create.xlsx(kaks.exon.7, "figure/kaks.exon.7.xlsx")
 
 #### Identify the locations of the ZFs in the AA & NT MSAs ####
 
@@ -1473,13 +1475,13 @@ time.plot.annotated <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
   annotate("rect", xmin=30, ymin=7.8, xmax=60, ymax=9.5, fill="darkgreen", alpha=0.4)+
   annotate("text", x=40, y=9,label="ZF* to X/Y", size=2, hjust=0)+
   # Ssty box
-  annotate("rect", xmin=113, ymin=25.8, xmax=138, ymax=27.5, fill="darkgreen", alpha=0.4)+
-  annotate("text", x=115, y=27, label="Ssty appears", size=2, hjust=0)+
+  annotate("rect", xmin=113, ymin=26.8, xmax=138, ymax=28.5, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=115, y=28, label="Ssty appears", size=2, hjust=0)+
   # Zfy testis specific
-  annotate("text", x=115, y=26.2, label="Zfy testis specific", size=2, hjust=0)+
+  annotate("text", x=115, y=27.2, label="Zfy testis specific", size=2, hjust=0)+
   # Sly amplifies box
-  annotate("text", x=170, y=30.7, label="Sly\namplifies", size=2, hjust=0)+
-  annotate("rect", xmin=170, ymin=29.8, xmax=180, ymax=31.5, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=170, y=31.7, label="Sly\namplifies", size=2, hjust=0)+
+  annotate("rect", xmin=170, ymin=30.8, xmax=180, ymax=32.5, fill="darkgreen", alpha=0.4)+
   # Slxl1 acquired box
   # annotate("text", x=0.242, y=28, label="Slxl1\nacquired?", size=2, hjust=0)+
   aes(colour = log(subsPerMyr)) +

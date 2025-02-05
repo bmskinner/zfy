@@ -589,16 +589,7 @@ plot.kaks <- function(nt.aln.file, species.order, kaks.limits=c(0, 1)){
   y.limit = ifelse(is.infinite(max.y), 1, max.y)
   
   palette.choice <- scale_fill_viridis_c(limits = kaks.limits, direction = -1)
-  # # If there are values above 1, use a diverging palette. Otherwise, viridis
-  # if(y.limit>1){
-  #   palette.choice <- scale_fill_paletteer_c("ggthemes::Classic Red-Blue", 
-  #                                            direction = -1, 
-  #                                            limits = c(0, ceiling(y.limit)))
-  #   
-  # } else {
-  #   palette.choice <- scale_fill_viridis_c(limits = c(0, 1), direction = -1)
-  # }
-  
+
   ggplot(kaks.pairwise, aes(x = col, y = row))+
     geom_tile(aes(fill=value))+
     palette.choice+
