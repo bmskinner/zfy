@@ -92,7 +92,7 @@ FILES <- list(
 #### Invokations of external binaries #####
 
 # Run muscle on the given input FASTA and output to the given alignment file base name
-run.macse <- function(fa.file, aln.file){
+run.macse <- function(fa.file, aln.file, ...){
   if(!file.exists(MACSE.PATH)) stop("MACSE not present in bin directory")
   
   aa.out <- paste0(aln.file, ".aa.aln")
@@ -102,7 +102,8 @@ run.macse <- function(fa.file, aln.file){
                         " -prog alignSequences",
                         "-seq",    fa.file, # input
                         "-out_NT", nt.out,  # output nt alignment
-                        "-out_AA", aa.out), # output aa alignment
+                        "-out_AA", aa.out,  # output aa alignment
+                        ...), # any other options
           stdout = paste0(aln.file, ".macse.log"),  # logs
           stderr = paste0(aln.file, ".macse.log"))  # error logs
   
@@ -131,9 +132,6 @@ run.muscle <- function(fa.file, aln.file){
 # Run IQTREE on the given alignment file (should end .aln)
 run.iqtree <- function(aln.file, ...){
   system2("iqtree", paste("-s ", aln.file, 
-                          "-redo", # always overwrite existing files
-                          "-bb 1000", # number of bootstrap replicates
-                          "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
                           "-nt 6",  # number of threads
                           ...), # any other arguments to iqtree
           stdout = gsub(".aln$", ".iqtree.log", aln.file), 

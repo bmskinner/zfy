@@ -39,13 +39,16 @@ names(fa.read) <- common.names
 ape::write.FASTA(fa.read, file = FILES$cox1.nt.fas)
 
 # Use macse to align with mitochondrial code
-system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
-                      "-gc_def 2", # vertebrate mito code
-                      "-seq",    FILES$cox1.nt.fas, # input
-                      "-out_NT", FILES$cox1.nt.aln,  # output nt alignment
-                      "-out_AA", FILES$cox1.aa.aln), # output aa alignment
-        stdout = paste0(FILES$cox1.nt.aln, ".macse.log"),  # logs
-        stderr = paste0(FILES$cox1.nt.aln, ".macse.log"))  # error logs
+run.macse(FILES$cox1.nt.fas, "aln/cox1/cox1",
+          "-gc_def 2")  # vertebrate mito code
+
+# system2("java", paste("-jar bin/macse_v2.07.jar -prog alignSequences",
+#                       "-gc_def 2",
+#                       "-seq",    FILES$cox1.nt.fas, # input
+#                       "-out_NT", FILES$cox1.nt.aln,  # output nt alignment
+#                       "-out_AA", FILES$cox1.aa.aln), # output aa alignment
+#         stdout = paste0(FILES$cox1.nt.aln, ".macse.log"),  # logs
+#         stderr = paste0(FILES$cox1.nt.aln, ".macse.log"))  # error logs
 
 #### Make ML tree with distances #####
 
@@ -70,10 +73,11 @@ cox1.phylogeny <- paste0("(Platypus, (Opossum, ", # Outgroups
                             ")Simiiformes,",  # /Simiiformes
                             "(", # Rodentia
                               "(Gray_squirrel,(Arctic_ground_squirrel, Alpine_marmot)Xerinae)Sciuridae,", # Sciuridae 
-                              "(Beaver, (", # Muroidea
-                              "(North_American_deer_mouse, Desert_hamster)Cricetidae,", # Cricetidae 
-                              "(Mongolian_gerbil, (Rat, (Mouse, African_Grass_Rat)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-                              ")Eumuroida)Muroidea", # /Muroidea
+                             "(Damara_mole-rat,", 
+                                "(Beaver, (", # Muroidea
+                                "(North_American_deer_mouse, Desert_hamster)Cricetidae,", # Cricetidae 
+                                "(Mongolian_gerbil, (Rat, (Mouse, African_Grass_Rat)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
+                              ")Eumuroida)Muroidea)Muroidea-Fukomys", # /Muroidea
                             ")Rodentia", # /Rodentia
                             ")Euarchonoglires,", # /Euarchonoglires
                             "(", # Laurasiatheria
@@ -95,6 +99,7 @@ write_file(cox1.phylogeny, "aln/cox1/cox1.nt.species.nwk")
 system2("iqtree", paste("-s ", "aln/cox1/cox1.nt.aln", 
                         "-nt AUTO", # number of threads
                         "-te aln/cox1/cox1.nt.species.nwk", # user tree guide
+                        "-st CODON",
                         "-asr")) # ancestral sequence reconstruction
 
 #### Plot the tree ####
@@ -103,5 +108,8 @@ cox1.nt.aln.tree <- ape::read.tree("aln/cox1/cox1.nt.aln.treefile")
 # Root the trees on platypus
 cox1.nt.aln.tree <- phytools::reroot(cox1.nt.aln.tree, which(cox1.nt.aln.tree$tip.label=="Platypus"), position = 0.015)
 
-cox1.nt.aln.tree.plot <- plot.tree(cox1.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.01, nudge_y = 0.5, hjust=1,  node = "internal") + xlim(0, 1.5)+ labs(title = "COX1 (MT)")
+cox1.nt.aln.tree.plot <- plot.tree(cox1.nt.aln.tree) + 
+  geom_nodelab(size=2, nudge_x = -0.01, nudge_y = 0.5, hjust=1,  node = "internal") + 
+  xlim(0, 1.5) + 
+  labs(title = "COX1 (MT)")
 save.double.width("figure/cox1.tree.png", cox1.nt.aln.tree.plot)

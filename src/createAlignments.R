@@ -116,7 +116,9 @@ alg2nex(FILES$combined.nt.aln, format = "fasta", interleaved = FALSE, gap = "-",
 
 #### Create combined mammal/outgroup AA tree ####
 cat("Creating trees\n")
-FILES$combined.aa.aln.treefile <- run.iqtree(FILES$combined.aa.aln)
+FILES$combined.aa.aln.treefile <- run.iqtree(FILES$combined.aa.aln, 
+                                             "-bb 1000", # number of bootstrap replicates
+                                             "-alrt 1000") # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
 
 #### Create mammal CDS NT tree #####
 
@@ -125,8 +127,16 @@ FILES$combined.aa.aln.treefile <- run.iqtree(FILES$combined.aa.aln)
 # Note model testing is automatically performed in v1.5.4 onwards
 # Note: we can use a partition model if we specify exon coordinates
 # -st to use codon model rather than pure DNA model
-FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln, "-asr")
-FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln, "-asr")
+FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln, 
+                                             "-bb 1000", # number of bootstrap replicates
+                                             "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+                                             "-asr" # Ancestral sequence resconstruction
+                                             )
+FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln,
+                                           "-bb 1000", # number of bootstrap replicates
+                                           "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+                                           "-asr" # Ancestral sequence resconstruction
+)
 
 #### Make individual mammal exon NT trees ####
 
@@ -637,15 +647,26 @@ zfy.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
 write_file(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
 
 # Run the ancestral reconstructions
-system2("iqtree", paste("-s ", "aln/zfx_only/zfx.aln", 
-                        "-nt AUTO", # number of threads
-                        "-te aln/zfx_only/zfx.nt.species.nwk", # user tree guide
-                        "-asr")) # ancestral sequence reconstruction
+run.iqtree("aln/zfx_only/zfx.aln", 
+           "-nt AUTO", # number of threads
+           "-te aln/zfx_only/zfx.nt.species.nwk", # user tree guide
+           "-asr") # ancestral sequence reconstruction
 
-system2("iqtree", paste("-s ", "aln/zfy_only/zfy.aln", 
-                        "-nt AUTO", # number of threads
-                        "-te aln/zfy_only/zfy.nt.species.nwk", # user tree guide
-                        "-asr")) # ancestral sequence reconstruction
+run.iqtree("aln/zfy_only/zfy.aln", 
+           "-nt AUTO", # number of threads
+           "-te aln/zfy_only/zfy.nt.species.nwk", # user tree guide
+           "-asr") # ancestral sequence reconstruction
+
+
+# system2("iqtree", paste("-s ", "aln/zfx_only/zfx.aln", 
+#                         "-nt AUTO", # number of threads
+#                         "-te aln/zfx_only/zfx.nt.species.nwk", # user tree guide
+#                         "-asr")) # ancestral sequence reconstruction
+# 
+# system2("iqtree", paste("-s ", "aln/zfy_only/zfy.aln", 
+#                         "-nt AUTO", # number of threads
+#                         "-te aln/zfy_only/zfy.nt.species.nwk", # user tree guide
+#                         "-asr")) # ancestral sequence reconstruction
 
 #### Remove duplicate species nodes from the trees  ####
 
@@ -769,6 +790,8 @@ anc.gene.conv.control <- paste0("#GCONV_CONFIG\n",
 
 write_file(anc.gene.conv.control, "aln/anc.zfx.zfy.geneconv.cfg")
 
+# Invoke geneconv via:
+# geneconv aln/anc.zfx.zfy.geneconv.cfg aln/ancestral.zfx.zfy.nodes.fa
 
 
 #### Tar the outputs ####

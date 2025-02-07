@@ -48,19 +48,116 @@ run.muscle(FILES$final.intron.zfy.nt.fas, FILES$final.intron.zfy.nt.aln)
 run.muscle(FILES$final.intron.zfx.nt.fas, FILES$final.intron.zfx.nt.aln)
 run.muscle(FILES$final.intron.nt.fas,     FILES$final.intron.nt.aln)
 
+#### Make species phylogenies for Zfx and Zfy #####
+
+# We want to specify actual species tree for each of Zfx and Zfy
+# Note that not all species have intron info available - make a new species tree
+zfx.phylogeny <- paste0("", # Outgroups
+                        "(", # Eutheria
+                          "(Southern_two-toed_sloth_ZFX, African_bush_elephant_ZFX)Atlantogenata, ", # Atlantogenata  
+                          "(", # Boreoeutheria
+                            "(",  # Euarchonoglires
+                              "( ", # Simiiformes
+                              "Common_marmoset_ZFX,", # New world monkeys
+                                "(", # Catarrhini (Old world monkeys & apes)
+                                "(", #Cercopithecidae (Old world monkeys)
+                                  "Golden_snub-nosed_monkey_ZFX,",   #Colobinae
+                                  "(Olive_baboon_ZFX, Macaque_ZFX)Cercopithecinae", # Cercopithecinae
+                                ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
+                                "(", # Hominidae
+                                "Gorilla_ZFX, (Chimpanzee_ZFX, Human_ZFX)Hominini",
+                                ")Hominidae",  # /Hominidae
+                                ")Catarrhini", # /Catarrhini
+                              ")Simiiformes,",  # /Simiiformes
+                            "(", # Rodentia
+                             "(Gray_squirrel_Zfx,(Arctic_ground_squirrel_Zfx, Alpine_marmot_ZFX)Xerinae)Sciuridae,", # Sciuridae 
+                              "(Damara_mole-rat_Zfx,", # Muroidea-Fukomys
+                                "(Beaver_Zfx, (", # Muroidea
+                                "(North_American_deer_mouse_Zfx, Desert_hamster_Zfx)Cricetidae,", # Cricetidae 
+                                "(Mongolian_gerbil_Zfx, (Rat_Zfx, (Mouse_Zfx, African_Grass_Rat_Zfx)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
+                                ")Eumuroida)Muroidea",  # /Muroidea
+                              ")Muroidea-Fukomys", # /Muroidea-Fukomys
+                            ")Rodentia", # /Rodentia
+                            ")Euarchonoglires,", # /Euarchonoglires
+                            "(", # Laurasiatheria
+                              "(",  # Carnivora
+                                "Cat_ZFX, (Dog_ZFX, (Stoat_ZFX, Polar_bear_ZFX)Arctoidea)Caniformia",
+                              ")Carnivora,",  # /Carnivora
+                              "(",  # Euungulata 
+                                "Horse_ZFX, (Pig_ZFX, (White_tailed_deer_ZFX, (Cattle_ZFX, Goat_ZFX)Bovidae)Pecora)Artiodactyla",
+                              ")Euungulata", # /Euungulata 
+                            ")Laurasiatheria", # /Laurasiatheria
+                          ")Boreoeutheria", # /Boreoeutheria
+                        ")Eutheria;" # /Eutheria
+                        ) # /Outgroups
+
+write_file(zfx.phylogeny, "aln/final.intron.zfx/zfx.nt.species.nwk")
+
+zfy.phylogeny <- paste0("", # Outgroups
+                        "(", # Eutheria
+                        "(Southern_two-toed_sloth_ZFY, African_bush_elephant_ZFY)Atlantogenata, ", # Afrotheria & Xenarthra
+                        "(", # Boreoeutheria
+                        "(",  # Euarchonoglires
+                        "( ", # Simiiformes
+                        "Common_marmoset_ZFY,", # New world monkeys
+                        "(", # Catarrhini (Old world monkeys & apes)
+                        "(", #Cercopithecidae (Old world monkeys)
+                        "Golden_snub-nosed_monkey_ZFY,",   #Colobinae
+                        "(Olive_baboon_ZFY, Macaque_ZFY)Cercopithecinae", # Cercopithecinae
+                        ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
+                        "(", # Hominidae
+                        "Gorilla_ZFY, (Chimpanzee_ZFY, Human_ZFY)Hominini",
+                        ")Hominidae",  # /Hominidae
+                        ")Catarrhini", # /Catarrhini
+                        ")Simiiformes,",  # /Simiiformes
+                        "(", # Rodentia
+                        "(Gray_squirrel_Zfy,(Arctic_ground_squirrel_Zfx-like_putative-Zfy, Alpine_marmot_ZFY)Xerinae)Sciuridae,", # Sciuridae 
+                        "(Damara_mole-rat_Zfy,", 
+                        "(Beaver_Zfx-like_putative-Zfy, (", # Muroidea
+                        "(North_American_deer_mouse_Zfx-like_putative-Zfy, Desert_hamster_Zfx-like_putative-Zfy)Cricetidae,", # Cricetidae 
+                        "(Mongolian_gerbil_Zfx-like_putative-Zfy, (Rat_Zfy2, ((Mouse_Zfy1, Mouse_Zfy2), (African_Grass_Rat_ZFY2-like_1, African_Grass_Rat_ZFY2-like_2))Mus-Arvicanthis)Murinae)Muridae", # Muridae 
+                        ")Eumuroida)Muroidea)Muroidea-Fukomys", # /Muroidea
+                        ")Rodentia", # /Rodentia
+                        ")Euarchonoglires,", # /Euarchonoglires
+                          "(", # Laurasiatheria
+                            "(",  # Carnivora
+                              "Dog_ZFY, (Stoat_ZFY, Polar_bear_ZFY)Arctoidea",
+                            ")Carnivora,",  # /Carnivora
+                          "(",  # Euungulata 
+                          "Horse_ZFY, (Pig_ZFY, (White_tailed_deer_ZFY, (Cattle_ZFY, Goat_ZFY)Bovidae)Pecora)Artiodactyla",
+                          ")Euungulata", # /Euungulata 
+                          ")Laurasiatheria", # /Laurasiatheria
+                        ")Boreoeutheria", # /Boreoeutheria
+                        ")Eutheria;" # /Eutheria
+                        ) # /Outgroups
+
+write_file(zfy.phylogeny, "aln/final.intron.zfy/zfy.nt.species.nwk")
+
 #### Make ML tree with distances #####
 
 # -alninfo: print information about the number of informative sites
 # -lmap 2000: use 2000 quartets for likelihood mapping. How treelike is the data?
-final.intron.zfy.nt.aln.tree <- run.iqtree(FILES$final.intron.zfy.nt.aln, "-alninfo -lmap 2000") %>%
+# Make the tree using the species phylogeny
+final.intron.zfy.nt.aln.tree <- run.iqtree(FILES$final.intron.zfy.nt.aln, 
+                        "-nt AUTO", # number of threads
+                        "-keep-ident",
+                        "-te aln/final.intron.zfy/zfy.nt.species.nwk" # user tree guide
+                        ) %>%
         ape::read.tree(.) %>%
         reroot.tree(., c("African_bush_elephant_ZFY"), position = 0.015)
 
-final.intron.zfx.nt.aln.tree <- run.iqtree(FILES$final.intron.zfx.nt.aln, "-alninfo -lmap 2000") %>%
+final.intron.zfx.nt.aln.tree <- system2("iqtree", paste("-s ", FILES$final.intron.zfx.nt.aln, 
+                                                       "-nt AUTO", # number of threads
+                                                       "-keep-ident",
+                                                       "-te aln/final.intron.zfx/zfx.nt.species.nwk" # user tree guide
+                                                       )) %>%
         ape::read.tree(.) %>%
         reroot.tree(.,"African_bush_elephant_ZFX", position = 0.015)
 
-final.intron.nt.aln.tree <- run.iqtree(FILES$final.intron.nt.aln, "-alninfo -lmap 2000") %>%
+# Make a combined tree with no species tree specified
+final.intron.nt.aln.tree <- run.iqtree(FILES$final.intron.nt.aln, 
+                                       "-nt AUTO",
+                                       "-alninfo -lmap 2000") %>%
         ape::read.tree(.) %>%
         reroot.tree(., "African_bush_elephant_ZFX", position = 0.015)
 
@@ -75,11 +172,3 @@ final.intron.nt.aln.tree.plot <- plot.tree(final.intron.nt.aln.tree)  + xlim(0, 
 save.double.width("figure/final.intron.combined.tree.png", final.intron.nt.aln.tree.plot)
 
 #### Plot unrooted fan trees ####
-
-ggtree(final.intron.zfy.nt.aln.tree, layout="equal_angle")  +
-  geom_tiplab(size=2)+
-  geom_treescale(fontsize =2, width = 0.05) 
-
-ggtree(final.intron.zfx.nt.aln.tree, layout="equal_angle")  +
-  geom_tiplab(size=2)+
-  geom_treescale(fontsize =2, width = 0.05) 
