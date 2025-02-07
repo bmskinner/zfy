@@ -794,6 +794,26 @@ write_file(anc.gene.conv.control, "aln/anc.zfx.zfy.geneconv.cfg")
 # geneconv aln/anc.zfx.zfy.geneconv.cfg aln/ancestral.zfx.zfy.nodes.fa
 
 
+#### Find structural features ####
+
+# Read the combined tree and find the taxa order
+combined.outgroup.tree <- read.combined.outgroup.tree(FILES$combined.aa.aln.treefile)
+combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")
+combined.taxa.name.order <- ggtree::get_taxa_name(combined.aa.tree) 
+
+# Find and export ZFs
+locations.zf <- locate.zfs.in.alignment(combined.taxa.name.order)
+readr::write_tsv(locations.zf, "aln/locations.zf.tsv")
+
+# Find and export 9aaTADS
+locations.9aaTAD <- locate.9aaTADs.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
+readr::write_tsv(locations.9aaTAD, "aln/locations.9aaTAD.tsv")
+
+# Find and export NLS
+locations.NLS <- locate.NLS.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
+readr::write_tsv(locations.NLS, "aln/locations.NLS.tsv")
+
+
 #### Tar the outputs ####
 system2("tar", "czf aln.tar.gz aln")
 cat("Done!\n")

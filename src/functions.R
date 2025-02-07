@@ -573,13 +573,8 @@ calc.kaks <- function(nt.aln.file){
 # species.order - a vector with the plotting order for species in the file
 plot.kaks <- function(nt.aln.file, species.order, kaks.limits=c(0, 1)){
   
-  seqin.aln <- seqinr::read.alignment(nt.aln.file, format = "fasta")
-  kaks.data <- seqinr::kaks(seqin.aln)
-  
-  kaks.ratio <- kaks.data$ka / kaks.data$ks
-  
   # Convert to long format and remove pairwise diagonal
-  kaks.pairwise <- metagMisc::dist2list(kaks.ratio, tri = F)
+  kaks.pairwise <- calc.kaks(nt.aln.file)
   
   # Ensure spaces are converted to underscores in the species names
   # species.order <- gsub(" ", "_", species.order)
@@ -771,6 +766,21 @@ locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
                                           NA))
 }
 
+# Read the given treefile for mammals and outgroup species
+read.combined.outgroup.tree <- function(file){
+  combined.outgroup.tree <- ape::read.tree(paste0(file))
+  
+  rooted.file <- gsub("treefile", "rooted.treefile", file)
+  
+  # Root the tree in the edge between Xenopus nodes and chicken
+  xenopus.node <- ape::getMRCA(combined.outgroup.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
+  combined.outgroup.tree <- phytools::reroot(combined.outgroup.tree, xenopus.node, position = 0.1)
+  ape::write.tree(combined.outgroup.tree, file = rooted.file)
+  
+  mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
+  combined.outgroup.tree <- groupOTU(combined.outgroup.tree, mammal.gene.groups, group_name = "group")
+  combined.outgroup.tree
+}
 
 #### Other functions #####
 

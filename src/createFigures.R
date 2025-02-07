@@ -19,20 +19,6 @@ ALIGNMENTS <- read.alignments()
 mouse.exons <- find.exons()
 
 #### Plot combined mammal/outgroup AA tree ####
-read.combined.outgroup.tree <- function(file){
-  combined.outgroup.tree <- ape::read.tree(paste0(file))
-  
-  rooted.file <- gsub("treefile", "rooted.treefile", file)
-  
-  # Root the tree in the edge between Xenopus nodes and chicken
-  xenopus.node <- ape::getMRCA(combined.outgroup.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
-  combined.outgroup.tree <- phytools::reroot(combined.outgroup.tree, xenopus.node, position = 0.1)
-  ape::write.tree(combined.outgroup.tree, file = rooted.file)
-  
-  mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
-  combined.outgroup.tree <- groupOTU(combined.outgroup.tree, mammal.gene.groups, group_name = "group")
-  combined.outgroup.tree
-}
 
 combined.outgroup.tree <- read.combined.outgroup.tree(FILES$combined.aa.aln.treefile)
 
@@ -201,7 +187,8 @@ create.xlsx(kaks.exon.7, "figure/kaks.exon.7.xlsx")
 
 #### Identify the locations of the ZFs in the AA & NT MSAs ####
 
-locations.zf <- locate.zfs.in.alignment(combined.taxa.name.order)
+# locations.zf <- locate.zfs.in.alignment(combined.taxa.name.order)
+locations.zf <- readr::read_tsv("aln/locations.zf.tsv")
 
 write_tsv(locations.zf %>% 
             dplyr::select(sequence, aa_motif, start_ungapped, end_ungapped, 
@@ -219,7 +206,8 @@ locations.zf %<>%
 
 #### Identify the locations of the 9aaTADs in the AA & NT MSAs ####
 
-locations.9aaTAD <- locate.9aaTADs.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
+# locations.9aaTAD <- locate.9aaTADs.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
+locations.9aaTAD <- readr::read_tsv("aln/locations.9aaTAD.tsv")
 
 write_tsv(locations.9aaTAD %>% 
             dplyr::select(sequence, aa_motif, rc_score, start_ungapped, end_ungapped, 
@@ -246,7 +234,8 @@ locations.9aaTAD %<>%
 
 #### Identify the locations of the NLS in the AA & NT MSAs ####
 
-locations.NLS <- locate.NLS.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
+# locations.NLS <- locate.NLS.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
+locations.NLS <- readr::read_tsv("aln/locations.NLS.tsv")
 
 # Export the locations of the NLS
 write_tsv(locations.NLS %>% 
