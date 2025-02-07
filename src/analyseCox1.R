@@ -113,3 +113,15 @@ cox1.nt.aln.tree.plot <- plot.tree(cox1.nt.aln.tree) +
   xlim(0, 1.5) + 
   labs(title = "COX1 (MT)")
 save.double.width("figure/cox1.tree.png", cox1.nt.aln.tree.plot)
+
+
+#### Test selection on COX1 ####
+
+cox1.taxa.name.order <- get_taxa_name(cox1.nt.aln.tree.plot) 
+
+cox1.kaks.plot <- plot.kaks(FILES$cox1.nt.aln, 
+          species.order = cox1.taxa.name.order,
+          kaks.limits = c(0, 1.5))
+
+
+save.double.width("figure/cox1.dnds.png", cox1.kaks.plot)

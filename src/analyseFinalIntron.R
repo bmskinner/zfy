@@ -146,11 +146,11 @@ final.intron.zfy.nt.aln.tree <- run.iqtree(FILES$final.intron.zfy.nt.aln,
         ape::read.tree(.) %>%
         reroot.tree(., c("African_bush_elephant_ZFY"), position = 0.015)
 
-final.intron.zfx.nt.aln.tree <- system2("iqtree", paste("-s ", FILES$final.intron.zfx.nt.aln, 
-                                                       "-nt AUTO", # number of threads
-                                                       "-keep-ident",
-                                                       "-te aln/final.intron.zfx/zfx.nt.species.nwk" # user tree guide
-                                                       )) %>%
+final.intron.zfx.nt.aln.tree <- run.iqtree(FILES$final.intron.zfx.nt.aln, 
+                                           "-nt AUTO", # number of threads
+                                           "-keep-ident",
+                                           "-te aln/final.intron.zfx/zfx.nt.species.nwk" # user tree guide
+) %>%
         ape::read.tree(.) %>%
         reroot.tree(.,"African_bush_elephant_ZFX", position = 0.015)
 
@@ -164,11 +164,15 @@ final.intron.nt.aln.tree <- run.iqtree(FILES$final.intron.nt.aln,
 #### Plot the trees ####
 
 final.intron.zfy.nt.aln.tree.plot <- plot.tree(final.intron.zfy.nt.aln.tree)  + xlim(0, 2) + labs(title = "ZFY")
-
 final.intron.zfx.nt.aln.tree.plot <- plot.tree(final.intron.zfx.nt.aln.tree) + xlim(0, 2)+ labs(title = "ZFX")
 save.double.width("figure/final.intron.tree.png", final.intron.zfx.nt.aln.tree.plot/final.intron.zfy.nt.aln.tree.plot)
 
-final.intron.nt.aln.tree.plot <- plot.tree(final.intron.nt.aln.tree)  + xlim(0, 3) + labs(title = "Combined")
-save.double.width("figure/final.intron.combined.tree.png", final.intron.nt.aln.tree.plot)
+# final.intron.nt.aln.tree.plot <- plot.tree(final.intron.nt.aln.tree)  + xlim(0, 3) + labs(title = "Combined")
+# save.double.width("figure/final.intron.combined.tree.png", final.intron.nt.aln.tree.plot)
 
 #### Plot unrooted fan trees ####
+
+
+
+#### End ####
+cat("Done!")

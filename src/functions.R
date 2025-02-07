@@ -557,6 +557,17 @@ annotate.structure.plot <- function(plot, n.taxa){
     patchwork::plot_layout(widths = c(0.1, 0.9))
 }
 
+# Given an alignment, calculate KaKs and return in tidy format
+calc.kaks <- function(nt.aln.file){
+  seqin.aln <- seqinr::read.alignment(nt.aln.file, format = "fasta")
+  kaks.data <- seqinr::kaks(seqin.aln)
+  
+  kaks.ratio <- kaks.data$ka / kaks.data$ks
+  
+  # Convert to long format and remove pairwise diagonal
+  metagMisc::dist2list(kaks.ratio, tri = F)
+}
+
 # Given an alignment and order of species, calculate KaKs and make a pairwise plot
 # nt.aln.file - the nucleotide alignment
 # species.order - a vector with the plotting order for species in the file
