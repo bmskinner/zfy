@@ -144,12 +144,12 @@ create.pairwise.kaks.data <- function(seqinr.aln){
   kaks.pairwise <- metagMisc::dist2list(kaks.ratio, tri = F) %>%
     dplyr::mutate(col = str_replace_all(col, "_", " "),
                   row = str_replace_all(row, "_", " "),
-                  col = factor(col, levels = mammal.taxa.name.order),
-                  row = factor(row, levels = mammal.taxa.name.order),
+                  col = factor(col, levels = combined.taxa.name.order[1:62],),
+                  row = factor(row, levels = combined.taxa.name.order[1:62],),
                   colnum = as.integer(col),
                   rownum = as.integer(row),
                   kaks  = ifelse(value==1, NA, value)) %>%  # values of exactly 1 are from missing data)
-    dplyr::filter(rownum > colnum) %>%
+    dplyr::filter(rownum < colnum) %>%
     dplyr::select(-value)
 }
 
@@ -162,11 +162,12 @@ plot.pairwise.kaks <- function(kaks.pairwise){
     geom_tile(aes(fill=kaks))+
     scale_fill_viridis_c(limits = c(0, 1), direction = -1, na.value="white")+
     labs(fill="dNdS")+
+    scale_x_discrete(limits=rev)+
     theme_bw()+
     theme(axis.text.x = element_text(size = 3, angle = 90, vjust = 0.5, hjust=1),
           axis.text.y = element_text(size = 3.5),
           axis.title = element_blank(),
-          legend.position = c(0.8, 0.3),
+          legend.position = c(0.8, 0.7),
           legend.background = element_blank(),
           legend.title = element_text(size = 5),
           legend.text = element_text(size = 5))
@@ -714,7 +715,7 @@ save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 1
 #### Combine all structure plots ####
 cat("Plotting combined hydrophobicity and charge\n")
 # To test spacing and balance
-structure.plot <- (hydrophobicity.plot) / (charge.plot) + plot_layout(ncol = 1)
+structure.plot <- (charge.plot / hydrophobicity.plot)+ plot_layout(ncol = 1)
 save.double.width("figure/Figure_xxxx_combined_structure.plot.png", structure.plot, height = 230)
 
 
