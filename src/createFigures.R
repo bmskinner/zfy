@@ -111,7 +111,8 @@ save.double.width("figure/Figure_Sxxxx_exons_tree.png", exon.joint.tree, height=
 #### Test selection globally in mammals ####
 
 kaks.pairwise.plot <- plot.kaks(FILES$mammal.nt.aln, 
-                                species.order = mammal.taxa.name.order,
+                                #species.order = mammal.taxa.name.order,
+                                species.order = combined.taxa.name.order[1:62], # use the aa tree order so ZFX and ZFY are grouped
                                 kaks.limits = c(0, 1.5))
 save.double.width("figure/dnds.png", kaks.pairwise.plot)
 
@@ -719,8 +720,9 @@ save.double.width("figure/Figure_xxxx_combined_structure.plot.png", structure.pl
 
 #### What are the hydrophobic patches in exons 2, 3 and 5 that are not 9aaTADs? ####
 cat("Identifying hydrophobic patches\n")
+
 # Extract all nt and aa sequences from the MSA for the given region, and calculate the
-# consensus sequence
+# consensus sequence. Ranges are inclusive.
 extract.alignment.region <- function(nt.start=NULL, nt.end=NULL, aa.start=NULL, aa.end=NULL){
   
   if(is.null(nt.start) & is.null(nt.end)){
@@ -735,12 +737,14 @@ extract.alignment.region <- function(nt.start=NULL, nt.end=NULL, aa.start=NULL, 
   
   nt.aln <- as.data.frame(as.matrix(ALIGNMENTS$nt.combined.biostrings)[,nt.start:nt.end]) %>%
     dplyr::mutate(Sequence = rownames(.),
+                  Sequence = str_replace_all(Sequence, "_", " "), # remove underscores for pretty printing
                   Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
     dplyr::arrange(as.integer(Sequence)) %>%
     dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+nt.start-1) )
   
   aa.aln <- as.data.frame(as.matrix(ALIGNMENTS$aa.combined.biostrings)[,aa.start:aa.end]) %>%
     dplyr::mutate(Sequence = rownames(.),
+                  Sequence = str_replace_all(Sequence, "_", " "), # remove underscores for pretty printing
                   Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
     dplyr::arrange(as.integer(Sequence)) %>%
     dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+aa.start-1) )
@@ -856,7 +860,7 @@ create.relax.k.tree <- function(json.file){
   cat(json.file, "K=", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2), 
       "p=", round(hyphy.data$`test results`$`p-value`, digits = 2), "\n")
   
-  p <- ggtree(hyphy.input.tree, size=1.5) + 
+  p <- ggtree(hyphy.input.tree, size=1.2) + 
     geom_tiplab(size=2)
   p <- p %<+% k.vals + aes(colour=adj.k) + 
     scale_color_paletteer_c("ggthemes::Classic Red-Blue",
@@ -896,9 +900,135 @@ if(file.exists("aln/hyphy/combined.rodentia.relax.json")){
 #### Plot HyPhy MEME test for directional selection ####
 
 cat("Plotting MEME result\n")
+
+# Read the json file of meme results for a given node
+# Filter to those of interest at p<0.05
+# outgroup.type: combined or mammal
+read.meme.results <- function(node.name="rodentia", outgroup.type="combined"){
+  
+  json.file <- paste0("aln/hyphy/", outgroup.type, ".", node.name, ".meme.json")
+  meme.data <- jsonlite::read_json(json.file)
+  
+  # Read a given partition
+  read.partition <- function(partition){
+    
+    # Extract the values for the given partition
+    meme.cols <- as_tibble(do.call(rbind, meme.data$MLE$content[[as.name(partition)]])) %>% 
+      unnest_longer(everything())
+
+    # Extract the sites covered by the partition
+    meme.cols$site <- unlist(meme.data$`data partitions`[[as.name(partition)]]$coverage)
+    meme.cols$partition <- partition
+    
+    # Extract column names
+    colnames(meme.cols) <- c(unlist(lapply(meme.data$MLE$headers, \(i) i[[1]])), "site", "partition")
+    meme.cols
+  }
+  
+  # Read all partitions and combine
+  meme.data <-  do.call(rbind, lapply(0:2, read.partition))
+  
+  meme.data$node <- node.name
+  meme.data$outgroup.type <- outgroup.type
+  
+  # Plot the MEME results - window around each site
+  meme.sites <- meme.data %>%
+    dplyr::filter(`p-value`<0.01) %>%
+    dplyr::mutate(start = site-1,
+                  end = site+1)
+  
+  list(meme.data = meme.data,
+       meme.sites = meme.sites)
+}
+
+
+combined.meme.results <- lapply(node.names, read.meme.results)
+
+mammal.meme.results <- lapply(node.names, read.meme.results, outgroup.type="mammal")
+
+# Summarise the MEME results to give an overview of the significant sites at each test branch
+calculate.meme.overview.data <- function(meme.results){
+  # Find the unique set of sites in the meme data
+  do.call(rbind, lapply(meme.results, \(x) x$meme.data)) %>%
+    tidyr::pivot_wider(id_cols = c(site, partition), names_from = node, values_from = `p-value`) %>%
+    dplyr::filter(if_any(.cols= rodentia:murinae, ~.<0.01)) # filter to sites significant in any node
+  
+}
+
+# Plot MEME overview data
+create.meme.overview.plot <- function(meme.overview, outgroup.type){
+  
+  p.value.threshold <- 0.01
+  
+  # Annotate MEME sites over the exons
+  meme.location.plot <- ggplot()+
+    # Draw the structures
+    add.track(ranges.NLS.common,    1.95, 2.55, fill=NLS.COLOUR, alpha = 1)+ # +8.5
+    add.track(ranges.ZF.common,     2, 2.5, fill=ZF.COLOUR)+ # 9 - 11
+    add.track.labels(ranges.ZF.common, 2, 2.5, col="white", label_col = "motif_number")+   # Label the ZFs
+    add.track(ranges.9aaTAD.common, 2, 2.5, fill=TAD.COLOUR,  alpha = 0.9)+  #9
+    add.track.labels(ranges.9aaTAD.common, 2, 2.5, col="white")+   # Label the 9aaTADs
+    
+    annotate("rect", xmin = exon2.patch$aa.start, xmax = exon2.patch$aa.end, 
+             ymin = 2, ymax = 2.5, fill = "pink", alpha=0.5)+
+    annotate("rect", xmin = exon3.patch$aa.start, xmax = exon3.patch$aa.end, 
+             ymin = 2, ymax = 2.5, fill = "pink", alpha=0.5)+
+    annotate("rect", xmin = exon5.patch$aa.start, xmax = exon5.patch$aa.end, 
+             ymin = 2, ymax = 2.5, fill = "pink", alpha=0.5)+
+    
+    new_scale_fill()+
+    scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
+    scale_pattern_color_manual(values=c("white", "white"))+
+    
+    scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
+    guides(fill = "none", pattern="none")+
+    add.exon.track(y.start = 2.6, y.end = 3, col="black")+
+    add.exon.labels(y.start = 2.6, y.end = 3)+
+    
+    # Show which test clades the sites show up in
+    geom_point(data = meme.overview, aes(x=site, y = 3.1, alpha = rodentia<p.value.threshold), col="black",size = 0.2)+
+    geom_point(data = meme.overview, aes(x=site, y = 3.2, alpha = eumuroida<p.value.threshold), col="black",size = 0.2)+
+    geom_point(data = meme.overview, aes(x=site, y = 3.3, alpha = muridae<p.value.threshold), col="black",size = 0.2)+
+    geom_point(data = meme.overview, aes(x=site, y = 3.4, alpha = murinae<p.value.threshold), col="black", size = 0.2)+
+    scale_alpha_manual(values=c(0, 1))+
+    
+    geom_tile(data = meme.overview, aes(x=site, y = 2.5, height = 1, width=1), fill = "brown")+
+    annotate("text", x= 750, y=3.1, label = "rodentia", hjust=0, size = 2)+
+    annotate("text", x= 750, y=3.2, label = "eumuroida", hjust=0, size = 2)+
+    annotate("text", x= 750, y=3.3, label = "muridae", hjust=0, size = 2)+
+    annotate("text", x= 750, y=3.4, label = "murinae", hjust=0, size = 2)+
+    
+    
+    scale_x_continuous(breaks = seq(0, 885, 50), expand = c(0, 0.05))+
+    coord_cartesian(xlim = c(0, 885))+
+    theme_bw()+
+    theme(axis.text.y = element_blank(),
+          axis.title = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.text.x = element_text(size=6),
+          legend.position = "none",
+          legend.title = element_text(size = 6, vjust = 0.85),
+          legend.text = element_text(size = 6),
+          legend.key.height = unit(3, "mm"),
+          legend.spacing.y = unit(2, "mm"),
+          legend.box.spacing = unit(2, "mm"),
+          panel.border = element_blank(),
+          axis.line.x.bottom = element_line(),
+          panel.grid = element_blank())
+  
+  save.double.width(filename = paste0("figure/meme.",outgroup.type,".site.locations.png"), meme.location.plot, height = 45)
+}
+
+mammal.meme.overview <- calculate.meme.overview.data(mammal.meme.results)
+create.meme.overview.plot(mammal.meme.overview,"mammal")
+
+combined.meme.overview <- calculate.meme.overview.data(combined.meme.results)
+create.meme.overview.plot(combined.meme.overview,"combined")
+
 # Given an alignment region produced by `extract.alignment.region`, plot it
 plot.alignment.region <- function(region.data, meme.overview){
   
+  # Convert aa site to nt
   meme.overview$site.nt <- meme.overview$site*3-1
   
   tidy.region.nt.data <- region.data$nt.aln %>%
@@ -954,7 +1084,7 @@ plot.alignment.region <- function(region.data, meme.overview){
     geom_tile(data = tidy.region.aa.data, aes(x = Site, y = 64.5, width=3, height=2, fill = isSignificant))+
     scale_fill_manual(values = c(`TRUE`="lightblue", `FALSE`="grey"))+
     guides(fill = FALSE)+
-
+    
     scale_x_continuous(breaks = seq(region.data$nt.start, region.data$nt.end, 3))+
     coord_cartesian(xlim = c(region.data$nt.start,region.data$nt.end),  ylim = c(0, 66), clip = 'on')+
     # NT consensus
@@ -973,123 +1103,8 @@ plot.alignment.region <- function(region.data, meme.overview){
 }
 
 
-# Read the json file of meme results for a given node
-# Filter to those of interest at p<0.05
-# outgroup.type: combined or mammal
-read.meme.results <- function(node.name="rodentia", outgroup.type="combined"){
-  
-  json.file <- paste0("aln/hyphy/", outgroup.type, ".", node.name, ".meme.json")
-  meme.data <- jsonlite::read_json(json.file)
-  
-  # Read a given partition
-  read.partition <- function(partition){
-    
-    # Extract the values for the given partition
-    meme.cols <- as_tibble(do.call(rbind, meme.data$MLE$content[[as.name(partition)]])) %>% 
-      unnest_longer(everything())
-
-    # Extract the sites covered by the partition
-    meme.cols$site <- unlist(meme.data$`data partitions`[[as.name(partition)]]$coverage)
-    meme.cols$partition <- partition
-    
-    # Extract column names
-    colnames(meme.cols) <- c(unlist(lapply(meme.data$MLE$headers, \(i) i[[1]])), "site", "partition")
-    meme.cols
-  }
-  
-  # Read all partitions and combine
-  meme.data <-  do.call(rbind, lapply(0:2, read.partition))
-  
-  meme.data$node <- node.name
-  meme.data$outgroup.type <- outgroup.type
-  
-  # Plot the MEME results - window around each site
-  meme.sites <- meme.data %>%
-    dplyr::filter(`p-value`<0.01) %>%
-    dplyr::mutate(start = site-1,
-                  end = site+1)
-  
-  list(meme.data = meme.data,
-       meme.sites = meme.sites)
-}
-
-
-combined.meme.results <- lapply(node.names, read.meme.results)
-
-mammal.meme.results <- lapply(node.names, read.meme.results, outgroup.type="mammal")
-
 # Create plots of the MSA around the sites of interest
-plot.individual.meme.sites <- function(meme.results, outgroup.type){
-  
-  create.meme.overview.plot <- function(meme.overview){
-    
-    p.value.threshold <- 0.01
-    
-    # Annotate MEME sites over the exons
-    meme.location.plot <- ggplot()+
-      # Draw the structures
-      add.track(ranges.NLS.common,    1.95, 2.55, fill=NLS.COLOUR, alpha = 1)+ # +8.5
-      add.track(ranges.ZF.common,     2, 2.5, fill=ZF.COLOUR)+ # 9 - 11
-      add.track.labels(ranges.ZF.common, 2, 2.5, col="white", label_col = "motif_number")+   # Label the ZFs
-      add.track(ranges.9aaTAD.common, 2, 2.5, fill=TAD.COLOUR,  alpha = 0.9)+  #9
-      add.track.labels(ranges.9aaTAD.common, 2, 2.5, col="white")+   # Label the 9aaTADs
-      
-      annotate("rect", xmin = exon2.patch$nt.start, xmax = exon2.patch$nt.end, 
-               ymin = 2, ymax = 2.5, fill = "pink")+
-      annotate("rect", xmin = exon3.patch$nt.start, xmax = exon3.patch$nt.end, 
-               ymin = 2, ymax = 2.5, fill = "pink")+
-      annotate("rect", xmin = exon5.patch$nt.start, xmax = exon5.patch$nt.end, 
-               ymin = 2, ymax = 2.5, fill = "pink")+
-      
-      new_scale_fill()+
-      scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
-      scale_pattern_color_manual(values=c("white", "white"))+
-      
-      scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
-      guides(fill = "none", pattern="none")+
-      add.exon.track(y.start = 2.6, y.end = 3, col="black")+
-      add.exon.labels(y.start = 2.6, y.end = 3)+
-      
-      # Show which test clades the sites show up in
-      geom_point(data = meme.overview, aes(x=site, y = 3.1, alpha = rodentia<p.value.threshold), col="black",size = 0.2)+
-      geom_point(data = meme.overview, aes(x=site, y = 3.2, alpha = eumuroida<p.value.threshold), col="black",size = 0.2)+
-      geom_point(data = meme.overview, aes(x=site, y = 3.3, alpha = muridae<p.value.threshold), col="black",size = 0.2)+
-      geom_point(data = meme.overview, aes(x=site, y = 3.4, alpha = murinae<p.value.threshold), col="black", size = 0.2)+
-      scale_alpha_manual(values=c(0, 1))+
-      
-      geom_tile(data = meme.overview, aes(x=site, y = 2.5, height = 1, width=1), fill = "brown")+
-      annotate("text", x= 750, y=3.1, label = "rodentia", hjust=0, size = 2)+
-      annotate("text", x= 750, y=3.2, label = "eumuroida", hjust=0, size = 2)+
-      annotate("text", x= 750, y=3.3, label = "muridae", hjust=0, size = 2)+
-      annotate("text", x= 750, y=3.4, label = "murinae", hjust=0, size = 2)+
-      
-      
-      scale_x_continuous(breaks = seq(0, 885, 50), expand = c(0, 0.05))+
-      coord_cartesian(xlim = c(0, 885))+
-      theme_bw()+
-      theme(axis.text.y = element_blank(),
-            axis.title = element_blank(),
-            axis.ticks.y = element_blank(),
-            axis.text.x = element_text(size=6),
-            legend.position = "none",
-            legend.title = element_text(size = 6, vjust = 0.85),
-            legend.text = element_text(size = 6),
-            legend.key.height = unit(3, "mm"),
-            legend.spacing.y = unit(2, "mm"),
-            legend.box.spacing = unit(2, "mm"),
-            panel.border = element_blank(),
-            axis.line.x.bottom = element_line(),
-            panel.grid = element_blank())
-    
-    save.double.width(filename = paste0("figure/meme.",outgroup.type,".site.locations.png"), meme.location.plot, height = 45)
-  }
-  
-  # Find the unique set of sites in the meme data
-  meme.overview <- do.call(rbind, lapply(meme.results, \(x) x$meme.data)) %>%
-    tidyr::pivot_wider(id_cols = c(site, partition), names_from = node, values_from = `p-value`) %>%
-    dplyr::filter(if_any(.cols= rodentia:murinae, ~.<0.01)) # filter to sites significant in any node
-  
-  create.meme.overview.plot(meme.overview)
+plot.individual.meme.sites <- function(meme.overview, outgroup.type){
   
   site.ranges <- with(meme.overview, IRanges(start=site-2, end=site+2))
   collapsed.ranges <- as.data.frame(IRanges::reduce(site.ranges))
@@ -1108,7 +1123,7 @@ plot.individual.meme.sites <- function(meme.results, outgroup.type){
   } )
 }
 
-plot.individual.meme.sites(mammal.meme.results, "mammal")
+plot.individual.meme.sites(mammal.meme.overview, "mammal")
 plot.individual.meme.sites(combined.meme.results, "combined")
 
 #### codeml site models to check for site-specific and branch-site selection ####
