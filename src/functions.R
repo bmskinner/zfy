@@ -167,7 +167,7 @@ run.divvier <- function(aln.file){
                     "# Identify phylogenetically informatve sites with indels\n",
                     "divvier -divvygap ", aln.file,  "\n",
                     
-                    "# Ensure file extension is aln for use in IQTREE",
+                    "# Ensure file extension is aln for use in IQTREE\n",
                     "mv ", paste0(aln.file, ".divvy.fas"), " ", paste0(aln.file, ".divvy.aln"), "\n"
                     
   ),

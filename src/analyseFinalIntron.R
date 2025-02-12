@@ -44,9 +44,15 @@ ape::write.FASTA(zf.all, file = FILES$final.intron.nt.fas)
 #### Align sequences #####
 
 # Use MUSCLE to align  - non coding
+cat("Aligning sequences\n")
 run.muscle(FILES$final.intron.zfy.nt.fas, FILES$final.intron.zfy.nt.aln)
 run.muscle(FILES$final.intron.zfx.nt.fas, FILES$final.intron.zfx.nt.aln)
 run.muscle(FILES$final.intron.nt.fas,     FILES$final.intron.nt.aln)
+
+#### Run divvier to improve high-confidence homologies in alignments ####
+
+final.intron.zfy.nt.divvy.aln <- run.divvier(FILES$final.intron.zfy.nt.aln)
+final.intron.zfx.nt.divvy.aln <- run.divvier(FILES$final.intron.zfx.nt.aln)
 
 #### Make species phylogenies for Zfx and Zfy #####
 
@@ -133,10 +139,9 @@ zfy.phylogeny <- paste0("", # Outgroups
 
 write_file(zfy.phylogeny, "aln/final.intron.zfy/zfy.nt.species.nwk")
 
-#### Make ML tree with distances #####
+#### Make ML tree based on raw alignments #####
 
-# -alninfo: print information about the number of informative sites
-# -lmap 2000: use 2000 quartets for likelihood mapping. How treelike is the data?
+cat("Creating raw alignment trees\n")
 # Make the tree using the species phylogeny
 final.intron.zfy.nt.aln.tree <- run.iqtree(FILES$final.intron.zfy.nt.aln, 
                         "-nt AUTO", # number of threads
@@ -147,32 +152,43 @@ final.intron.zfy.nt.aln.tree <- run.iqtree(FILES$final.intron.zfy.nt.aln,
         reroot.tree(., c("African_bush_elephant_ZFY"), position = 0.015)
 
 final.intron.zfx.nt.aln.tree <- run.iqtree(FILES$final.intron.zfx.nt.aln, 
+                        "-nt AUTO", # number of threads
+                        "-keep-ident",
+                        "-te aln/final.intron.zfx/zfx.nt.species.nwk" # user tree guide
+                        ) %>%
+        ape::read.tree(.) %>%
+        reroot.tree(., c("African_bush_elephant_ZFX"), position = 0.015)
+
+#### Make ML tree based on divvied alignments ####
+cat("Creating divvied alignment trees\n")
+final.intron.zfy.nt.divvy.aln.tree <- run.iqtree(final.intron.zfy.nt.divvy.aln, 
+                                           "-nt AUTO", # number of threads
+                                           "-keep-ident",
+                                           "-te aln/final.intron.zfy/zfy.nt.species.nwk" # user tree guide
+) %>%
+  ape::read.tree(.) %>%
+  reroot.tree(., c("African_bush_elephant_ZFY"), position = 0.015)
+
+final.intron.zfx.nt.divvy.aln.tree <- run.iqtree(final.intron.zfx.nt.divvy.aln, 
                                            "-nt AUTO", # number of threads
                                            "-keep-ident",
                                            "-te aln/final.intron.zfx/zfx.nt.species.nwk" # user tree guide
 ) %>%
-        ape::read.tree(.) %>%
-        reroot.tree(.,"African_bush_elephant_ZFX", position = 0.015)
-
-# Make a combined tree with no species tree specified
-final.intron.nt.aln.tree <- run.iqtree(FILES$final.intron.nt.aln, 
-                                       "-nt AUTO",
-                                       "-alninfo -lmap 2000") %>%
-        ape::read.tree(.) %>%
-        reroot.tree(., "African_bush_elephant_ZFX", position = 0.015)
-
+  ape::read.tree(.) %>%
+  reroot.tree(.,"African_bush_elephant_ZFX", position = 0.015)
 #### Plot the trees ####
 
 final.intron.zfy.nt.aln.tree.plot <- plot.tree(final.intron.zfy.nt.aln.tree)  + xlim(0, 2) + labs(title = "ZFY")
 final.intron.zfx.nt.aln.tree.plot <- plot.tree(final.intron.zfx.nt.aln.tree) + xlim(0, 2)+ labs(title = "ZFX")
 save.double.width("figure/final.intron.tree.png", final.intron.zfx.nt.aln.tree.plot/final.intron.zfy.nt.aln.tree.plot)
 
+final.intron.zfy.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfy.nt.divvy.aln.tree)  + xlim(0, 2) + labs(title = "ZFY")
+final.intron.zfx.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfx.nt.divvy.aln.tree) + xlim(0, 2)+ labs(title = "ZFX")
+save.double.width("figure/final.intron.divvy.tree.png", final.intron.zfy.nt.divvy.aln.tree.plot/final.intron.zfx.nt.divvy.aln.tree.plot)
+
+
 # final.intron.nt.aln.tree.plot <- plot.tree(final.intron.nt.aln.tree)  + xlim(0, 3) + labs(title = "Combined")
 # save.double.width("figure/final.intron.combined.tree.png", final.intron.nt.aln.tree.plot)
-
-#### Plot unrooted fan trees ####
-
-
 
 #### End ####
 cat("Done!")
