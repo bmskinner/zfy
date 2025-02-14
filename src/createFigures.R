@@ -707,7 +707,7 @@ charge.plot <- ggplot()+
                                                    y = sequence,
                                                    fill=charge_smoothed),
               hjust = 0, vjust = 0)+ 
-  scale_fill_paletteer_c("ggthemes::Classic Red-Blue", direction = 1, limits = c(-1, 1))+
+  scale_fill_paletteer_c("ggthemes::Red-Blue Diverging", direction = 1, limits = c(-1, 1))+
   labs(fill="Charge (9 site average)")
 charge.plot <- annotate.structure.plot(charge.plot, n.taxa)
 save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 120)
@@ -1502,6 +1502,38 @@ time.plot.annotated <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
         legend.title = element_text(size=6))
 save.double.width("figure/subs.per.site.time.annotated.png", time.plot.annotated)
 
-#### Tar the outputs ####
+#### Read final intron ML trees ####
+cat("Reading final intron trees\n")
+
+final.intron.zfy.nt.aln.tree <- ape::read.tree(FILES$final.intron.zfy.nt.aln.treefile) %>%
+  reroot.tree(., c("African_bush_elephant_ZFY", "Southern_two-toed_sloth_ZFY"), position = 0.015)
+
+final.intron.zfx.nt.aln.tree <- ape::read.tree(FILES$final.intron.zfx.nt.aln.treefile) %>%
+  reroot.tree(., c("African_bush_elephant_ZFX", "Southern_two-toed_sloth_ZFX"), position = 0.015)
+
+final.intron.zfy.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.zfy.nt.aln.divvy.aln.treefile) %>%
+  reroot.tree(., c("African_bush_elephant_ZFY", "Southern_two-toed_sloth_ZFY"), position = 0.015)
+
+final.intron.zfx.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.zfx.nt.aln.divvy.aln.treefile) %>%
+  reroot.tree(.,c("African_bush_elephant_ZFX", "Southern_two-toed_sloth_ZFX"), position = 0.015)
+
+#### Plot the trees ####
+
+x.min <- -0.1
+x.max <- 1.6
+
+final.intron.zfy.nt.aln.tree.plot <- plot.tree(final.intron.zfy.nt.aln.tree)  + xlim(x.min, x.max) + labs(title = "ZFY")
+final.intron.zfx.nt.aln.tree.plot <- plot.tree(final.intron.zfx.nt.aln.tree) + xlim(x.min, x.max)+ labs(title = "ZFX")
+save.double.width("figure/final.intron.tree.png", final.intron.zfx.nt.aln.tree.plot/final.intron.zfy.nt.aln.tree.plot)
+
+final.intron.zfy.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfy.nt.divvy.aln.tree)  + xlim(x.min, x.max) + labs(title = "ZFY (filtered)")
+final.intron.zfx.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfx.nt.divvy.aln.tree) + xlim(x.min, x.max)+ labs(title = "ZFX (filtered)")
+save.double.width("figure/final.intron.divvy.tree.png", final.intron.zfy.nt.divvy.aln.tree.plot/final.intron.zfx.nt.divvy.aln.tree.plot)
+
+final.intron.combined.plot <- (final.intron.zfy.nt.aln.tree.plot + final.intron.zfy.nt.divvy.aln.tree.plot) / (final.intron.zfx.nt.aln.tree.plot + final.intron.zfx.nt.divvy.aln.tree.plot)
+save.double.width("figure/final.intron.combined.tree.png", final.intron.combined.plot)
+
+
+#### Tar the figure outputs ####
 system2("tar", "czf figure.tar.gz figure")
 cat("Done!\n")

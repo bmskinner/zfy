@@ -1,6 +1,8 @@
 # Analyse COX1
 # We want to compare the evolutionary rate of the Zfy final intron versus exons
 
+# This requires divvier 1.01 in a conda environment
+
 #### Imports #####
 
 source("src/functions.R")
@@ -143,38 +145,43 @@ write_file(zfy.phylogeny, "aln/final.intron.zfy/zfy.nt.species.nwk")
 
 cat("Creating raw alignment trees\n")
 # Make the tree using the species phylogeny
-final.intron.zfy.nt.aln.tree <- run.iqtree(FILES$final.intron.zfy.nt.aln, 
+final.intron.zfy.nt.aln.treefile <- run.iqtree(FILES$final.intron.zfy.nt.aln, 
                         "-nt AUTO", # number of threads
                         "-keep-ident",
                         "-te aln/final.intron.zfy/zfy.nt.species.nwk" # user tree guide
-                        ) %>%
-        ape::read.tree(.) %>%
+                        ) 
+
+
+final.intron.zfy.nt.aln.tree <- ape::read.tree(FILES$final.intron.zfy.nt.aln.treefile) %>%
         reroot.tree(., c("African_bush_elephant_ZFY"), position = 0.015)
 
-final.intron.zfx.nt.aln.tree <- run.iqtree(FILES$final.intron.zfx.nt.aln, 
+final.intron.zfx.nt.aln.treefile <- run.iqtree(FILES$final.intron.zfx.nt.aln, 
                         "-nt AUTO", # number of threads
                         "-keep-ident",
                         "-te aln/final.intron.zfx/zfx.nt.species.nwk" # user tree guide
-                        ) %>%
-        ape::read.tree(.) %>%
+                        ) 
+final.intron.zfx.nt.aln.tree <- ape::read.tree(FILES$final.intron.zfx.nt.aln.treefile) %>%
         reroot.tree(., c("African_bush_elephant_ZFX"), position = 0.015)
 
 #### Make ML tree based on divvied alignments ####
 cat("Creating divvied alignment trees\n")
-final.intron.zfy.nt.divvy.aln.tree <- run.iqtree(final.intron.zfy.nt.divvy.aln, 
-                                           "-nt AUTO", # number of threads
-                                           "-keep-ident",
-                                           "-te aln/final.intron.zfy/zfy.nt.species.nwk" # user tree guide
-) %>%
-  ape::read.tree(.) %>%
+
+final.intron.zfy.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfy.nt.divvy.aln, 
+           "-nt AUTO", # number of threads
+           "-keep-ident",
+           "-te aln/final.intron.zfy/zfy.nt.species.nwk" # user tree guide
+)
+
+final.intron.zfy.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.zfy.nt.aln.divvy.aln.treefile) %>%
   reroot.tree(., c("African_bush_elephant_ZFY"), position = 0.015)
 
-final.intron.zfx.nt.divvy.aln.tree <- run.iqtree(final.intron.zfx.nt.divvy.aln, 
-                                           "-nt AUTO", # number of threads
-                                           "-keep-ident",
-                                           "-te aln/final.intron.zfx/zfx.nt.species.nwk" # user tree guide
-) %>%
-  ape::read.tree(.) %>%
+final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfx.nt.divvy.aln, 
+           "-nt AUTO", # number of threads
+           "-keep-ident",
+           "-te aln/final.intron.zfx/zfx.nt.species.nwk" # user tree guide
+)
+
+final.intron.zfx.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.zfx.nt.aln.divvy.aln.treefile) %>%
   reroot.tree(.,"African_bush_elephant_ZFX", position = 0.015)
 #### Plot the trees ####
 
@@ -182,13 +189,13 @@ final.intron.zfy.nt.aln.tree.plot <- plot.tree(final.intron.zfy.nt.aln.tree)  + 
 final.intron.zfx.nt.aln.tree.plot <- plot.tree(final.intron.zfx.nt.aln.tree) + xlim(0, 2)+ labs(title = "ZFX")
 save.double.width("figure/final.intron.tree.png", final.intron.zfx.nt.aln.tree.plot/final.intron.zfy.nt.aln.tree.plot)
 
-final.intron.zfy.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfy.nt.divvy.aln.tree)  + xlim(0, 2) + labs(title = "ZFY")
-final.intron.zfx.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfx.nt.divvy.aln.tree) + xlim(0, 2)+ labs(title = "ZFX")
+final.intron.zfy.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfy.nt.divvy.aln.tree)  + xlim(0, 2) + labs(title = "ZFY (divvied)")
+final.intron.zfx.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfx.nt.divvy.aln.tree) + xlim(0, 2)+ labs(title = "ZFX (divvied)")
 save.double.width("figure/final.intron.divvy.tree.png", final.intron.zfy.nt.divvy.aln.tree.plot/final.intron.zfx.nt.divvy.aln.tree.plot)
 
 
-# final.intron.nt.aln.tree.plot <- plot.tree(final.intron.nt.aln.tree)  + xlim(0, 3) + labs(title = "Combined")
-# save.double.width("figure/final.intron.combined.tree.png", final.intron.nt.aln.tree.plot)
+combined.plot <- (final.intron.zfy.nt.aln.tree.plot + final.intron.zfy.nt.divvy.aln.tree.plot) / (final.intron.zfx.nt.aln.tree.plot + final.intron.zfx.nt.divvy.aln.tree.plot)
+save.double.width("figure/final.intron.combined.tree.png", combined.plot)
 
 #### End ####
 cat("Done!")

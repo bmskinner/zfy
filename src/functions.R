@@ -84,7 +84,15 @@ FILES <- list(
   final.intron.zfy.nt.fas = "fasta/final.intron.zfy.nt.fas",
   final.intron.zfx.nt.fas = "fasta/final.intron.zfx.nt.fas",
   final.intron.zfy.nt.aln = "aln/final.intron.zfy/final.intron.zfy.nt.aln",
-  final.intron.zfx.nt.aln = "aln/final.intron.zfx/final.intron.zfx.nt.aln"
+  final.intron.zfx.nt.aln = "aln/final.intron.zfx/final.intron.zfx.nt.aln",
+  
+  final.intron.zfy.nt.aln.treefile = "aln/final.intron.zfy/final.intron.zfy.nt.aln.treefile",
+  final.intron.zfx.nt.aln.treefile = "aln/final.intron.zfx/final.intron.zfx.nt.aln.treefile",
+  
+  final.intron.zfy.nt.aln.divvy.aln.treefile = "aln/final.intron.zfy/final.intron.zfy.nt.aln.divvy.aln.treefile",
+  final.intron.zfx.nt.aln.divvy.aln.treefile = "aln/final.intron.zfx/final.intron.zfx.nt.aln.divvy.aln.treefile"
+  
+  
   
   
 )
@@ -159,6 +167,10 @@ run.hyphy.meme <- function(nex.file, tree.file){
   json.file
 }
 
+# Run divvier from within a conda environment (named divvier).Creates a divvied
+# alignment.
+# aln.file - the alignment to divvy
+# Returns - the divvied alignment file path
 run.divvier <- function(aln.file){
   bash.file <- paste0(aln.file, ".sh")
   write_file(paste0("#!/bin/bash\n",

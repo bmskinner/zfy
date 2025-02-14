@@ -31,7 +31,7 @@ Other software:
 Program             | Source  | Reference  | Version used in this study
 --------------------|---------|------------|---------------------------
 HyPhy | http://www.hyphy.org/ | [doi:10.1093/bioinformatics/bti079](https://doi.org/10.1093/bioinformatics/bti079) | 2.5.29
-Divvier | https://github.com/simonwhelan/Divvier | doi: 10.1093/molbev/msz142(https://pmc.ncbi.nlm.nih.gov/articles/PMC6933875/) | 1.01
+Divvier | https://github.com/simonwhelan/Divvier | [doi:10.1093/molbev/msz142](https://pmc.ncbi.nlm.nih.gov/articles/PMC6933875/) | 1.01
 
 HyPhy and Divvier are installed as python packages in conda environments:
 ```
