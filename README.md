@@ -31,15 +31,21 @@ Other software:
 Program             | Source  | Reference  | Version used in this study
 --------------------|---------|------------|---------------------------
 HyPhy | http://www.hyphy.org/ | [doi:10.1093/bioinformatics/bti079](https://doi.org/10.1093/bioinformatics/bti079) | 2.5.29
+Divvier | https://github.com/simonwhelan/Divvier | doi: 10.1093/molbev/msz142(https://pmc.ncbi.nlm.nih.gov/articles/PMC6933875/) | 1.01
 
-HyPhy is installed as a python package in a conda environment:
+HyPhy and Divvier are installed as python packages in conda environments:
 ```
 conda create -n hyphy           # create conda environment
 conda activate hyphy            # enter the environment
 conda install -c bioconda hyphy # install hyphy from bioconda
 
-# To activate conda from a shell script:
+conda create -n divvier           # create conda environment
+conda activate divvier            # enter the environment
+conda install -c bioconda divvier # install divvier from bioconda
+
+# To activate a conda environment from within a shell script:
 source activate hyphy
+
 ```
 
 ### R packages
@@ -64,12 +70,6 @@ This will generate output data in the directory `aln`.
 
 ```
 bash run_paml.sh
-```
-
-The HyPhy RELAX analysis also runs separately, and `alignNucleotide.R` generates a shell script with the necessary commands:
-
-```
-bash hyphy.sh
 ```
 
 ### Testing for gene conversion
