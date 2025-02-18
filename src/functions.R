@@ -258,7 +258,10 @@ read.alignments <- function(){
     nt.combined.biostrings = Biostrings::readAAMultipleAlignment(FILES$combined.nt.aln, format="fasta"),
     
     nt.mammal.ape = ape::read.FASTA(FILES$mammal.nt.aln),
-    nt.mammal.biostrings = Biostrings::readDNAMultipleAlignment(FILES$mammal.nt.aln, format="fasta")
+    nt.mammal.biostrings = Biostrings::readDNAMultipleAlignment(FILES$mammal.nt.aln, format="fasta"),
+    
+    aa.mammal.ape <- ape::read.FASTA(FILES$mammal.aa.aln, type="AA"),
+    aa.mammal.biostrings = Biostrings::readAAMultipleAlignment(FILES$mammal.aa.aln, format="fasta")
   )
 }
 
@@ -1021,6 +1024,121 @@ reroot.tree <- function(tree, node.labels, position=0.01){
   }
   root.node <- ape::getMRCA(tree, node.labels)
   return(phytools::reroot(tree, root.node, position = position))
+}
+
+
+# Extract all nt and aa sequences from a combined-outgroup MSA for the given region, and calculate the
+# consensus sequence. Ranges are inclusive.
+extract.combined.alignment.region <- function(nt.start=NULL, nt.end=NULL, aa.start=NULL, aa.end=NULL){
+
+  if(is.null(nt.start) & is.null(nt.end)){
+    nt.start <- floor(max(1, aa.start*3)-2)
+    nt.end <- ceiling(max(1, aa.end*3))
+  }
+  
+  if(is.null(aa.start) & is.null(aa.end)){
+    aa.start <- floor(max(1, nt.start/3))
+    aa.end <- ceiling(max(1, nt.end/3))
+  }
+  
+  nt.aln <- as.data.frame(as.matrix(ALIGNMENTS$nt.combined.biostrings)[,nt.start:nt.end]) %>%
+    dplyr::mutate(Sequence = rownames(.),
+                  Sequence = str_replace_all(Sequence, "_", " "), # remove underscores for pretty printing
+                  Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+    dplyr::arrange(as.integer(Sequence)) %>%
+    dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+nt.start-1) )
+  
+  aa.aln <- as.data.frame(as.matrix(ALIGNMENTS$aa.combined.biostrings)[,aa.start:aa.end]) %>%
+    dplyr::mutate(Sequence = rownames(.),
+                  Sequence = str_replace_all(Sequence, "_", " "), # remove underscores for pretty printing
+                  Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+    dplyr::arrange(as.integer(Sequence)) %>%
+    dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+aa.start-1) )
+  
+  
+  # find the most common nucleotide in the consensus matrix
+  nt.consensus <- paste(unlist(
+    apply(consensusMatrix(ALIGNMENTS$nt.combined.biostrings)[,(nt.start):(nt.end)], 
+          2, \(x) names( which(x==max(x)) )[1]  ) # Take only the first consensus in case of ties
+  ), 
+  collapse = "")
+  
+  aa.consensus <- paste(unlist(
+    apply(consensusMatrix(ALIGNMENTS$aa.combined.biostrings)[,(aa.start):(aa.end)], 
+          2, \(x) names( which(x==max(x)) )[1] ) # Take only the first consensus in case of ties
+  ), 
+  collapse = "")
+  
+  list(
+    nt.aln   = nt.aln,
+    aa.aln   = aa.aln,
+    aa.start = aa.start,
+    aa.end   = aa.end,
+    aa.length = aa.end - aa.start + 1,
+    nt.start = nt.start,
+    nt.end   = nt.end,
+    nt.length = nt.end - nt.start + 1,
+    nt.consensus = nt.consensus,
+    aa.consensus = aa.consensus
+  )
+}
+
+
+# Extract all nt and aa sequences from a mammal-only MSA for the given region, and calculate the
+# consensus sequence. Ranges are inclusive.
+extract.mammal.alignment.region <- function(nt.start=NULL, nt.end=NULL, aa.start=NULL, aa.end=NULL){
+
+  
+  if(is.null(nt.start) & is.null(nt.end)){
+    nt.start <- floor(max(1, aa.start*3)-2)
+    nt.end <- ceiling(max(1, aa.end*3))
+  }
+  
+  if(is.null(aa.start) & is.null(aa.end)){
+    aa.start <- floor(max(1, nt.start/3))
+    aa.end <- ceiling(max(1, nt.end/3))
+  }
+  
+  nt.aln <- as.data.frame(as.matrix(ALIGNMENTS$nt.mammal.biostrings)[,nt.start:nt.end]) %>%
+    dplyr::mutate(Sequence = rownames(.),
+                  Sequence = str_replace_all(Sequence, "_", " "), # remove underscores for pretty printing
+                  Sequence = factor(Sequence, levels = mammal.taxa.name.order)) %>%
+    dplyr::arrange(as.integer(Sequence)) %>%
+    dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+nt.start-1) )
+  
+  aa.aln <- as.data.frame(as.matrix(ALIGNMENTS$aa.mammal.biostrings)[,aa.start:aa.end]) %>%
+    dplyr::mutate(Sequence = rownames(.),
+                  Sequence = str_replace_all(Sequence, "_", " "), # remove underscores for pretty printing
+                  Sequence = factor(Sequence, levels = mammal.taxa.name.order)) %>%
+    dplyr::arrange(as.integer(Sequence)) %>%
+    dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+aa.start-1) )
+  
+  
+  # find the most common nucleotide in the consensus matrix
+  nt.consensus <- paste(unlist(
+    apply(consensusMatrix(ALIGNMENTS$nt.mammal.biostrings)[,(nt.start):(nt.end)], 
+          2, \(x) names( which(x==max(x)) )[1]  ) # Take only the first consensus in case of ties
+  ), 
+  collapse = "")
+  
+  aa.consensus <- paste(unlist(
+    apply(consensusMatrix(ALIGNMENTS$aa.mammal.biostrings)[,(aa.start):(aa.end)], 
+          2, \(x) names( which(x==max(x)) )[1] ) # Take only the first consensus in case of ties
+  ), 
+  collapse = "")
+  
+  list(
+    nt.aln   = nt.aln,
+    aa.aln   = aa.aln,
+    aa.start = aa.start,
+    aa.end   = aa.end,
+    aa.length = aa.end - aa.start + 1,
+    nt.start = nt.start,
+    nt.end   = nt.end,
+    nt.length = nt.end - nt.start + 1,
+    nt.consensus = nt.consensus,
+    aa.consensus = aa.consensus
+  )
 }
 
 #### ####
