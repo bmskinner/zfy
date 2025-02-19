@@ -186,7 +186,8 @@ run.pwm.predict()
 # Create a species list for use in bulk TimeTree website. Note that this may not 
 # retrieve the full species tree - check manually. The manual output is saved
 # to ./species_names.nwk
-write.table(unique(METADATA$mammal$species), file = "figure/species_names.tsv", row.names = FALSE, col.names = FALSE, quote = FALSE)
+write.table(unique(METADATA$mammal$species), file = "figure/species_names.tsv", 
+            row.names = FALSE, col.names = FALSE, quote = FALSE)
 
 # Read the manually created species tree
 # Replace the Latin names with common names, and ZFX/ZFY suffix to make
@@ -211,7 +212,7 @@ get.time.tree <- function(tax.a, tax.b){
   tryCatch({
     tt <- httr::GET(paste0("http://timetree.temple.edu/api/pairwise/",tax.a, "/", tax.b))
     Sys.sleep(1) # rate limit
-    if(tt$headers$`content-length`>1000){
+    if(as.numeric(tt$headers$`content-length`)>1000){
       message(paste("Cannot get data for taxa", tax.a, "and", tax.b))
       return(data.frame("taxon_a_id" = tax.a,"taxon_b_id" = tax.b,"scientific_name_a" = NA,
                         "scientific_name_b" = NA,"all_total" = NA,"precomputed_age" = NA,
