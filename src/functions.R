@@ -803,6 +803,8 @@ read.combined.outgroup.tree <- function(file){
 
 #### Other functions #####
 
+timestamp <- function() format(Sys.time(), "%Y-%M-%d %H:%M:%S")
+
 # Translate ungapped coordinates back to gapped
 # site.no.gap - the integer site in an ungapped sequence to convert
 # gapped.seq - the sequence with gaps from an alignment

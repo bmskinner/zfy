@@ -40,11 +40,11 @@ filesstrings::create_dir("paml/exon_2")
 filesstrings::create_dir("paml/exon_7")
 
 # Clear previous analyses if present
-cat("Removing existing output directories\n")
+cat(timestamp(), "Removing existing output directories\n")
 filesstrings::remove_dir(c("aln", "figure"))
 
 # Create missing dirs if needed
-cat("Creating output directories\n")
+cat(timestamp(), "Creating output directories\n")
 create.output.dir <- function(dir.path){
   if(!filesstrings::create_dir(dir.path)) stop(paste0("Could not create output directory '", dir.path, "'"))
 }
@@ -72,7 +72,7 @@ METADATA <- prepare.fas.files()
 
 
 #### Run combined mammal/outgroup AA alignment ####
-cat("Creating mammal plus outgroup alignments\n")
+cat(timestamp(), "Creating mammal plus outgroup alignments\n")
 # Expect java on the PATH. Macse download from https://www.agap-ge2pop.org/macsee-pipelines/
 # Direct download link:
 # https://www.agap-ge2pop.org/wp-content/uploads/macse/releases/macse_v2.07.jar
@@ -80,7 +80,7 @@ cat("Creating mammal plus outgroup alignments\n")
 run.macse(FILES$combined.nt.fas, "aln/combined/combined")
 
 #### Run mammal NT alignment guided by AA #####
-cat("Creating mammal alignments\n")
+cat(timestamp(), "Creating mammal alignments\n")
 # Run a codon aware alignment with MACSE
 run.macse(FILES$mammal.nt.fas, "aln/mammal/mammal")
 
@@ -121,7 +121,7 @@ alg2nex(FILES$combined.nt.aln, format = "fasta", interleaved = FALSE, gap = "-",
 
 
 #### Create combined mammal/outgroup AA tree ####
-cat("Creating trees\n")
+cat(timestamp(), "Creating trees\n")
 FILES$combined.aa.aln.treefile <- run.iqtree(FILES$combined.aa.aln, 
                                              "-bb 1000", # number of bootstrap replicates
                                              "-alrt 1000") # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
@@ -256,7 +256,7 @@ if(!file.exists( "time.tree.data.tsv")){
 
 #### Prepare codeml site model to check for site-specific selection ####
 
-cat("Creating CODEML site model control files\n")
+cat(timestamp(), "Creating CODEML site model control files\n")
 # Adapted from Beginner's Guide on the Use of PAML to Detect Positive Selection
 # https://academic.oup.com/mbe/article/40/4/msad041/7140562 for details
 
@@ -301,7 +301,7 @@ write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
 
 #### Prepare codeml branch-site model to look for selection specifically in Muroidea ####
 
-cat("Creating CODEML branch-site model control files\n")
+cat(timestamp(), "Creating CODEML branch-site model control files\n")
 # To look at the rodent clade, we need a rooted tree
 nt.aln.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
 # Root the tree on platypus and resave
@@ -444,7 +444,7 @@ write_file(paml.shell.script, "run_paml.sh")
 
 #### Run HyPhy RELAX to test for relaxed selection and MEME for diversifying selection ####
 
-cat("Creating HyPhy RELAX and MEME control files\n")
+cat(timestamp(), "Creating HyPhy RELAX and MEME control files\n")
 # Create and save a tree in HyPhy format. Set test branches to the given node, all others
 # as reference. 
 create.mammal.hyphy.relax.tree.file <- function(fg.node, node.name){
@@ -591,7 +591,7 @@ write_file(paste0("#!/bin/bash\n",
 ),
 "run_hyphy.sh")
 
-cat("Running HyPhy RELAX and MEME across nodes", paste(node.names, collapse=";"), "\n")
+cat(timestamp(), "Running HyPhy RELAX and MEME across nodes", paste(node.names, collapse=";"), "\n")
 system2("bash", "run_hyphy.sh")
 
 
@@ -610,6 +610,7 @@ Biostrings::writeXStringSet(zfy.nt.aln,  file = "aln/zfy_only/zfy.aln", format =
 
 #### Create independent trees for ZFX and ZFY sequences with species trees ####
 
+cat(timestamp(), "Running ancestral sequence reconstruction with species tree\n")
 # We can specify the true phylogeny of the sequences for ancestral reconstruction
 # zfx.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
 #                         "(", # Eutheria
@@ -840,7 +841,7 @@ write_file(anc.gene.conv.control, "aln/anc.zfx.zfy.geneconv.cfg")
 
 
 #### Find structural features ####
-
+cat(timestamp(), "Identifying structural features\n")
 # Read the combined tree and find the taxa order
 combined.outgroup.tree <- read.combined.outgroup.tree(FILES$combined.aa.aln.treefile)
 combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")
@@ -859,7 +860,7 @@ locations.NLS <- locate.NLS.in.alignment(FILES$combined.aa.aln, FILES$combined.n
 readr::write_tsv(locations.NLS, "aln/locations.NLS.tsv")
 
 #### Read final intron sequences #####
-
+cat(timestamp(), "Processing final intron sequences\n")
 # Read all unaligned sequence files with .fa extension
 zfy.files <- list.files(path = "fasta/final.intron.zfy", pattern = "*.fa$", 
                         include.dirs = T, full.names = T)
@@ -892,7 +893,7 @@ ape::write.FASTA(zf.all, file = FILES$final.intron.nt.fas)
 #### Align final intron sequences #####
 
 # Use MUSCLE to align  - non coding
-cat("Aligning sequences\n")
+cat(timestamp(), "Aligning final inton sequences\n")
 run.muscle(FILES$final.intron.zfy.nt.fas, FILES$final.intron.zfy.nt.aln)
 run.muscle(FILES$final.intron.zfx.nt.fas, FILES$final.intron.zfx.nt.aln)
 run.muscle(FILES$final.intron.nt.fas,     FILES$final.intron.nt.aln)
@@ -903,6 +904,7 @@ final.intron.zfy.nt.divvy.aln <- run.divvier(FILES$final.intron.zfy.nt.aln)
 final.intron.zfx.nt.divvy.aln <- run.divvier(FILES$final.intron.zfx.nt.aln)
 
 #### Make species phylogenies for Zfx and Zfy final intron  #####
+cat(timestamp(), "Creating final intron species trees\n")
 
 # We want to specify actual species tree for each of Zfx and Zfy
 # Note that not all species have intron info available - make a new species tree
@@ -989,7 +991,7 @@ write_file(zfy.phylogeny, "aln/final.intron.zfy/zfy.nt.species.nwk")
 
 #### Make ML tree based on final intron raw alignments #####
 
-cat("Creating raw alignment trees\n")
+cat(timestamp(), "Creating final intron ML trees using species phylogenies\n")
 # Make the tree using the species phylogeny
 final.intron.zfy.nt.aln.treefile <- run.iqtree(FILES$final.intron.zfy.nt.aln, 
                                                "-nt AUTO", # number of threads
@@ -1004,7 +1006,7 @@ final.intron.zfx.nt.aln.treefile <- run.iqtree(FILES$final.intron.zfx.nt.aln,
 ) 
 
 #### Make ML tree based on final intron divvied alignments ####
-cat("Creating divvied alignment trees\n")
+cat(timestamp(), "Creating divvied final intron ML trees using species phylogenies\n")
 
 final.intron.zfy.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfy.nt.divvy.aln, 
                                                      "-nt AUTO", # number of threads
@@ -1020,4 +1022,4 @@ final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfx.nt.divvy.a
 
 #### Tar the outputs ####
 system2("tar", "czf aln.tar.gz aln")
-cat("Done!\n")
+cat(timestamp(), "Done!\n")
