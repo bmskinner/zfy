@@ -618,8 +618,8 @@ plot.kaks <- function(nt.aln.file, species.order, kaks.limits=c(0, 1)){
     labs(fill="dNdS")+
     scale_x_discrete(limits=rev)+
     theme_bw()+
-    theme(axis.text.x = element_text(size = 6, angle = 45, hjust = 1),
-          axis.text.y = element_text(size = 6),
+    theme(axis.text.x = element_text(size = 5, angle = 45, hjust = 1),
+          axis.text.y = element_text(size = 5),
           axis.title = element_blank(),
           legend.position = c(0.9, 0.8),
           legend.background = element_blank(),

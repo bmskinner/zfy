@@ -129,7 +129,7 @@ save.double.width("figure/Figure_Sxxxx_exons_tree.png", exon.joint.tree, height=
 
 kaks.pairwise.plot <- plot.kaks(FILES$mammal.nt.aln, 
                                 #species.order = mammal.taxa.name.order,
-                                species.order = combined.taxa.name.order[1:62], # use the aa tree order so ZFX and ZFY are grouped
+                                species.order = combined.taxa.name.order[1:which(combined.taxa.name.order=="Platypus ZFX")], # use the aa tree order so ZFX and ZFY are grouped
                                 kaks.limits = c(0, 1.5))
 save.double.width("figure/dnds.png", kaks.pairwise.plot)
 
@@ -161,8 +161,8 @@ create.pairwise.kaks.data <- function(seqinr.aln){
   kaks.pairwise <- metagMisc::dist2list(kaks.ratio, tri = F) %>%
     dplyr::mutate(col = str_replace_all(col, "_", " "),
                   row = str_replace_all(row, "_", " "),
-                  col = factor(col, levels = combined.taxa.name.order[1:62],),
-                  row = factor(row, levels = combined.taxa.name.order[1:62],),
+                  col = factor(col, levels = combined.taxa.name.order[1:which(combined.taxa.name.order=="Platypus ZFX")],),
+                  row = factor(row, levels = combined.taxa.name.order[1:which(combined.taxa.name.order=="Platypus ZFX")],),
                   colnum = as.integer(col),
                   rownum = as.integer(row),
                   kaks  = ifelse(value==1, NA, value)) %>%  # values of exactly 1 are from missing data)
@@ -177,7 +177,7 @@ kaks.exon.7 <- create.pairwise.kaks.data(seqin.aln.exon.7)
 plot.pairwise.kaks <- function(kaks.pairwise){
   ggplot(kaks.pairwise, aes(x = col, y = row))+
     geom_tile(aes(fill=kaks))+
-    scale_fill_viridis_c(limits = c(0, 1), direction = -1, na.value="white")+
+    scale_fill_viridis_c(limits = c(0, 1.5), direction = -1, na.value="white")+
     labs(fill="dNdS")+
     scale_x_discrete(limits=rev)+
     theme_bw()+
@@ -1268,6 +1268,7 @@ zfy.nt.aln.tree <- ape::read.tree("aln/zfy_only/zfy.aln.treefile")
 # Drop the second ZFYs in mouse and rat
 zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2") 
 zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "African_Grass_Rat_ZFY2-like_1") 
+
 
 # Root the trees on platypus
 zfx.nt.aln.tree <- phytools::reroot(zfx.nt.aln.tree, which(zfx.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
