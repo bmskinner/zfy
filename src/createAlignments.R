@@ -193,7 +193,7 @@ write.table(unique(METADATA$mammal$species), file = "figure/species_names.tsv",
 # Replace the Latin names with common names, and ZFX/ZFY suffix to make
 # gene specific species trees
 species.tree <- ape::read.tree("species_names.nwk")
-species.tree$edge.length <-NULL # remove times
+species.tree$edge.length <- NULL # remove times
 species.tree$tip.label <- gsub("_", " ", species.tree$tip.label)
 
 zfx.phylogeny <- species.tree
@@ -211,7 +211,7 @@ ape::write.tree(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
 get.time.tree <- function(tax.a, tax.b){
   tryCatch({
     tt <- httr::GET(paste0("http://timetree.temple.edu/api/pairwise/",tax.a, "/", tax.b))
-    Sys.sleep(1) # rate limit
+    Sys.sleep(0.5) # rate limit
     if(as.numeric(tt$headers$`content-length`)>1000){
       message(paste("Cannot get data for taxa", tax.a, "and", tax.b))
       return(data.frame("taxon_a_id" = tax.a,"taxon_b_id" = tax.b,"scientific_name_a" = NA,
@@ -249,9 +249,10 @@ if(!file.exists( "time.tree.data.tsv")){
   
   # Find the pairwise distances between each species
   pairwise.species <- expand.grid(unique(METADATA$mammal$taxon_id), unique(METADATA$mammal$taxon_id)) %>%
-    dplyr::filter(Var1!=Var2, Var1<Var2) # only call each pair once
+    dplyr::filter(Var1!=Var2, Var1<Var2) %>% # only call each pair once
+    dplyr::arrange(Var1, Var2)
   
-  pairwise.times <- do.call(rbind, mapply(get.time.tree, pairwise.species$Var1, pairwise.species$Var2))
+  pairwise.times <- do.call(rbind, mapply(get.time.tree, pairwise.species$Var1, pairwise.species$Var2, SIMPLIFY = FALSE))
   write_tsv(pairwise.times, file = "time.tree.data.tsv", col_names = T, quote = "none")
 }
 
