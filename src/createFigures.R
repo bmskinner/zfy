@@ -23,20 +23,29 @@ mouse.exons <- find.exons()
 combined.outgroup.tree <- read.combined.outgroup.tree(FILES$combined.aa.aln.treefile)
 
 combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")+
-  coord_cartesian(clip="off", xlim = c(0, 0.7), ylim= c(-2, length(combined.outgroup.tree$tip.label)))+
-  annotate("text", x = 0.3, y = 60.5, label = "Eumuroida", size=2)
+  coord_cartesian(clip="off", xlim = c(0, 0.7), ylim= c(-2, length(combined.outgroup.tree$tip.label)))
+  
+# Find the location of the Eumuroida clade in the plot
+eumuroida.node <- ape::getMRCA(combined.outgroup.tree, c("Mouse_Zfy1", "North_American_deer_mouse_Zfx-like_putative-Zfy"))
+eumuroida.node.position <- ggtree::get_clade_position(combined.aa.tree, eumuroida.node)
+
+# Add text annotation just below the y midpoint of the Eumuroida clade
+combined.aa.tree <- combined.aa.tree + annotate("text", x = 0.3, 
+                                                y = (eumuroida.node.position$ymax+eumuroida.node.position$ymin)/2-1, 
+                                                label = "Eumuroida", size=2)
 
 save.double.width("figure/Figure_1_aa_tree.png", combined.aa.tree)
 
 # Also save the order of taxa in the outgroup tree to use later
 combined.taxa.name.order <- ggtree::get_taxa_name(combined.aa.tree) 
 
+
 #### Plot mammal CDS NT tree #####
 
 nt.aln.tree <- ape::read.tree(FILES$combined.nt.aln.treefile)
 
-# Root the tree on platypus and resave
-# The root is arbitrarily placed in the platypus branch to fit neatly
+# Root the tree and resave
+# The root is arbitrarily placed to fit neatly
 xenopus.node <- ape::getMRCA(nt.aln.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
 nt.aln.tree <- phytools::reroot(nt.aln.tree, xenopus.node, position = 0.01)
 # nt.aln.tree <- phytools::reroot(nt.aln.tree, which(nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
@@ -46,12 +55,20 @@ ape::write.tree(nt.aln.tree, file = paste0(FILES$combined.nt.aln, ".rooted.treef
 mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
 nt.aln.tree <- tidytree::groupOTU(nt.aln.tree, mammal.gene.groups, group_name = "group")
 
-plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off", xlim = c(0, 0.6)) + 
-  annotate("text", x = 0.3, y = 60.5, label = "Eumuroida", size=2)
+plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off", xlim = c(0, 0.6)) 
+
+# Find the location of the Eumuroida clade in the plot
+eumuroida.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy1", "North_American_deer_mouse_Zfx-like_putative-Zfy"))
+eumuroida.node.position <- ggtree::get_clade_position(plot.zfx.zfy, eumuroida.node)
+
+
+plot.zfx.zfy <- plot.zfx.zfy + annotate("text", x = 0.3, 
+                                        y = (eumuroida.node.position$ymax+eumuroida.node.position$ymin)/2-1, 
+                                        label = "Eumuroida", size=2)
 
 # Emphasise the ZFX / ZFY splits more by rotating the Laurasiatheria node
-laurasiatheria.node <- ape::getMRCA(nt.aln.tree, c("Cat_ZFY", "Cat_ZFX"))
-plot.zfx.zfy <- rotate(plot.zfx.zfy, laurasiatheria.node)
+# laurasiatheria.node <- ape::getMRCA(nt.aln.tree, c("Cat_ZFY", "Cat_ZFX"))
+# plot.zfx.zfy <- rotate(plot.zfx.zfy, laurasiatheria.node)
 
 save.double.width("figure/Figure_xxxx_nucleotide_tree.png", plot.zfx.zfy)
 
