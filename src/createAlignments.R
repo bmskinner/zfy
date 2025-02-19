@@ -181,35 +181,73 @@ create.exon.alignment(exon1.3_6.aln, "exon_1.3-6.aln")
 
 run.pwm.predict()
 
-#### Fetch divergence times to highlight the rapid evolution in the rodents ####
+#### Fetch TimeTree divergence times to highlight the rapid evolution in the rodents ####
+
+# Create a species list for use in bulk TimeTree website. Note that this may not 
+# retrieve the full species tree - check manually. The manual output is saved
+# to ./species_names.nwk
+write.table(unique(METADATA$mammal$species), file = "figure/species_names.tsv", row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+# Read the manually created species tree
+# Replace the Latin names with common names, and ZFX/ZFY suffix to make
+# gene specific species trees
+species.tree <- ape::read.tree("species_names.nwk")
+species.tree$edge.length <-NULL # remove times
+species.tree$tip.label <- gsub("_", " ", species.tree$tip.label)
+
+zfx.phylogeny <- species.tree
+zfy.phylogeny <- species.tree
+
+zfx.phylogeny$tip.label <- sapply(zfx.phylogeny$tip.label, \(x) unique(METADATA$mammal[METADATA$mammal$species==x & (METADATA$mammal$group=="ZFX" | METADATA$mammal$group=="Outgroup"),]$common.name), simplify = TRUE)
+zfx.phylogeny$tip.label <- gsub(" ", "_", zfx.phylogeny$tip.label)
+ape::write.tree(zfx.phylogeny, "aln/zfx_only/zfx.nt.species.nwk")
+
+zfy.phylogeny$tip.label <- sapply(zfy.phylogeny$tip.label, \(x) unique(METADATA$mammal[METADATA$mammal$species==x & (METADATA$mammal$group=="ZFY" | METADATA$mammal$group=="Outgroup"),]$common.name), simplify = TRUE)
+zfy.phylogeny$tip.label <- gsub(" ", "_", zfy.phylogeny$tip.label)
+ape::write.tree(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
+
 
 get.time.tree <- function(tax.a, tax.b){
   tryCatch({
     tt <- httr::GET(paste0("http://timetree.temple.edu/api/pairwise/",tax.a, "/", tax.b))
+    Sys.sleep(1) # rate limit
+    if(tt$headers$`content-length`>1000){
+      message(paste("Cannot get data for taxa", tax.a, "and", tax.b))
+      return(data.frame("taxon_a_id" = tax.a,"taxon_b_id" = tax.b,"scientific_name_a" = NA,
+                        "scientific_name_b" = NA,"all_total" = NA,"precomputed_age" = NA,
+                        "precomputed_ci_low" = NA,"precomputed_ci_high" = NA,"adjusted_age" = NA))
+    }
+    
     ct <- content(tt)
-    Sys.sleep(1)
-    
-    
+    # Parse the response
     data <- as.data.frame( str_split(ct, "\r\n"), col.names = c("V1")) %>% 
       dplyr::slice_tail(n=1) %>%
-      tidyr::separate_wider_delim( cols = V1, delim = ",", names = c("taxon_a_id","taxon_b_id","scientific_name_a","scientific_name_b","all_total","precomputed_age","precomputed_ci_low","precomputed_ci_high","adjusted_age"))
+      tidyr::separate_wider_delim( cols = V1, delim = ",", 
+                                   names = c("taxon_a_id","taxon_b_id","scientific_name_a",
+                                             "scientific_name_b","all_total","precomputed_age",
+                                             "precomputed_ci_low","precomputed_ci_high","adjusted_age"))
     return(data)
   }, error = function(e) { 
-    print(e)
-    return(data.frame("taxon_a_id" = c(),"taxon_b_id" = c(),"scientific_name_a" = c(),"scientific_name_b" = c(),"all_total" = c(),"precomputed_age" = c(),"precomputed_ci_low" = c(),"precomputed_ci_high" = c(),"adjusted_age" = c()))
+    message(paste("Cannot get data for taxa", tax.a, "and", tax.b))
+    message("Original error message:")
+    message(conditionMessage(e))
+    
+    return(data.frame("taxon_a_id" = tax.a,"taxon_b_id" = tax.b,"scientific_name_a" = NA,
+                      "scientific_name_b" = NA,"all_total" = NA,"precomputed_age" = NA,
+                      "precomputed_ci_low" = NA,"precomputed_ci_high" = NA,"adjusted_age" = NA))
   }  ) 
 }
 
 # Save to avoid repeated API calls
 if(!file.exists( "time.tree.data.tsv")){
   
-  # Get the NCBI taxon ids for each species
-  taxon.data <- lapply(metadata.mammal$species, \(x) httr::GET( paste0("http://timetree.temple.edu/api/taxon/",curl::curl_escape(x)))  ) 
+  # Get the NCBI taxon ids for each species and add to metadata
+  taxon.data <- lapply( METADATA$mammal$species, \(x) httr::GET( paste0("http://timetree.temple.edu/api/taxon/",curl::curl_escape(x)))  ) 
   taxon.ids <- sapply(lapply(taxon.data, httr::content), \(x) x$taxon_id)
-  metadata.mammal$taxon_id <- taxon.ids
+  METADATA$mammal$taxon_id <- taxon.ids
   
   # Find the pairwise distances between each species
-  pairwise.species <- expand.grid(unique(metadata.mammal$taxon_id), unique(metadata.mammal$taxon_id)) %>%
+  pairwise.species <- expand.grid(unique(METADATA$mammal$taxon_id), unique(METADATA$mammal$taxon_id)) %>%
     dplyr::filter(Var1!=Var2, Var1<Var2) # only call each pair once
   
   pairwise.times <- do.call(rbind, mapply(get.time.tree, pairwise.species$Var1, pairwise.species$Var2))
@@ -404,7 +442,7 @@ paml.shell.script <- paste0("#!/bin/bash\n\n",
 )
 write_file(paml.shell.script, "run_paml.sh")
 
-#### Run HyPhy RELAX and MEME to test for relaxed selection ####
+#### Run HyPhy RELAX to test for relaxed selection and MEME for diversifying selection ####
 
 cat("Creating HyPhy RELAX and MEME control files\n")
 # Create and save a tree in HyPhy format. Set test branches to the given node, all others
@@ -570,88 +608,88 @@ zfy.nt.aln <- ALIGNMENTS$nt.mammal.biostrings@unmasked[names(ALIGNMENTS$nt.mamma
                                                                                                               METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
 Biostrings::writeXStringSet(zfy.nt.aln,  file = "aln/zfy_only/zfy.aln", format = "fasta")
 
-#### Create independent trees for ZFX and ZFY sequences ####
+#### Create independent trees for ZFX and ZFY sequences with species trees ####
 
 # We can specify the true phylogeny of the sequences for ancestral reconstruction
-zfx.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
-                        "(", # Eutheria
-                        "(Southern_two-toed_sloth_ZFX, African_bush_elephant_ZFX)Atlantogenata, ", # Atlantogenata  
-                        "(", # Boreoeutheria
-                        "(",  # Euarchonoglires
-                        "( ", # Simiiformes
-                        "Common_marmoset_ZFX,", # New world monkeys
-                        "(", # Catarrhini (Old world monkeys & apes)
-                          "(", #Cercopithecidae (Old world monkeys)
-                          "Golden_snub-nosed_monkey_ZFX,",   #Colobinae
-                          "(Olive_baboon_ZFX, Macaque_ZFX)Cercopithecinae", # Cercopithecinae
-                          ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
-                        "(", # Hominidae
-                        "Gorilla_ZFX, (Chimpanzee_ZFX, Human_ZFX)Hominini",
-                        ")Hominidae",  # /Hominidae
-                        ")Catarrhini", # /Catarrhini
-                        ")Simiiformes,",  # /Simiiformes
-                        "(", # Rodentia
-                        "(Gray_squirrel_Zfx,(Arctic_ground_squirrel_Zfx, Alpine_marmot_ZFX)Xerinae)Sciuridae,", # Sciuridae 
-                          "(Damara_mole-rat_Zfx,", 
-                            "(Beaver_Zfx, (", # Muroidea
-                              "(North_American_deer_mouse_Zfx, Desert_hamster_Zfx)Cricetidae,", # Cricetidae 
-                              "(Mongolian_gerbil_Zfx, (Rat_Zfx, (Mouse_Zfx, African_Grass_Rat_Zfx)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-                            ")Eumuroida)Muroidea)Muroidea-Fukomys", # /Muroidea
-                        ")Rodentia", # /Rodentia
-                        ")Euarchonoglires,", # /Euarchonoglires
-                        "(", # Laurasiatheria
-                        "(",  # Carnivora
-                        "Cat_ZFX, (Dog_ZFX, (Stoat_ZFX, Polar_bear_ZFX)Arctoidea)Caniformia",
-                        ")Carnivora,",  # /Carnivora
-                        "(",  # Euungulata 
-                        "Horse_ZFX, (Pig_ZFX, (White_tailed_deer_ZFX, (Cattle_ZFX, Goat_ZFX)Bovidae)Pecora)Artiodactyla",
-                        ")Euungulata", # /Euungulata 
-                        ")Laurasiatheria", # /Laurasiatheria
-                        ")Boreoeutheria", # /Boreoeutheria
-                        ")Eutheria", # /Eutheria
-                        ")Theria)Mammalia;") # /Outgroups
+# zfx.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
+#                         "(", # Eutheria
+#                         "(Southern_two-toed_sloth_ZFX, African_bush_elephant_ZFX)Atlantogenata, ", # Atlantogenata  
+#                         "(", # Boreoeutheria
+#                         "(",  # Euarchonoglires
+#                         "( ", # Simiiformes
+#                         "Common_marmoset_ZFX,", # New world monkeys
+#                         "(", # Catarrhini (Old world monkeys & apes)
+#                           "(", #Cercopithecidae (Old world monkeys)
+#                           "Golden_snub-nosed_monkey_ZFX,",   #Colobinae
+#                           "(Olive_baboon_ZFX, Macaque_ZFX)Cercopithecinae", # Cercopithecinae
+#                           ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
+#                         "(", # Hominidae
+#                         "Gorilla_ZFX, (Chimpanzee_ZFX, Human_ZFX)Hominini",
+#                         ")Hominidae",  # /Hominidae
+#                         ")Catarrhini", # /Catarrhini
+#                         ")Simiiformes,",  # /Simiiformes
+#                         "(", # Rodentia
+#                         "(Gray_squirrel_Zfx,(Arctic_ground_squirrel_Zfx, Alpine_marmot_ZFX)Xerinae)Sciuridae,", # Sciuridae 
+#                           "(Damara_mole-rat_Zfx,", 
+#                             "(Beaver_Zfx, (", # Muroidea
+#                               "(North_American_deer_mouse_Zfx, Desert_hamster_Zfx)Cricetidae,", # Cricetidae 
+#                               "(Mongolian_gerbil_Zfx, (Rat_Zfx, (Mouse_Zfx, African_Grass_Rat_Zfx)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
+#                             ")Eumuroida)Muroidea)Muroidea-Fukomys", # /Muroidea
+#                         ")Rodentia", # /Rodentia
+#                         ")Euarchonoglires,", # /Euarchonoglires
+#                         "(", # Laurasiatheria
+#                         "(",  # Carnivora
+#                         "Cat_ZFX, (Dog_ZFX, (Stoat_ZFX, Polar_bear_ZFX)Arctoidea)Caniformia",
+#                         ")Carnivora,",  # /Carnivora
+#                         "(",  # Euungulata 
+#                         "Horse_ZFX, (Pig_ZFX, (White_tailed_deer_ZFX, (Cattle_ZFX, Goat_ZFX)Bovidae)Pecora)Artiodactyla",
+#                         ")Euungulata", # /Euungulata 
+#                         ")Laurasiatheria", # /Laurasiatheria
+#                         ")Boreoeutheria", # /Boreoeutheria
+#                         ")Eutheria", # /Eutheria
+#                         ")Theria)Mammalia;") # /Outgroups
 
-write_file(zfx.phylogeny, "aln/zfx_only/zfx.nt.species.nwk")
+# write_file(zfx.phylogeny, "aln/zfx_only/zfx.nt.species.nwk")
 
-zfy.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
-                        "(", # Eutheria
-                        "(Southern_two-toed_sloth_ZFY, African_bush_elephant_ZFY)Atlantogenata, ", # Afrotheria & Xenarthra
-                        "(", # Boreoeutheria
-                        "(",  # Euarchonoglires
-                        "( ", # Simiiformes
-                        "Common_marmoset_ZFY,", # New world monkeys
-                        "(", # Catarrhini (Old world monkeys & apes)
-                        "(", #Cercopithecidae (Old world monkeys)
-                        "Golden_snub-nosed_monkey_ZFY,",   #Colobinae
-                        "(Olive_baboon_ZFY, Macaque_ZFY)Cercopithecinae", # Cercopithecinae
-                        ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
-                        "(", # Hominidae
-                        "Gorilla_ZFY, (Chimpanzee_ZFY, Human_ZFY)Hominini",
-                        ")Hominidae",  # /Hominidae
-                        ")Catarrhini", # /Catarrhini
-                        ")Simiiformes,",  # /Simiiformes
-                        "(", # Rodentia
-                        "(Gray_squirrel_Zfy,(Arctic_ground_squirrel_Zfx-like_putative-Zfy, Alpine_marmot_ZFY)Xerinae)Sciuridae,", # Sciuridae 
-                        "(Damara_mole-rat_Zfy,", 
-                        "(Beaver_Zfx-like_putative-Zfy, (", # Muroidea
-                        "(North_American_deer_mouse_Zfx-like_putative-Zfy, Desert_hamster_Zfx-like_putative-Zfy)Cricetidae,", # Cricetidae 
-                        "(Mongolian_gerbil_Zfx-like_putative-Zfy, (Rat_Zfy2, ((Mouse_Zfy1, Mouse_Zfy2), (African_Grass_Rat_ZFY2-like_1, African_Grass_Rat_ZFY2-like_2))Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-                        ")Eumuroida)Muroidea)Muroidea-Fukomys", # /Muroidea
-                        ")Rodentia", # /Rodentia
-                        ")Euarchonoglires,", # /Euarchonoglires
-                        "(", # Laurasiatheria
-                        "(",  # Carnivora
-                        "Cat_ZFY, (Dog_ZFY, (Stoat_ZFY, Polar_bear_ZFY)Arctoidea)Caniformia",
-                        ")Carnivora,",  # /Carnivora
-                        "(",  # Euungulata 
-                        "Horse_ZFY, (Pig_ZFY, (White_tailed_deer_ZFY, (Cattle_ZFY, Goat_ZFY)Bovidae)Pecora)Artiodactyla",
-                        ")Euungulata", # /Euungulata 
-                        ")Laurasiatheria", # /Laurasiatheria
-                        ")Boreoeutheria", # /Boreoeutheria
-                        ")Eutheria", # /Eutheria
-                        ")Theria)Mammalia;") # /Outgroups
+# zfy.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
+#                         "(", # Eutheria
+#                         "(Southern_two-toed_sloth_ZFY, African_bush_elephant_ZFY)Atlantogenata, ", # Afrotheria & Xenarthra
+#                         "(", # Boreoeutheria
+#                         "(",  # Euarchonoglires
+#                         "( ", # Simiiformes
+#                         "Common_marmoset_ZFY,", # New world monkeys
+#                         "(", # Catarrhini (Old world monkeys & apes)
+#                         "(", #Cercopithecidae (Old world monkeys)
+#                         "Golden_snub-nosed_monkey_ZFY,",   #Colobinae
+#                         "(Olive_baboon_ZFY, Macaque_ZFY)Cercopithecinae", # Cercopithecinae
+#                         ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
+#                         "(", # Hominidae
+#                         "Gorilla_ZFY, (Chimpanzee_ZFY, Human_ZFY)Hominini",
+#                         ")Hominidae",  # /Hominidae
+#                         ")Catarrhini", # /Catarrhini
+#                         ")Simiiformes,",  # /Simiiformes
+#                         "(", # Rodentia
+#                         "(Gray_squirrel_Zfy,(Arctic_ground_squirrel_Zfx-like_putative-Zfy, Alpine_marmot_ZFY)Xerinae)Sciuridae,", # Sciuridae 
+#                         "(Damara_mole-rat_Zfy,", 
+#                         "(Beaver_Zfx-like_putative-Zfy, (", # Muroidea
+#                         "(North_American_deer_mouse_Zfx-like_putative-Zfy, Desert_hamster_Zfx-like_putative-Zfy)Cricetidae,", # Cricetidae 
+#                         "(Mongolian_gerbil_Zfx-like_putative-Zfy, (Rat_Zfy2, ((Mouse_Zfy1, Mouse_Zfy2), (African_Grass_Rat_ZFY2-like_1, African_Grass_Rat_ZFY2-like_2))Mus-Arvicanthis)Murinae)Muridae", # Muridae 
+#                         ")Eumuroida)Muroidea)Muroidea-Fukomys", # /Muroidea
+#                         ")Rodentia", # /Rodentia
+#                         ")Euarchonoglires,", # /Euarchonoglires
+#                         "(", # Laurasiatheria
+#                         "(",  # Carnivora
+#                         "Cat_ZFY, (Dog_ZFY, (Stoat_ZFY, Polar_bear_ZFY)Arctoidea)Caniformia",
+#                         ")Carnivora,",  # /Carnivora
+#                         "(",  # Euungulata 
+#                         "Horse_ZFY, (Pig_ZFY, (White_tailed_deer_ZFY, (Cattle_ZFY, Goat_ZFY)Bovidae)Pecora)Artiodactyla",
+#                         ")Euungulata", # /Euungulata 
+#                         ")Laurasiatheria", # /Laurasiatheria
+#                         ")Boreoeutheria", # /Boreoeutheria
+#                         ")Eutheria", # /Eutheria
+#                         ")Theria)Mammalia;") # /Outgroups
 
-write_file(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
+# write_file(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
 
 # Run the ancestral reconstructions
 run.iqtree("aln/zfx_only/zfx.aln", 
