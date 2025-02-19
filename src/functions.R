@@ -237,11 +237,14 @@ read.sequences <- function(read.fasta.output){
 read.metadata <- function(read.fasta.output){
   metadata <- do.call(rbind, lapply(read.fasta.output, function(x) x$metadata))
   
+  outgroup.sequences <-  c("Platypus_ZFX", "Opossum_ZFX", 
+                           "Xenopus_ZFX.S", "Xenopus_ZFX.L", 
+                           "Chicken_ZFX", "Zebra_finch_ZFX")
+  
   # Grouping for trees
   metadata %<>%
     dplyr::mutate(group = case_when(grepl("ZFY", common.name, ignore.case=T) ~ "ZFY",
-                                    common.name %in% c("Platypus_ZFX", "Opossum_ZFX", 
-                                                       "Xenopus_ZFX.S", "Xenopus_ZFX.L", "Chicken_ZFX") ~ "Outgroup",
+                                    common.name %in% outgroup.sequences ~ "Outgroup",
                                     T ~ "ZFX"))
   metadata
 }
