@@ -6,6 +6,11 @@
 # nlstradamus.pl
 # pwm_predict/pwm_predict
 
+if(!file.exists("bin/macse_v2.07.jar")) stop("MACSE not found in ./bin/\nwget https://www.agap-ge2pop.org/wp-content/uploads/macse/releases/macse_v2.07.jar")
+if(!file.exists("bin/nlstradamus.pl")) stop("NLStradamus not found in ./bin/\nwget http://www.moseslab.csb.utoronto.ca/NLStradamus/NLStradamus/NLStradamus.1.8.tar.gz")
+if(!file.exists("bin/pwm_predict/pwm_predict")) stop("pwm_predict not found in ./bin/\nwget https://zf.princeton.edu/downloads/pwm_predict.1.0.tar.gz")
+if(!file.exists("bin/muscle5.1.linux_intelx64")) stop("Muscle not found in ./bin/\nwget https://github.com/rcedgar/muscle/releases/download/v5.1/muscle5.1.linux_intel64")
+
 # Other binaries are expected on the PATH:
 # PAML
 # IQ-TREE
@@ -32,7 +37,6 @@ cat("Packages loaded\n")
 #### Create output directory structure #####
 
 # Create directories that remain constant
-filesstrings::create_dir("bin")
 filesstrings::create_dir("paml")
 filesstrings::create_dir("paml/site-specific")
 filesstrings::create_dir("paml/exon_1_3-6")
