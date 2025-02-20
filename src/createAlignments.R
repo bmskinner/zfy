@@ -412,10 +412,11 @@ muridae.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Mongolian_gerbil_Zfx-
 write.paml.fg.tree(muridae.node, 
                    "paml/branch-site-muridae")
 
-murinae.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Rat_Zfy2"))
+murinae.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Norwegian_Rat_Zfy2"))
 write.paml.fg.tree(murinae.node, 
                    "paml/branch-site-murinae")
 
+cat(timestamp(), "Creating CODEML control script\n")
 # Add a script to submit these jobs to the cluster
 # Run the commands manually - this takes a long time to run, so only invoke when needed
 paml.shell.script <- paste0("#!/bin/bash\n\n",
@@ -460,7 +461,7 @@ create.mammal.hyphy.relax.tree.file <- function(fg.node, node.name){
   
   # Root the tree on platypus
   # The root is arbitrarily placed in the platypus branch to fit neatly
-  hyphy.tree <- phytools::reroot(hyphy.tree, which(hyphy.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+  hyphy.tree <- reroot.tree(hyphy.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
   
   # Find the nodes that are ZFY vs ZFX and add to tree
   mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
@@ -509,7 +510,7 @@ create.mammal.hyphy.meme.tree.file <- function(fg.node, node.name){
   
   # Root the tree on platypus
   # The root is arbitrarily placed in the platypus branch to fit neatly
-  hyphy.tree <- phytools::reroot(hyphy.tree, which(hyphy.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+  hyphy.tree <- reroot.tree(hyphy.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
 
   # Find the nodes that are ZFY vs ZFX and add to tree
   mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
@@ -532,8 +533,7 @@ create.combined.hyphy.meme.tree.file <- function(fg.node, node.name){
   hyphy.tree <- ape::read.tree(FILES$combined.nt.aln.treefile)
   
   # Root on Xenopus
-  xenopus.node <- ape::getMRCA(hyphy.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
-  hyphy.tree <- phytools::reroot(hyphy.tree, xenopus.node, position = 0.01)
+  hyphy.tree <- reroot.tree(hyphy.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"), position = 0.01)
   
   # Find the nodes that are ZFY vs ZFX and add to tree
   gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
