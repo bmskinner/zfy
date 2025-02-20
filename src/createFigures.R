@@ -682,6 +682,56 @@ aa.structure.confident.plot <- annotate.structure.plot(aa.structure.confident.pl
 save.double.width("figure/Figure_2_aa.structure.confident.png", aa.structure.confident.plot, height = 120)
 
 
+#### Calculate conservation between X and Y gametologues for each species ####
+
+# Given species names, find the X and Y sequences from the aa alignment.
+# Generate a vector of 0 (diferent aa at a site) or 1 (same aa at a site).
+calculate.gametologue.conservation <- function(zfx, zfy){
+  
+  cat(zfx, "\n")
+  tryCatch({
+    # Find the characters in the reference sequence
+    aa.aln <- ggmsa::tidy_msa(ALIGNMENTS$aa.combined.biostrings)  %>%
+      dplyr::filter( name==zfx | name==zfy) %>%
+      dplyr::mutate(type = case_when(str_detect(name, "(?i)zfy") ~ "ZFY",
+                                     .default = "ZFX")) %>%
+      tidyr::pivot_wider(id_cols = position, names_from = type, values_from = character) %>%
+      dplyr::mutate(conservation = as.numeric(ZFX==ZFY))
+    
+    return(data.frame("zfx"=zfx, "zfy"=zfy,
+                "conservation" = aa.aln$conservation, site = 1:length( aa.aln$conservation)))
+  },
+  error = function(e){
+    message(conditionMessage(e))
+    return(data.frame("zfx"=zfx, "zfy"=zfy, "conservation"=NA, site=NA ))
+  }
+  )
+  
+}
+
+# Get only one ZFX/Y pair per species
+valid.pairs <- METADATA$mammal %>%
+  dplyr::filter(group=="ZFX" | group=="ZFY") %>%
+  dplyr::group_by(species) %>%
+  dplyr::arrange(species, group) %>%
+  dplyr::slice_head(n=2) %>% # skip second zfy if present
+  tidyr::pivot_wider(id_cols = Species_common_name, names_from = group, values_from = common.name)
+
+# Calculate homologue conservation across the alignments
+gametologue.conservation <- do.call(rbind, mapply(calculate.gametologue.conservation,   valid.pairs$ZFX,   valid.pairs$ZFY, SIMPLIFY = FALSE)) %>%
+  dplyr::mutate(zfx = str_replace_all(zfx, "_", " "),
+                zfy = str_replace_all(zfy, "_", " "),
+                zfx = factor(zfx, levels = combined.taxa.name.order))
+
+
+gametologue.conservation.plot <- ggplot(gametologue.conservation, aes(x=site, y=zfx, col=as.factor(conservation) ))+
+  geom_tile()+
+  scale_colour_manual(values=c("0"="darkblue", "1"="lightgrey"))+
+  labs(x="Site")+
+  theme(legend.position = "none",
+        panel.grid = element_blank())
+save.double.width(filename = "figure/gametologue.conservation.png", gametologue.conservation.plot, height = 170)
+
 #### Plot the conservation of hydrophobicity across mammal/outgroup AA MSA ####
 cat("Plotting conservation of hydrophobicity\n")
 msa.aa.aln.hydrophobicity <- do.call(rbind, mapply(calc.hydrophobicity, aa=ALIGNMENTS$aa.combined.biostrings@unmasked, 

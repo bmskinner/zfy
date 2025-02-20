@@ -312,7 +312,7 @@ cat(timestamp(), "Creating CODEML branch-site model control files\n")
 nt.aln.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
 # Root the tree on platypus and resave
 # The root is arbitrarily placed in the platypus branch to fit neatly
-nt.aln.tree <- phytools::reroot(nt.aln.tree, which(nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+nt.aln.tree <- reroot.tree(nt.aln.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
 ape::write.tree(nt.aln.tree, file = paste0(FILES$mammal.nt.aln, ".rooted.treefile"))
 
 # Find the nodes that are ZFY vs ZFX and add to tree
