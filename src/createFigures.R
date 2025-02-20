@@ -48,7 +48,6 @@ nt.aln.tree <- ape::read.tree(FILES$combined.nt.aln.treefile)
 # The root is arbitrarily placed to fit neatly
 xenopus.node <- ape::getMRCA(nt.aln.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
 nt.aln.tree <- phytools::reroot(nt.aln.tree, xenopus.node, position = 0.01)
-# nt.aln.tree <- phytools::reroot(nt.aln.tree, which(nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
 ape::write.tree(nt.aln.tree, file = paste0(FILES$combined.nt.aln, ".rooted.treefile"))
 
 # Find the nodes that are ZFY vs ZFX and add to tree
@@ -101,7 +100,7 @@ create.exon.plot <- function(name){
   
   exon.tree <- ape::read.tree(paste0(exon.aln.file, ".treefile"))
   # Root the tree on platypus
-  exon.tree <- phytools::reroot(exon.tree, which(exon.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+  exon.tree <- reroot.tree(exon.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015 )
   
   # Find the nodes that are ZFY vs ZFX and add to tree
   mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
@@ -556,7 +555,8 @@ ancestral.nt.seqs <- read.table(paste0(FILES$mammal.nt.aln, ".state") ,header=TR
 
 # Read the tree back to keep full node names
 nt.aln.tree.nodes <- ape::read.tree(paste0(FILES$mammal.nt.aln, ".treefile"))
-nt.aln.tree.nodes <- ape::root(nt.aln.tree.nodes, "Platypus_ZFX")
+nt.aln.tree.nodes.root <- ape::getMRCA(nt.aln.tree.nodes, c("Platypus_ZFX", "Australian_echidna_ZFX"))
+nt.aln.tree.nodes <- ape::root(nt.aln.tree.nodes, node=nt.aln.tree.nodes.root)
 
 # Node number returned includes number of tip labels; subtract to get node
 rodent.node <- ape::getMRCA(nt.aln.tree.nodes, c("Mouse_Zfy1", "Desert_hamster_Zfx-like_putative-Zfy")) - length(nt.aln.tree.nodes$tip.label)
@@ -818,7 +818,7 @@ create.relax.k.tree <- function(json.file){
   branch.lengths <- unlist(sapply(hyphy.input.tree$edge[,2], \(x)  k.vals[k.vals$node==x,"branch.length"]))
   hyphy.input.tree$edge.length <- branch.lengths
   
-  hyphy.input.tree <- reroot.tree(hyphy.input.tree, node.labels="Platypus_ZFX",  position=0.015)
+  hyphy.input.tree <- reroot.tree(hyphy.input.tree, node.labels=c("Platypus_ZFX", "Australian_echidna_ZFX",  position=0.015)
   hyphy.input.tree <- reroot.tree(hyphy.input.tree, node.labels= c("Xenopus_ZFX_L", "Xenopus_ZFX_S"),  position = 0.015) # will fail silently for mammal-only
 
   cat(json.file,  "K=", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2), 
@@ -1271,8 +1271,10 @@ zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "African_Grass_Rat_ZFY2-l
 
 
 # Root the trees on platypus
-zfx.nt.aln.tree <- phytools::reroot(zfx.nt.aln.tree, which(zfx.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
-zfy.nt.aln.tree <- phytools::reroot(zfy.nt.aln.tree, which(zfy.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+zfx.nt.aln.tree <- reroot.tree(zfx.nt.aln.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
+zfy.nt.aln.tree <- reroot.tree(zfy.nt.aln.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
+# zfx.nt.aln.tree <- phytools::reroot(zfx.nt.aln.tree, which(zfx.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+# zfy.nt.aln.tree <- phytools::reroot(zfy.nt.aln.tree, which(zfy.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
 
 # Remove gene names so tip labels are comparable
 zfx.nt.aln.tree$tip.label <- str_replace(zfx.nt.aln.tree$tip.label, "_Z[F|f][X|x].*", "")

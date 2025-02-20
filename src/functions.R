@@ -238,6 +238,7 @@ read.metadata <- function(read.fasta.output){
   metadata <- do.call(rbind, lapply(read.fasta.output, function(x) x$metadata))
   
   outgroup.sequences <-  c("Platypus_ZFX", "Opossum_ZFX", 
+                           "Australian_echidna_ZFX",
                            "Xenopus_ZFX.S", "Xenopus_ZFX.L", 
                            "Chicken_ZFX", "Zebra_finch_ZFX")
   
@@ -422,9 +423,9 @@ plot.tree <- function(tree.data, tiplab.font.size = 2, ...){
     geom_tiplab(size=tiplab.font.size, aes_string(...))+
     scale_color_manual(values = c(OUT.TREE.COLOUR, ZFX.TREE.COLOUR, ZFY.TREE.COLOUR))+
     # geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")+
-    geom_nodepoint(size=1.5,  col="black")+
-    geom_nodepoint(size=0.75,  col=node.label.values$colour)+
-    geom_treescale(fontsize =2, y = -1, width = 0.05) +
+    geom_nodepoint(size=1.25,  col="black")+
+    geom_nodepoint(size=0.65,  col=node.label.values$colour)+
+    geom_treescale(fontsize =1.8, y = -1, width = 0.05) +
     coord_cartesian(clip="off", ylim = c(-2, length(tree.data$tip.label)+1))+
     theme_tree() +
     theme(legend.position = "none")
