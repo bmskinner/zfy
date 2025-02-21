@@ -220,7 +220,61 @@ species.tree <- ape::read.tree("species_names.nwk")
 species.tree$edge.length <- NULL # remove times
 species.tree$tip.label <- gsub("_", " ", species.tree$tip.label)
 
+# Set a new node label for the common ancestral node of the given species
+update.node.label <- function(tree, new.name, ...){
+  test.node <- ape::getMRCA(tree, c(...))
+  tree$node.label[test.node-length(tree$tip.label)] <- new.name
+  tree
+}
+
+# Set node names for ZFX species tree
 zfx.phylogeny <- species.tree
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Mus", "Mus musculus", "Mus musculus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Arvicanthis", "Arvicanthis niloticus", "Arvicanthis niloticus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Mus-Arvicanthis", "Mus musculus", "Arvicanthis niloticus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Rattus", "Rattus norvegicus", "Rattus rattus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Murinae", "Mus musculus", "Rattus rattus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Muridae", "Mus musculus", "Meriones unguiculatus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Cricetidae", "Peromyscus maniculatus", "Phodopus roborovskii")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Eumuroida", "Mus musculus", "Phodopus roborovskii")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Muroidea", "Mus musculus", "Castor canadensis")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Muroidea-Fukomys", "Mus musculus", "Fukomys damarensis")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Xerinae", "Marmota marmota", "Urocitellus parryii")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Sciuridae", "Marmota marmota", "Sciurus carolinensis")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Rodentia", "Mus musculus", "Sciurus carolinensis")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Hominini", "Pan troglodytes", "Homo sapiens")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Homininae", "Gorilla gorilla", "Homo sapiens")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Hominidae", "Pongo pygmaeus", "Homo sapiens")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Cercopithecinae", "Macaca mulatta", "Papio anubis")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Cercopithecidae", "Rhinopithecus roxellana", "Papio anubis")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Catarrhini", "Homo sapiens", "Papio anubis")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Simiiformes", "Callithrix jacchus", "Papio anubis")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Euarchonoglires", "Mus musculus", "Papio anubis")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Otarioidea", "Zalophus californianus", "Odobenus rosmarus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Otarioidea-Mustela", "Mustela erminea", "Odobenus rosmarus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Ursus", "Ursus arctos", "Ursus maritimus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Arctoidea", "Mustela erminea", "Ursus maritimus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Canidae", "Canis lupus", "Vulpes vulpes")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Caniformia", "Canis lupus", "Odobenus rosmarus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Carnivora", "Canis lupus", "Felis catus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Felinae", "Lynx canadensis", "Felis catus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Ferae", "Manis pentadactyla", "Felis catus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Panperissodactyla", "Equus caballus", "Felis catus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Bovidae", "Capra hircus", "Bos taurus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Pecora", "Odocoileus virginianus", "Bos taurus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Cetacea", "Balaenoptera musculus", "Monodon monoceros")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Cetruminantia", "Balaenoptera musculus", "Bos taurus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Artiodactyla", "Sus scrofa", "Bos taurus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Euungulata", "Sus scrofa", "Zalophus californianus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Scrotifera", "Phyllostomus discolor", "Bos taurus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Boreoeutheria", "Mus musculus", "Bos taurus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Atlantogenata", "Choloepus didactylus", "Loxodonta africana")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Eutheria", "Mus musculus", "Loxodonta africana")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Marsupialia", "Monodelphis domestica", "Phascolarctos cinereus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Theria", "Mus musculus", "Phascolarctos cinereus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Monotremata", "Ornithorhynchus anatinus", "Tachyglossus aculeatus")
+zfx.phylogeny <- update.node.label(zfx.phylogeny, "Mammalia", "Mus musculus", "Tachyglossus aculeatus")
+
 zfx.phylogeny$tip.label <- sapply(zfx.phylogeny$tip.label, \(x) unique(METADATA$mammal[METADATA$mammal$species==x & (METADATA$mammal$group=="ZFX" | METADATA$mammal$group=="Outgroup"),]$common.name), simplify = TRUE)
 zfx.phylogeny$tip.label <- gsub(" ", "_", zfx.phylogeny$tip.label)
 ape::write.tree(zfx.phylogeny, "aln/zfx_only/zfx.nt.species.nwk")
@@ -233,8 +287,55 @@ zfy.phylogeny <- phytools::bind.tip(zfy.phylogeny, "Mus musculus", where=mus.nod
 arvicanthis.node <- which(zfy.phylogeny$tip.label=="Arvicanthis niloticus")
 zfy.phylogeny <- phytools::bind.tip(zfy.phylogeny, "Arvicanthis niloticus", where=arvicanthis.node)
 
+# Replace node numbers with closest identifiable clades
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Mus", "Mus musculus", "Mus musculus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Arvicanthis", "Arvicanthis niloticus", "Arvicanthis niloticus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Mus-Arvicanthis", "Mus musculus", "Arvicanthis niloticus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Rattus", "Rattus norvegicus", "Rattus rattus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Murinae", "Mus musculus", "Rattus rattus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Muridae", "Mus musculus", "Meriones unguiculatus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Cricetidae", "Peromyscus maniculatus", "Phodopus roborovskii")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Eumuroida", "Mus musculus", "Phodopus roborovskii")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Muroidea", "Mus musculus", "Castor canadensis")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Muroidea-Fukomys", "Mus musculus", "Fukomys damarensis")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Xerinae", "Marmota marmota", "Urocitellus parryii")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Sciuridae", "Marmota marmota", "Sciurus carolinensis")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Rodentia", "Mus musculus", "Sciurus carolinensis")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Hominini", "Pan troglodytes", "Homo sapiens")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Homininae", "Gorilla gorilla", "Homo sapiens")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Hominidae", "Pongo pygmaeus", "Homo sapiens")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Cercopithecinae", "Macaca mulatta", "Papio anubis")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Cercopithecidae", "Rhinopithecus roxellana", "Papio anubis")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Catarrhini", "Homo sapiens", "Papio anubis")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Simiiformes", "Callithrix jacchus", "Papio anubis")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Euarchonoglires", "Mus musculus", "Papio anubis")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Otarioidea", "Zalophus californianus", "Odobenus rosmarus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Otarioidea-Mustela", "Mustela erminea", "Odobenus rosmarus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Ursus", "Ursus arctos", "Ursus maritimus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Arctoidea", "Mustela erminea", "Ursus maritimus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Canidae", "Canis lupus", "Vulpes vulpes")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Caniformia", "Canis lupus", "Odobenus rosmarus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Carnivora", "Canis lupus", "Felis catus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Felinae", "Lynx canadensis", "Felis catus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Ferae", "Manis pentadactyla", "Felis catus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Panperissodactyla", "Equus caballus", "Felis catus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Bovidae", "Capra hircus", "Bos taurus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Pecora", "Odocoileus virginianus", "Bos taurus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Cetacea", "Balaenoptera musculus", "Monodon monoceros")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Cetruminantia", "Balaenoptera musculus", "Bos taurus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Artiodactyla", "Sus scrofa", "Bos taurus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Euungulata", "Sus scrofa", "Zalophus californianus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Scrotifera", "Phyllostomus discolor", "Bos taurus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Boreoeutheria", "Mus musculus", "Bos taurus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Atlantogenata", "Choloepus didactylus", "Loxodonta africana")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Eutheria", "Mus musculus", "Loxodonta africana")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Marsupialia", "Monodelphis domestica", "Phascolarctos cinereus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Theria", "Mus musculus", "Phascolarctos cinereus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Monotremata", "Ornithorhynchus anatinus", "Tachyglossus aculeatus")
+zfy.phylogeny <- update.node.label(zfy.phylogeny, "Mammalia", "Mus musculus", "Tachyglossus aculeatus")
+
 # Get the ordered set of tip labels from metadata based on the tree order. 
-# Search only unique species names, gets two hits for mus, flatten the list result
+# Search only unique species names, gets two hits for Mus+Arvicanthis, flatten the list result
 zfy.phylogeny$tip.label <- unlist( lapply(unique(zfy.phylogeny$tip.label),
                                   \(x) unique(METADATA$mammal[METADATA$mammal$species==x & 
                                                                 (METADATA$mammal$group=="ZFY" | 
@@ -306,86 +407,6 @@ Biostrings::writeXStringSet(zfy.nt.aln,  file = "aln/zfy_only/zfy.aln", format =
 #### Create independent trees for ZFX and ZFY sequences with species trees ####
 
 cat(timestamp(), "Running ancestral sequence reconstruction with species tree\n")
-# We can specify the true phylogeny of the sequences for ancestral reconstruction
-# zfx.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
-#                         "(", # Eutheria
-#                         "(Southern_two-toed_sloth_ZFX, African_bush_elephant_ZFX)Atlantogenata, ", # Atlantogenata  
-#                         "(", # Boreoeutheria
-#                         "(",  # Euarchonoglires
-#                         "( ", # Simiiformes
-#                         "Common_marmoset_ZFX,", # New world monkeys
-#                         "(", # Catarrhini (Old world monkeys & apes)
-#                           "(", #Cercopithecidae (Old world monkeys)
-#                           "Golden_snub-nosed_monkey_ZFX,",   #Colobinae
-#                           "(Olive_baboon_ZFX, Macaque_ZFX)Cercopithecinae", # Cercopithecinae
-#                           ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
-#                         "(", # Hominidae
-#                         "Gorilla_ZFX, (Chimpanzee_ZFX, Human_ZFX)Hominini",
-#                         ")Hominidae",  # /Hominidae
-#                         ")Catarrhini", # /Catarrhini
-#                         ")Simiiformes,",  # /Simiiformes
-#                         "(", # Rodentia
-#                         "(Gray_squirrel_Zfx,(Arctic_ground_squirrel_Zfx, Alpine_marmot_ZFX)Xerinae)Sciuridae,", # Sciuridae 
-#                           "(Damara_mole-rat_Zfx,", 
-#                             "(Beaver_Zfx, (", # Muroidea
-#                               "(North_American_deer_mouse_Zfx, Desert_hamster_Zfx)Cricetidae,", # Cricetidae 
-#                               "(Mongolian_gerbil_Zfx, (Rat_Zfx, (Mouse_Zfx, African_Grass_Rat_Zfx)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-#                             ")Eumuroida)Muroidea)Muroidea-Fukomys", # /Muroidea
-#                         ")Rodentia", # /Rodentia
-#                         ")Euarchonoglires,", # /Euarchonoglires
-#                         "(", # Laurasiatheria
-#                         "(",  # Carnivora
-#                         "Cat_ZFX, (Dog_ZFX, (Stoat_ZFX, Polar_bear_ZFX)Arctoidea)Caniformia",
-#                         ")Carnivora,",  # /Carnivora
-#                         "(",  # Euungulata 
-#                         "Horse_ZFX, (Pig_ZFX, (White_tailed_deer_ZFX, (Cattle_ZFX, Goat_ZFX)Bovidae)Pecora)Artiodactyla",
-#                         ")Euungulata", # /Euungulata 
-#                         ")Laurasiatheria", # /Laurasiatheria
-#                         ")Boreoeutheria", # /Boreoeutheria
-#                         ")Eutheria", # /Eutheria
-#                         ")Theria)Mammalia;") # /Outgroups
-
-# write_file(zfx.phylogeny, "aln/zfx_only/zfx.nt.species.nwk")
-
-# zfy.phylogeny <- paste0("(Platypus_ZFX, (Opossum_ZFX, ", # Outgroups
-#                         "(", # Eutheria
-#                         "(Southern_two-toed_sloth_ZFY, African_bush_elephant_ZFY)Atlantogenata, ", # Afrotheria & Xenarthra
-#                         "(", # Boreoeutheria
-#                         "(",  # Euarchonoglires
-#                         "( ", # Simiiformes
-#                         "Common_marmoset_ZFY,", # New world monkeys
-#                         "(", # Catarrhini (Old world monkeys & apes)
-#                         "(", #Cercopithecidae (Old world monkeys)
-#                         "Golden_snub-nosed_monkey_ZFY,",   #Colobinae
-#                         "(Olive_baboon_ZFY, Macaque_ZFY)Cercopithecinae", # Cercopithecinae
-#                         ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
-#                         "(", # Hominidae
-#                         "Gorilla_ZFY, (Chimpanzee_ZFY, Human_ZFY)Hominini",
-#                         ")Hominidae",  # /Hominidae
-#                         ")Catarrhini", # /Catarrhini
-#                         ")Simiiformes,",  # /Simiiformes
-#                         "(", # Rodentia
-#                         "(Gray_squirrel_Zfy,(Arctic_ground_squirrel_Zfx-like_putative-Zfy, Alpine_marmot_ZFY)Xerinae)Sciuridae,", # Sciuridae 
-#                         "(Damara_mole-rat_Zfy,", 
-#                         "(Beaver_Zfx-like_putative-Zfy, (", # Muroidea
-#                         "(North_American_deer_mouse_Zfx-like_putative-Zfy, Desert_hamster_Zfx-like_putative-Zfy)Cricetidae,", # Cricetidae 
-#                         "(Mongolian_gerbil_Zfx-like_putative-Zfy, (Rat_Zfy2, ((Mouse_Zfy1, Mouse_Zfy2), (African_Grass_Rat_ZFY2-like_1, African_Grass_Rat_ZFY2-like_2))Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-#                         ")Eumuroida)Muroidea)Muroidea-Fukomys", # /Muroidea
-#                         ")Rodentia", # /Rodentia
-#                         ")Euarchonoglires,", # /Euarchonoglires
-#                         "(", # Laurasiatheria
-#                         "(",  # Carnivora
-#                         "Cat_ZFY, (Dog_ZFY, (Stoat_ZFY, Polar_bear_ZFY)Arctoidea)Caniformia",
-#                         ")Carnivora,",  # /Carnivora
-#                         "(",  # Euungulata 
-#                         "Horse_ZFY, (Pig_ZFY, (White_tailed_deer_ZFY, (Cattle_ZFY, Goat_ZFY)Bovidae)Pecora)Artiodactyla",
-#                         ")Euungulata", # /Euungulata 
-#                         ")Laurasiatheria", # /Laurasiatheria
-#                         ")Boreoeutheria", # /Boreoeutheria
-#                         ")Eutheria", # /Eutheria
-#                         ")Theria)Mammalia;") # /Outgroups
-
-# write_file(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
 
 # Run the ancestral reconstructions
 run.iqtree("aln/zfx_only/zfx.aln", 
@@ -397,17 +418,6 @@ run.iqtree("aln/zfy_only/zfy.aln",
            "-nt AUTO", # number of threads
            "-te aln/zfy_only/zfy.nt.species.nwk", # user tree guide
            "-asr") # ancestral sequence reconstruction
-
-
-# system2("iqtree", paste("-s ", "aln/zfx_only/zfx.aln", 
-#                         "-nt AUTO", # number of threads
-#                         "-te aln/zfx_only/zfx.nt.species.nwk", # user tree guide
-#                         "-asr")) # ancestral sequence reconstruction
-# 
-# system2("iqtree", paste("-s ", "aln/zfy_only/zfy.aln", 
-#                         "-nt AUTO", # number of threads
-#                         "-te aln/zfy_only/zfy.nt.species.nwk", # user tree guide
-#                         "-asr")) # ancestral sequence reconstruction
 
 #### Remove duplicate species nodes from the trees  ####
 
