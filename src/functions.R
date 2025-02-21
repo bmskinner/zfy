@@ -440,7 +440,11 @@ make.outgroup.mini.tree <-function(combined.outgroup.tree, text.labels){
   # 2 rows per label, plus one spacer
   max.y <- length(combined.outgroup.tree.mini$tip.label) + (length(text.labels)*3)
   
+  zfx.min <- min(which(str_detect(combined.outgroup.tree.mini$tip.label, "ZFX")))+sum(METADATA$combined$group=="Outgroup")
+  zfx.max <- zfx.min + sum(METADATA$combined$group=="ZFX") - 1
   
+  zfy.min <- zfx.max + 1
+  zfy.max <- zfy.min + sum(METADATA$combined$group=="ZFY") - 1
   
   # Replace the tip labels with empty string so no labels are plotted
   combined.outgroup.tree.mini$tip.label <- rep("", length(combined.outgroup.tree.mini$tip.label))
@@ -449,20 +453,18 @@ make.outgroup.mini.tree <-function(combined.outgroup.tree, text.labels){
     scale_color_manual(values = c(OUT.TREE.COLOUR, ZFX.TREE.COLOUR, ZFY.TREE.COLOUR))+
     coord_cartesian(ylim = c(0.5, max.y+1), expand = FALSE)
   
-  # Draw marker lines for ZFX and ZFX sequences
-  result <- result + annotate(geom="text", x=0.05, y = 49, size = 2,
-                              angle = 90, label="ZFY", col = ZFY.TREE.COLOUR)
-  result <- result + annotate(geom="text", x=0.05, y = 20, size = 2,
-                              angle = 90, label="ZFX", col = ZFX.TREE.COLOUR)
-  
-  result <- result + annotate(geom="segment", x=0.05, y = 6, linewidth = 0.5,
-                              xend = 0.05, yend=18, col = ZFX.TREE.COLOUR)
-  result <- result + annotate(geom="segment", x=0.05, y = 22, linewidth = 0.5,
-                              xend = 0.05, yend=33, col = ZFX.TREE.COLOUR)
-  result <- result + annotate(geom="segment", x=0.05, y = 34, linewidth = 0.5,
-                              xend = 0.05, yend=47, col = ZFY.TREE.COLOUR)
-  result <- result + annotate(geom="segment", x=0.05, y = 51, linewidth = 0.5,
-                              xend = 0.05, yend=63, col = ZFY.TREE.COLOUR)
+
+  # Draw marker lines
+  result <- result + annotate(geom="segment", x=0.05, y = zfx.min, linewidth = 0.5,
+                              xend = 0.05, yend=zfx.max, col = ZFX.TREE.COLOUR)
+  result <- result + annotate(geom="segment", x=0.05, y = zfy.min, linewidth = 0.5,
+                              xend = 0.05, yend=zfy.max, col = ZFY.TREE.COLOUR)
+
+  # Draw ZFX and ZFY labels
+  result <- result + annotate(geom="label", x=0.05, y = (zfy.min+zfy.max)/2, size = 2,
+                              angle = 90, label="ZFY", col = ZFY.TREE.COLOUR, fill="white", label.size=NA)
+  result <- result + annotate(geom="label", x=0.05, y = (zfx.min+zfx.max)/2, size = 2,
+                              angle = 90, label="ZFX", col = ZFX.TREE.COLOUR, fill="white", label.size=NA)
   
   # Whare is the top of the tree?
   curr.y <- length(combined.outgroup.tree.mini$tip.label) + 3
