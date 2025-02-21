@@ -185,6 +185,26 @@ create.exon.alignment(exon1.3_6.aln, "exon_1.3-6.aln")
 
 run.pwm.predict()
 
+#### Find and export structural features ####
+cat(timestamp(), "Identifying structural features\n")
+# Read the combined tree and find the taxa order
+combined.outgroup.tree <- read.combined.outgroup.tree(FILES$combined.aa.aln.treefile)
+combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")
+combined.taxa.name.order <- ggtree::get_taxa_name(combined.aa.tree) 
+
+# Find and export ZFs
+locations.zf <- locate.zfs.in.alignment(combined.taxa.name.order)
+readr::write_tsv(locations.zf, "aln/locations.zf.tsv")
+
+# Find and export 9aaTADS
+locations.9aaTAD <- locate.9aaTADs.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
+readr::write_tsv(locations.9aaTAD, "aln/locations.9aaTAD.tsv")
+
+# Find and export NLS
+locations.NLS <- locate.NLS.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
+readr::write_tsv(locations.NLS, "aln/locations.NLS.tsv")
+
+
 #### Fetch TimeTree divergence times to highlight the rapid evolution in the rodents ####
 
 # Create a species list for use in bulk TimeTree website. Note that this may not 
@@ -201,13 +221,24 @@ species.tree$edge.length <- NULL # remove times
 species.tree$tip.label <- gsub("_", " ", species.tree$tip.label)
 
 zfx.phylogeny <- species.tree
-zfy.phylogeny <- species.tree
-
 zfx.phylogeny$tip.label <- sapply(zfx.phylogeny$tip.label, \(x) unique(METADATA$mammal[METADATA$mammal$species==x & (METADATA$mammal$group=="ZFX" | METADATA$mammal$group=="Outgroup"),]$common.name), simplify = TRUE)
 zfx.phylogeny$tip.label <- gsub(" ", "_", zfx.phylogeny$tip.label)
 ape::write.tree(zfx.phylogeny, "aln/zfx_only/zfx.nt.species.nwk")
 
-zfy.phylogeny$tip.label <- sapply(zfy.phylogeny$tip.label, \(x) unique(METADATA$mammal[METADATA$mammal$species==x & (METADATA$mammal$group=="ZFY" | METADATA$mammal$group=="Outgroup"),]$common.name), simplify = TRUE)
+# For ZFY, we need to account for the two copies in mouse and Nile Rat. Split
+# these into two tips each
+zfy.phylogeny <- species.tree
+mus.node <- which(zfy.phylogeny$tip.label=="Mus musculus")
+zfy.phylogeny <- phytools::bind.tip(zfy.phylogeny, "Mus musculus", where=mus.node)
+arvicanthis.node <- which(zfy.phylogeny$tip.label=="Arvicanthis niloticus")
+zfy.phylogeny <- phytools::bind.tip(zfy.phylogeny, "Arvicanthis niloticus", where=arvicanthis.node)
+
+# Get the ordered set of tip labels from metadata based on the tree order. 
+# Search only unique species names, gets two hits for mus, flatten the list result
+zfy.phylogeny$tip.label <- unlist( lapply(unique(zfy.phylogeny$tip.label),
+                                  \(x) unique(METADATA$mammal[METADATA$mammal$species==x & 
+                                                                (METADATA$mammal$group=="ZFY" | 
+                                                                   METADATA$mammal$group=="Outgroup"),]$common.name) ))
 zfy.phylogeny$tip.label <- gsub(" ", "_", zfy.phylogeny$tip.label)
 ape::write.tree(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
 
@@ -260,348 +291,6 @@ if(!file.exists( "time.tree.data.tsv")){
   write_tsv(pairwise.times, file = "time.tree.data.tsv", col_names = T, quote = "none")
 }
 
-#### Prepare codeml site model to check for site-specific selection ####
-
-cat(timestamp(), "Creating CODEML site model control files\n")
-# Adapted from Beginner's Guide on the Use of PAML to Detect Positive Selection
-# https://academic.oup.com/mbe/article/40/4/msad041/7140562 for details
-
-# Two files need to be uploaded to the cluster for running codeml:
-# - alignment
-# - tree file (unrooted)
-
-# The treefile created earlier needs node names and branch lengths removing.
-# Set node names to the empty string, and set branch lengths to 1
-labelled.tree <- ape::read.tree(paste0(FILES$mammal.nt.aln, ".treefile"))
-labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
-labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
-ape::write.tree(labelled.tree, file = "paml/site-specific/zfxy.nt.aln.paml.treefile")
-
-# We now read the tree as a raw string to remove the branch lengths entirely,
-# separate the labels from taxon names and resave
-labelled.tree <- readr::read_file("paml/site-specific/zfxy.nt.aln.paml.treefile")
-labelled.tree <- gsub(":1", "", labelled.tree)
-readr::write_file(labelled.tree, "paml/site-specific/zfxy.nt.aln.paml.treefile")
-
-# This control file tests site models With heterogeneous ω Across Sites
-paml.site.file <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
-                         "treefile  = zfxy.nt.aln.paml.treefile * tree in Newick format without nodes\n", # 
-                         "outfile   = site.specific.paml.out.txt\n",
-                         "\n",
-                         "noisy     = 3 * on screen logging\n",
-                         "verbose   = 1 * detailed output in file\n",
-                         "\n",
-                         "seqtype   = 1 * codon data\n",
-                         "ndata     = 1 * one gene alignment\n",
-                         "icode     = 0 * universal genetic code\n",
-                         "cleandata = 0 * keep sites with ambiguity data\n",
-                         "\n",
-                         "model     = 0 * ω consistent across branches\n",
-                         "NSsites   = 0 1 2 7 8 * ω variation across sites\n",
-                         "CodonFreq = 7 * use mutation selection model\n",
-                         "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
-                         "clock     = 0 * assume no clock\n",
-                         "fix_omega = 0 * enables option to estimate omega\n",
-                         "omega     = 0.5 * initial omega value\n")
-write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
-
-#### Prepare codeml branch-site model to look for selection specifically in Muroidea ####
-
-cat(timestamp(), "Creating CODEML branch-site model control files\n")
-# To look at the rodent clade, we need a rooted tree
-nt.aln.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
-# Root the tree on platypus and resave
-# The root is arbitrarily placed in the platypus branch to fit neatly
-nt.aln.tree <- reroot.tree(nt.aln.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
-ape::write.tree(nt.aln.tree, file = paste0(FILES$mammal.nt.aln, ".rooted.treefile"))
-
-# Find the nodes that are ZFY vs ZFX and add to tree
-mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
-nt.aln.tree <- tidytree::groupOTU(nt.aln.tree, mammal.gene.groups, group_name = "group")
-
-
-
-# Label the given node and its children and save to the given files
-# Creates null model and test model directories
-write.paml.fg.tree <- function(fg.node, dir.base){
-  filesstrings::create_dir(dir.base)
-  filesstrings::create_dir(paste0(dir.base, "-null"))
-  # Remove existing node labels, label the nodes and tips of the tree with #1
-  # for foreground branches
-  labelled.tree <- nt.aln.tree
-  labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
-  labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
-  labelled.tree <- treeio::label_branch_paml(labelled.tree, fg.node, "#1")
-  
-  tree.file <- paste0(dir.base, "/tree.treefile")
-  tree.file.null <- paste0(dir.base, "-null/tree.treefile")
-  fg.tree.file <- paste0(dir.base, "/tree.fg.treefile")
-  fg.tree.file.null <- paste0(dir.base, "-null/tree.fg.treefile")
-  control.file <- paste0(dir.base, "/paml.ctl")
-  control.file.null <- paste0(dir.base, "-null/paml.ctl")
-  
-  ape::write.tree(labelled.tree, file = tree.file)
-  ape::write.tree(labelled.tree, file = tree.file.null)
-  
-  # Then remove the branch lengths, separate the labels from taxon names and resave
-  newick.test <- read_file(tree.file)
-  newick.test <- gsub(":1", "", newick.test) # branch lengths we set to 1
-  newick.test <- gsub("_#1", " #1", newick.test) # fg labels
-  write_file(newick.test, fg.tree.file)
-  write_file(newick.test, fg.tree.file.null)
-  
-  # Create control files for the test and null codeml
-  # This control file tests site models With heterogeneous ω across Sites
-  control.file.data <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
-                                  "treefile  = tree.fg.treefile * tree in Newick format without nodes\n", # 
-                                  "outfile   = paml.out.txt\n",
-                                  "\n",
-                                  "noisy     = 3 * on screen logging\n",
-                                  "verbose   = 1 * detailed output in file\n",
-                                  "\n",
-                                  "seqtype   = 1 * codon data\n",
-                                  "ndata     = 1 * one gene alignment\n",
-                                  "icode     = 0 * universal genetic code\n",
-                                  "cleandata = 0 * keep sites with ambiguity data\n",
-                                  "\n",
-                                  "model     = 2 * 2 ω values across branches\n",
-                                  "NSsites   = 2 * Model M2a\n",
-                                  "CodonFreq = 7 * use mutation selection model\n",
-                                  "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
-                                  "clock     = 0 * assume no clock\n",
-                                  "fix_omega = 0 * enables option to estimate omega\n",
-                                  "omega     = 0.5 * initial omega value\n")
-  write_file(control.file.data, control.file)
-  
-  # Prepare codeml branch-site null model to look for selection specifically in Muroidea
-  # This control file tests null branch site model With fixed ω across sites
-  control.file.data.null <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
-                                       "treefile  = tree.fg.treefile * tree in Newick format without nodes\n", # 
-                                       "outfile   = paml.out.txt\n",
-                                       "\n",
-                                       "noisy     = 3 * on screen logging\n",
-                                       "verbose   = 1 * detailed output in file\n",
-                                       "\n",
-                                       "seqtype   = 1 * codon data\n",
-                                       "ndata     = 1 * one gene alignment\n",
-                                       "icode     = 0 * universal genetic code\n",
-                                       "cleandata = 0 * keep sites with ambiguity data\n",
-                                       "\n",
-                                       "model     = 2 * 2 ω values across branches\n",
-                                       "NSsites   = 2 * Model M2a\n",
-                                       "CodonFreq = 7 * use mutation selection model\n",
-                                       "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
-                                       "clock     = 0 * assume no clock\n",
-                                       "fix_omega = 1 * The value of ω2 for foreground branches will be fixed\n",
-                                       "omega     = 1 * The fixed value will be ω2 = 1\n")
-  write_file(control.file.data.null, control.file.null)
-
-}
-
-rodentia.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Gray_squirrel_Zfy"))
-write.paml.fg.tree(rodentia.node, 
-                   "paml/branch-site-rodentia")
-
-# Find the MRCA of the rodents with rapid ZFY evolution
-eumuroida.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Desert_hamster_Zfx-like_putative-Zfy"))
-# Create labelled tree for rodent node
-write.paml.fg.tree(eumuroida.node, 
-                   "paml/branch-site-eumuroida")
-
-muridae.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Mongolian_gerbil_Zfx-like_putative-Zfy"))
-write.paml.fg.tree(muridae.node, 
-                   "paml/branch-site-muridae")
-
-murinae.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Norwegian_Rat_Zfy2"))
-write.paml.fg.tree(murinae.node, 
-                   "paml/branch-site-murinae")
-
-cat(timestamp(), "Creating CODEML control script\n")
-# Add a script to submit these jobs to the cluster
-# Run the commands manually - this takes a long time to run, so only invoke when needed
-paml.shell.script <- paste0("#!/bin/bash\n\n",
-                            "# qsubme is an alias to submit the job to the cluster\n",
-                            "shopt -s expand_aliases\n",
-                            "source ~/.bashrc\n\n",
-                            "cd paml/site-specific\n",
-                            "# codeml zfy.site-specific.paml.ctl\n",
-                            "qsubme codeml zfy.site-specific.paml.ctl\n\n",
-                            
-                            "cd ../branch-site-rodentia\n",
-                            "qsubme codeml paml.ctl\n",
-                            "cd ../branch-site-rodentia-null\n",
-                            "qsubme codeml paml.ctl\n\n",
-                            
-                            "cd ../branch-site-eumuroida\n",
-                            "qsubme codeml paml.ctl\n",
-                            "cd ../branch-site-eumuroida-null\n",
-                            "qsubme codeml paml.ctl\n\n",
-                            
-                            "cd ../branch-site-muridae\n",
-                            "qsubme codeml paml.ctl\n",
-                            "cd ../branch-site-muridae-null\n",
-                            "qsubme codeml paml.ctl\n\n",
-                            
-                            "cd ../branch-site-murinae\n",
-                            "qsubme codeml paml.ctl\n",
-                            "cd ../branch-site-murinae-null\n",
-                            "qsubme codeml paml.ctl\n\n"
-)
-write_file(paml.shell.script, "run_paml.sh")
-
-#### Run HyPhy RELAX to test for relaxed selection and MEME for diversifying selection ####
-
-cat(timestamp(), "Creating HyPhy RELAX and MEME control files\n")
-# Create and save a tree in HyPhy format. Set test branches to the given node, all others
-# as reference. 
-create.mammal.hyphy.relax.tree.file <- function(fg.node, node.name){
-  # Newick tree tips and nodes need to be tagged with {Test} and {Reference}
-  # Set all branches and nodes to reference
-  hyphy.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
-  
-  # Root the tree on platypus
-  # The root is arbitrarily placed in the platypus branch to fit neatly
-  hyphy.tree <- reroot.tree(hyphy.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
-  
-  # Find the nodes that are ZFY vs ZFX and add to tree
-  mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
-  hyphy.tree <- tidytree::groupOTU(hyphy.tree, mammal.gene.groups, group_name = "group")
-  
-  hyphy.tree$node.label <- rep("", length(hyphy.tree$node.label)) # remove all node names
-  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
-  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
-  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
-  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
-  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
-  
-  tree.file <- paste0("aln/hyphy/mammal.", node.name, ".hyphy.relax.treefile")
-  
-  ape::write.tree(hyphy.tree, file = tree.file)
-}
-
-create.combined.hyphy.relax.tree.file <- function(fg.node, node.name){
-  # Newick tree tips and nodes need to be tagged with {Test} and {Reference}
-  # Set all branches and nodes to reference
-  hyphy.tree <- ape::read.tree(FILES$combined.nt.aln.treefile)
-  
-  # Root on Xenopus
-  xenopus.node <- ape::getMRCA(hyphy.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
-  hyphy.tree <- phytools::reroot(hyphy.tree, xenopus.node, position = 0.01)
-  
-  # Find the nodes that are ZFY vs ZFX and add to tree
-  gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
-  hyphy.tree <- tidytree::groupOTU(hyphy.tree, gene.groups, group_name = "group")
-  
-  hyphy.tree$node.label <- rep("", length(hyphy.tree$node.label)) # remove all node names
-  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
-  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
-  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
-  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
-  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
-  
-  tree.file <- paste0("aln/hyphy/combined.", node.name, ".hyphy.relax.treefile")
-  
-  ape::write.tree(hyphy.tree, file = tree.file)
-}
-
-# MEME cannot handle either / or . in node names. Replace both
-create.mammal.hyphy.meme.tree.file <- function(fg.node, node.name){
-  hyphy.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
-  
-  # Root the tree on platypus
-  # The root is arbitrarily placed in the platypus branch to fit neatly
-  hyphy.tree <- reroot.tree(hyphy.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
-
-  # Find the nodes that are ZFY vs ZFX and add to tree
-  mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
-  hyphy.tree <- tidytree::groupOTU(hyphy.tree, mammal.gene.groups, group_name = "group")
-  
-  hyphy.tree$node.label <- gsub("\\.", "_", hyphy.tree$node.label)
-  hyphy.tree$node.label <- gsub("/", "_", hyphy.tree$node.label)
-  
-  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
-  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
-  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
-  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
-  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
-
-  tree.file <- paste0("aln/hyphy/mammal.", node.name,".meme.hyphy.treefile")
-  ape::write.tree(hyphy.tree, file = tree.file)
-}
-
-create.combined.hyphy.meme.tree.file <- function(fg.node, node.name){
-  hyphy.tree <- ape::read.tree(FILES$combined.nt.aln.treefile)
-  
-  # Root on Xenopus
-  hyphy.tree <- reroot.tree(hyphy.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"), position = 0.01)
-  
-  # Find the nodes that are ZFY vs ZFX and add to tree
-  gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
-  hyphy.tree <- tidytree::groupOTU(hyphy.tree, gene.groups, group_name = "group")
-  
-  hyphy.tree$node.label <- gsub("\\.", "_", hyphy.tree$node.label)
-  hyphy.tree$node.label <- gsub("/", "_", hyphy.tree$node.label)
-  
-  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
-  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
-  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
-  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
-  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
-  
-  tree.file <- paste0("aln/hyphy/combined.", node.name,".meme.hyphy.treefile")
-  ape::write.tree(hyphy.tree, file = tree.file)
-}
-
-nodes <- c(rodentia.node, eumuroida.node, muridae.node, murinae.node)
-node.names <- c("rodentia", "eumuroida", "muridae", "murinae")
-
-mapply(create.combined.hyphy.relax.tree.file, nodes, node.names)
-mapply(create.mammal.hyphy.relax.tree.file,   nodes, node.names)
-mapply(create.combined.hyphy.meme.tree.file,  nodes, node.names)
-mapply(create.mammal.hyphy.meme.tree.file,    nodes, node.names)
-
-# Create Hyphy RELAX invokations for shell scripting for the given node names
-create.hyphy.relax.invokation <- function(node.name){
-  paste0(
-    "# Mammal alignment for ", node.name, "\n",
-    "hyphy relax --alignment  ", FILES$mammal.nt.aln, " --tree aln/hyphy/mammal.", node.name , ".hyphy.relax.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/mammal.", node.name, ".relax.json\n",
-    "# Combined alignment for ", node.name, "\n",
-    "hyphy relax --alignment  ", FILES$combined.nt.aln, " --tree aln/hyphy/combined.", node.name , ".hyphy.relax.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/combined.", node.name, ".relax.json\n"
-  )
-}
-
-# Create Hyphy MEME invokations for shell scripting for the given node names
-# Use a partition model to allow three different classes of evolution:
-# Exons 1, 3-6, exon 2 and exon 7
-create.hyphy.meme.invokation <- function(node.name){
-  paste0(
-    "# Mammal partitioned alignment for ", node.name, "\n",
-    "hyphy meme --alignment  ", FILES$mammal.nt.nexus, " --tree aln/hyphy/mammal.", node.name , ".meme.hyphy.treefile --branches Test --output aln/hyphy/mammal.", node.name, ".meme.json\n",
-    "# Combined partitioned alignment for ", node.name, "\n",
-    "hyphy meme --alignment  ", FILES$combined.nt.nexus, " --tree aln/hyphy/combined.", node.name , ".meme.hyphy.treefile --branches Test --output aln/hyphy/combined.", node.name, ".meme.json\n")
-}
-
-
-
-# HyPhy is installed in a conda environment (hence we can't use 'system2' to
-# directly call 'hyphy'). This creates a script to activate the conda
-# environment and run RELAX.
-write_file(paste0("#!/bin/bash\n",
-                  "source activate hyphy\n\n",
-                  "# RELAX test for realxed purifying selection in test branches\n",
-                  paste(sapply(node.names, create.hyphy.relax.invokation), 
-                        collapse = ""), "\n",
-                  "# MEME test for positive selection at individual sites in all branches\n",
-                  paste(sapply(node.names, create.hyphy.meme.invokation), 
-                        collapse = "")
-),
-"run_hyphy.sh")
-
-cat(timestamp(), "Running HyPhy RELAX and MEME across nodes", paste(node.names, collapse=";"), "\n")
-system2("bash", "run_hyphy.sh")
-
-
-#### Prepare data for GENECONV analysis ####
 #### Export ZFX and ZFY separately ####
 
 # Write ZFX sequences to file
@@ -744,11 +433,6 @@ zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "(_putative)
 
 #### Plot ZFX / ZFY tree comparisons  ####
 
-# Export comparison of the ML trees
-png(filename = "figure/zfx.zfy.nt.species.tree.treediff.png")
-treespace::plotTreeDiff(zfx.nt.aln.tree, zfy.nt.aln.tree, treesFacing=TRUE)
-dev.off()
-
 # Plot the two trees with node labels
 zfx.nt.aln.tree.plot <- plot.tree(zfx.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
 zfy.nt.aln.tree.plot <- plot.tree(zfy.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
@@ -808,10 +492,10 @@ node.string <- paste(node.string.names$GroupString, collapse = "\n")
 split.gene.names <- METADATA$mammal %>%
   # Since we're about to split on 'Z', remove secondary instances of the string
   # keeping whatever - or _ was in the original name
-  dplyr::mutate(common.name = str_replace(common.name, "putative-Zfy", "putative-Y"),
-                common.name = str_replace(common.name, "putative_Zfy", "putative_Y")) %>%
+  dplyr::mutate(common.name = str_replace(common.name, "(?i)putative-Zfy", "putative-Y"),
+                common.name = str_replace(common.name, "(?i)putative_Zfy", "putative_Y")) %>%
   separate_wider_delim(common.name, 
-                       delim= "Z", names = c("Species", "Gene"), too_few = "debug") %>%
+                       delim= "Z", names = c("Species", "Gene"), too_few = "debug", too_many = "debug") %>%
   dplyr::mutate(Species = str_replace(Species, "_$", ""),
                 Gene = paste0("Z", Gene)) %>%
   # Repair gene names following the split earlier
@@ -845,25 +529,6 @@ write_file(anc.gene.conv.control, "aln/anc.zfx.zfy.geneconv.cfg")
 # Invoke geneconv via:
 # geneconv aln/anc.zfx.zfy.geneconv.cfg aln/ancestral.zfx.zfy.nodes.fa
 
-
-#### Find structural features ####
-cat(timestamp(), "Identifying structural features\n")
-# Read the combined tree and find the taxa order
-combined.outgroup.tree <- read.combined.outgroup.tree(FILES$combined.aa.aln.treefile)
-combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")
-combined.taxa.name.order <- ggtree::get_taxa_name(combined.aa.tree) 
-
-# Find and export ZFs
-locations.zf <- locate.zfs.in.alignment(combined.taxa.name.order)
-readr::write_tsv(locations.zf, "aln/locations.zf.tsv")
-
-# Find and export 9aaTADS
-locations.9aaTAD <- locate.9aaTADs.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
-readr::write_tsv(locations.9aaTAD, "aln/locations.9aaTAD.tsv")
-
-# Find and export NLS
-locations.NLS <- locate.NLS.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
-readr::write_tsv(locations.NLS, "aln/locations.NLS.tsv")
 
 #### Read final intron sequences #####
 cat(timestamp(), "Processing final intron sequences\n")
@@ -1025,6 +690,346 @@ final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfx.nt.divvy.a
                                                      "-keep-ident",
                                                      "-te aln/final.intron.zfx/zfx.nt.species.nwk" # user tree guide
 )
+
+#### Prepare codeml site model to check for site-specific selection ####
+
+cat(timestamp(), "Creating CODEML site model control files\n")
+# Adapted from Beginner's Guide on the Use of PAML to Detect Positive Selection
+# https://academic.oup.com/mbe/article/40/4/msad041/7140562 for details
+
+# Two files need to be uploaded to the cluster for running codeml:
+# - alignment
+# - tree file (unrooted)
+
+# The treefile created earlier needs node names and branch lengths removing.
+# Set node names to the empty string, and set branch lengths to 1
+labelled.tree <- ape::read.tree(paste0(FILES$mammal.nt.aln, ".treefile"))
+labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
+labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
+ape::write.tree(labelled.tree, file = "paml/site-specific/zfxy.nt.aln.paml.treefile")
+
+# We now read the tree as a raw string to remove the branch lengths entirely,
+# separate the labels from taxon names and resave
+labelled.tree <- readr::read_file("paml/site-specific/zfxy.nt.aln.paml.treefile")
+labelled.tree <- gsub(":1", "", labelled.tree)
+readr::write_file(labelled.tree, "paml/site-specific/zfxy.nt.aln.paml.treefile")
+
+# This control file tests site models With heterogeneous ω Across Sites
+paml.site.file <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
+                         "treefile  = zfxy.nt.aln.paml.treefile * tree in Newick format without nodes\n", # 
+                         "outfile   = site.specific.paml.out.txt\n",
+                         "\n",
+                         "noisy     = 3 * on screen logging\n",
+                         "verbose   = 1 * detailed output in file\n",
+                         "\n",
+                         "seqtype   = 1 * codon data\n",
+                         "ndata     = 1 * one gene alignment\n",
+                         "icode     = 0 * universal genetic code\n",
+                         "cleandata = 0 * keep sites with ambiguity data\n",
+                         "\n",
+                         "model     = 0 * ω consistent across branches\n",
+                         "NSsites   = 0 1 2 7 8 * ω variation across sites\n",
+                         "CodonFreq = 7 * use mutation selection model\n",
+                         "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                         "clock     = 0 * assume no clock\n",
+                         "fix_omega = 0 * enables option to estimate omega\n",
+                         "omega     = 0.5 * initial omega value\n")
+write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
+
+#### Prepare codeml branch-site model to look for selection specifically in Muroidea ####
+
+cat(timestamp(), "Creating CODEML branch-site model control files\n")
+# To look at the rodent clade, we need a rooted tree
+nt.aln.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
+# Root the tree on platypus and resave
+# The root is arbitrarily placed in the platypus branch to fit neatly
+nt.aln.tree <- reroot.tree(nt.aln.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
+ape::write.tree(nt.aln.tree, file = paste0(FILES$mammal.nt.aln, ".rooted.treefile"))
+
+# Find the nodes that are ZFY vs ZFX and add to tree
+mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
+nt.aln.tree <- tidytree::groupOTU(nt.aln.tree, mammal.gene.groups, group_name = "group")
+
+
+
+# Label the given node and its children and save to the given files
+# Creates null model and test model directories
+write.paml.fg.tree <- function(fg.node, dir.base){
+  filesstrings::create_dir(dir.base)
+  filesstrings::create_dir(paste0(dir.base, "-null"))
+  # Remove existing node labels, label the nodes and tips of the tree with #1
+  # for foreground branches
+  labelled.tree <- nt.aln.tree
+  labelled.tree$node.label <- rep("", length(labelled.tree$node.label))
+  labelled.tree$edge.length <- rep(1, length(labelled.tree$edge.length))
+  labelled.tree <- treeio::label_branch_paml(labelled.tree, fg.node, "#1")
+  
+  tree.file <- paste0(dir.base, "/tree.treefile")
+  tree.file.null <- paste0(dir.base, "-null/tree.treefile")
+  fg.tree.file <- paste0(dir.base, "/tree.fg.treefile")
+  fg.tree.file.null <- paste0(dir.base, "-null/tree.fg.treefile")
+  control.file <- paste0(dir.base, "/paml.ctl")
+  control.file.null <- paste0(dir.base, "-null/paml.ctl")
+  
+  ape::write.tree(labelled.tree, file = tree.file)
+  ape::write.tree(labelled.tree, file = tree.file.null)
+  
+  # Then remove the branch lengths, separate the labels from taxon names and resave
+  newick.test <- read_file(tree.file)
+  newick.test <- gsub(":1", "", newick.test) # branch lengths we set to 1
+  newick.test <- gsub("_#1", " #1", newick.test) # fg labels
+  write_file(newick.test, fg.tree.file)
+  write_file(newick.test, fg.tree.file.null)
+  
+  # Create control files for the test and null codeml
+  # This control file tests site models With heterogeneous ω across Sites
+  control.file.data <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
+                              "treefile  = tree.fg.treefile * tree in Newick format without nodes\n", # 
+                              "outfile   = paml.out.txt\n",
+                              "\n",
+                              "noisy     = 3 * on screen logging\n",
+                              "verbose   = 1 * detailed output in file\n",
+                              "\n",
+                              "seqtype   = 1 * codon data\n",
+                              "ndata     = 1 * one gene alignment\n",
+                              "icode     = 0 * universal genetic code\n",
+                              "cleandata = 0 * keep sites with ambiguity data\n",
+                              "\n",
+                              "model     = 2 * 2 ω values across branches\n",
+                              "NSsites   = 2 * Model M2a\n",
+                              "CodonFreq = 7 * use mutation selection model\n",
+                              "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                              "clock     = 0 * assume no clock\n",
+                              "fix_omega = 0 * enables option to estimate omega\n",
+                              "omega     = 0.5 * initial omega value\n")
+  write_file(control.file.data, control.file)
+  
+  # Prepare codeml branch-site null model to look for selection specifically in Muroidea
+  # This control file tests null branch site model With fixed ω across sites
+  control.file.data.null <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignment file\n",
+                                   "treefile  = tree.fg.treefile * tree in Newick format without nodes\n", # 
+                                   "outfile   = paml.out.txt\n",
+                                   "\n",
+                                   "noisy     = 3 * on screen logging\n",
+                                   "verbose   = 1 * detailed output in file\n",
+                                   "\n",
+                                   "seqtype   = 1 * codon data\n",
+                                   "ndata     = 1 * one gene alignment\n",
+                                   "icode     = 0 * universal genetic code\n",
+                                   "cleandata = 0 * keep sites with ambiguity data\n",
+                                   "\n",
+                                   "model     = 2 * 2 ω values across branches\n",
+                                   "NSsites   = 2 * Model M2a\n",
+                                   "CodonFreq = 7 * use mutation selection model\n",
+                                   "estFreq   = 0 * use observed frequencies to calc fitness/freq pairs\n",
+                                   "clock     = 0 * assume no clock\n",
+                                   "fix_omega = 1 * The value of ω2 for foreground branches will be fixed\n",
+                                   "omega     = 1 * The fixed value will be ω2 = 1\n")
+  write_file(control.file.data.null, control.file.null)
+  
+}
+
+rodentia.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Gray_squirrel_Zfy"))
+write.paml.fg.tree(rodentia.node, 
+                   "paml/branch-site-rodentia")
+
+# Find the MRCA of the rodents with rapid ZFY evolution
+eumuroida.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Desert_hamster_Zfx-like_putative-Zfy"))
+# Create labelled tree for rodent node
+write.paml.fg.tree(eumuroida.node, 
+                   "paml/branch-site-eumuroida")
+
+muridae.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Mongolian_gerbil_Zfx-like_putative-Zfy"))
+write.paml.fg.tree(muridae.node, 
+                   "paml/branch-site-muridae")
+
+murinae.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Norwegian_Rat_Zfy2"))
+write.paml.fg.tree(murinae.node, 
+                   "paml/branch-site-murinae")
+
+cat(timestamp(), "Creating CODEML control script\n")
+# Add a script to submit these jobs to the cluster
+# Run the commands manually - this takes a long time to run, so only invoke when needed
+paml.shell.script <- paste0("#!/bin/bash\n\n",
+                            "# qsubme is an alias to submit the job to the cluster\n",
+                            "shopt -s expand_aliases\n",
+                            "source ~/.bashrc\n\n",
+                            "cd paml/site-specific\n",
+                            "# codeml zfy.site-specific.paml.ctl\n",
+                            "qsubme codeml zfy.site-specific.paml.ctl\n\n",
+                            
+                            "cd ../branch-site-rodentia\n",
+                            "qsubme codeml paml.ctl\n",
+                            "cd ../branch-site-rodentia-null\n",
+                            "qsubme codeml paml.ctl\n\n",
+                            
+                            "cd ../branch-site-eumuroida\n",
+                            "qsubme codeml paml.ctl\n",
+                            "cd ../branch-site-eumuroida-null\n",
+                            "qsubme codeml paml.ctl\n\n",
+                            
+                            "cd ../branch-site-muridae\n",
+                            "qsubme codeml paml.ctl\n",
+                            "cd ../branch-site-muridae-null\n",
+                            "qsubme codeml paml.ctl\n\n",
+                            
+                            "cd ../branch-site-murinae\n",
+                            "qsubme codeml paml.ctl\n",
+                            "cd ../branch-site-murinae-null\n",
+                            "qsubme codeml paml.ctl\n\n"
+)
+write_file(paml.shell.script, "run_paml.sh")
+
+#### Run HyPhy RELAX to test for relaxed selection and MEME for diversifying selection ####
+
+cat(timestamp(), "Creating HyPhy RELAX and MEME control files\n")
+# Create and save a tree in HyPhy format. Set test branches to the given node, all others
+# as reference. 
+create.mammal.hyphy.relax.tree.file <- function(fg.node, node.name){
+  # Newick tree tips and nodes need to be tagged with {Test} and {Reference}
+  # Set all branches and nodes to reference
+  hyphy.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
+  
+  # Root the tree on platypus
+  # The root is arbitrarily placed in the platypus branch to fit neatly
+  hyphy.tree <- reroot.tree(hyphy.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
+  
+  # Find the nodes that are ZFY vs ZFX and add to tree
+  mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
+  hyphy.tree <- tidytree::groupOTU(hyphy.tree, mammal.gene.groups, group_name = "group")
+  
+  hyphy.tree$node.label <- rep("", length(hyphy.tree$node.label)) # remove all node names
+  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
+  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
+  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
+  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
+  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
+  
+  tree.file <- paste0("aln/hyphy/mammal.", node.name, ".hyphy.relax.treefile")
+  
+  ape::write.tree(hyphy.tree, file = tree.file)
+}
+
+create.combined.hyphy.relax.tree.file <- function(fg.node, node.name){
+  # Newick tree tips and nodes need to be tagged with {Test} and {Reference}
+  # Set all branches and nodes to reference
+  hyphy.tree <- ape::read.tree(FILES$combined.nt.aln.treefile)
+  
+  # Root on Xenopus
+  xenopus.node <- ape::getMRCA(hyphy.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
+  hyphy.tree <- phytools::reroot(hyphy.tree, xenopus.node, position = 0.01)
+  
+  # Find the nodes that are ZFY vs ZFX and add to tree
+  gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
+  hyphy.tree <- tidytree::groupOTU(hyphy.tree, gene.groups, group_name = "group")
+  
+  hyphy.tree$node.label <- rep("", length(hyphy.tree$node.label)) # remove all node names
+  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
+  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
+  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
+  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
+  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
+  
+  tree.file <- paste0("aln/hyphy/combined.", node.name, ".hyphy.relax.treefile")
+  
+  ape::write.tree(hyphy.tree, file = tree.file)
+}
+
+# MEME cannot handle either / or . in node names. Replace both
+create.mammal.hyphy.meme.tree.file <- function(fg.node, node.name){
+  hyphy.tree <- ape::read.tree(FILES$mammal.nt.aln.treefile)
+  
+  # Root the tree on platypus
+  # The root is arbitrarily placed in the platypus branch to fit neatly
+  hyphy.tree <- reroot.tree(hyphy.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
+  
+  # Find the nodes that are ZFY vs ZFX and add to tree
+  mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
+  hyphy.tree <- tidytree::groupOTU(hyphy.tree, mammal.gene.groups, group_name = "group")
+  
+  hyphy.tree$node.label <- gsub("\\.", "_", hyphy.tree$node.label)
+  hyphy.tree$node.label <- gsub("/", "_", hyphy.tree$node.label)
+  
+  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
+  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
+  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
+  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
+  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
+  
+  tree.file <- paste0("aln/hyphy/mammal.", node.name,".meme.hyphy.treefile")
+  ape::write.tree(hyphy.tree, file = tree.file)
+}
+
+create.combined.hyphy.meme.tree.file <- function(fg.node, node.name){
+  hyphy.tree <- ape::read.tree(FILES$combined.nt.aln.treefile)
+  
+  # Root on Xenopus
+  hyphy.tree <- reroot.tree(hyphy.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"), position = 0.01)
+  
+  # Find the nodes that are ZFY vs ZFX and add to tree
+  gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
+  hyphy.tree <- tidytree::groupOTU(hyphy.tree, gene.groups, group_name = "group")
+  
+  hyphy.tree$node.label <- gsub("\\.", "_", hyphy.tree$node.label)
+  hyphy.tree$node.label <- gsub("/", "_", hyphy.tree$node.label)
+  
+  hyphy.tree$node.label <- paste0(hyphy.tree$node.label, "{Reference}") # everything is reference
+  hyphy.tree$tip.label <- paste0(hyphy.tree$tip.label, "{Reference}") # everything is reference
+  hyphy.tree <- treeio::label_branch_paml(hyphy.tree, fg.node, "{Test}") # now rodents are test
+  hyphy.tree$node.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$node.label) # remove reference from anything in test
+  hyphy.tree$tip.label <- gsub("\\{Reference\\} \\{Test\\}", "{Test}", hyphy.tree$tip.label) # remove reference from anything in test
+  
+  tree.file <- paste0("aln/hyphy/combined.", node.name,".meme.hyphy.treefile")
+  ape::write.tree(hyphy.tree, file = tree.file)
+}
+
+nodes <- c(rodentia.node, eumuroida.node, muridae.node, murinae.node)
+node.names <- c("rodentia", "eumuroida", "muridae", "murinae")
+
+mapply(create.combined.hyphy.relax.tree.file, nodes, node.names)
+mapply(create.mammal.hyphy.relax.tree.file,   nodes, node.names)
+mapply(create.combined.hyphy.meme.tree.file,  nodes, node.names)
+mapply(create.mammal.hyphy.meme.tree.file,    nodes, node.names)
+
+# Create Hyphy RELAX invokations for shell scripting for the given node names
+create.hyphy.relax.invokation <- function(node.name){
+  paste0(
+    "# Mammal alignment for ", node.name, "\n",
+    "hyphy relax --alignment  ", FILES$mammal.nt.aln, " --tree aln/hyphy/mammal.", node.name , ".hyphy.relax.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/mammal.", node.name, ".relax.json\n",
+    "# Combined alignment for ", node.name, "\n",
+    "hyphy relax --alignment  ", FILES$combined.nt.aln, " --tree aln/hyphy/combined.", node.name , ".hyphy.relax.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/combined.", node.name, ".relax.json\n"
+  )
+}
+
+# Create Hyphy MEME invokations for shell scripting for the given node names
+# Use a partition model to allow three different classes of evolution:
+# Exons 1, 3-6, exon 2 and exon 7
+create.hyphy.meme.invokation <- function(node.name){
+  paste0(
+    "# Mammal partitioned alignment for ", node.name, "\n",
+    "hyphy meme --alignment  ", FILES$mammal.nt.nexus, " --tree aln/hyphy/mammal.", node.name , ".meme.hyphy.treefile --branches Test --output aln/hyphy/mammal.", node.name, ".meme.json\n",
+    "# Combined partitioned alignment for ", node.name, "\n",
+    "hyphy meme --alignment  ", FILES$combined.nt.nexus, " --tree aln/hyphy/combined.", node.name , ".meme.hyphy.treefile --branches Test --output aln/hyphy/combined.", node.name, ".meme.json\n")
+}
+
+
+
+# HyPhy is installed in a conda environment (hence we can't use 'system2' to
+# directly call 'hyphy'). This creates a script to activate the conda
+# environment and run RELAX.
+write_file(paste0("#!/bin/bash\n",
+                  "source activate hyphy\n\n",
+                  "# RELAX test for realxed purifying selection in test branches\n",
+                  paste(sapply(node.names, create.hyphy.relax.invokation), 
+                        collapse = ""), "\n",
+                  "# MEME test for positive selection at individual sites in all branches\n",
+                  paste(sapply(node.names, create.hyphy.meme.invokation), 
+                        collapse = "")
+),
+"run_hyphy.sh")
+
+cat(timestamp(), "Running HyPhy RELAX and MEME across nodes", paste(node.names, collapse=";"), "\n")
+system2("bash", "run_hyphy.sh")
 
 #### Tar the outputs ####
 system2("tar", "czf aln.tar.gz aln")
