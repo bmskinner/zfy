@@ -686,7 +686,7 @@ save.double.width("figure/Figure_2_aa.structure.confident.png", aa.structure.con
 
 # Given species names, find the X and Y sequences from the aa alignment.
 # Generate a vector of 0 (diferent aa at a site) or 1 (same aa at a site).
-calculate.gametologue.conservation <- function(zfx, zfy){
+calculate.gametologue.conservation <- function(zfx, zfy, common.name){
   
   cat(zfx, "\n")
   tryCatch({
@@ -698,12 +698,12 @@ calculate.gametologue.conservation <- function(zfx, zfy){
       tidyr::pivot_wider(id_cols = position, names_from = type, values_from = character) %>%
       dplyr::mutate(conservation = as.numeric(ZFX==ZFY))
     
-    return(data.frame("zfx"=zfx, "zfy"=zfy,
+    return(data.frame("zfx"=zfx, "zfy"=zfy, "common.name" = common.name,
                 "conservation" = aa.aln$conservation, site = 1:length( aa.aln$conservation)))
   },
   error = function(e){
     message(conditionMessage(e))
-    return(data.frame("zfx"=zfx, "zfy"=zfy, "conservation"=NA, site=NA ))
+    return(data.frame("zfx"=zfx, "zfy"=zfy, "common.name" = common.name, "conservation"=NA, site=NA ))
   }
   )
   
@@ -718,19 +718,60 @@ valid.pairs <- METADATA$mammal %>%
   tidyr::pivot_wider(id_cols = Species_common_name, names_from = group, values_from = common.name)
 
 # Calculate homologue conservation across the alignments
-gametologue.conservation <- do.call(rbind, mapply(calculate.gametologue.conservation,   valid.pairs$ZFX,   valid.pairs$ZFY, SIMPLIFY = FALSE)) %>%
-  dplyr::mutate(zfx = str_replace_all(zfx, "_", " "),
-                zfy = str_replace_all(zfy, "_", " "),
-                zfx = factor(zfx, levels = combined.taxa.name.order))
+gametologue.conservation <- do.call(rbind, mapply(calculate.gametologue.conservation, 
+                                                  valid.pairs$ZFX,   
+                                                  valid.pairs$ZFY, 
+                                                  valid.pairs$Species_common_name, 
+                                                  SIMPLIFY = FALSE)) %>%
+  dplyr::mutate(zfx = factor(zfx, levels = combined.taxa.name.order),
+                zfy = factor(zfy, levels = combined.taxa.name.order),
+                y.val = as.integer(zfy)) %>%
+  dplyr::group_by(y.val) %>%
+  dplyr::mutate( cum.diff =  cumsum(conservation==0),
+                 group = case_when(common.name=="Mouse" ~ "Eumuroida",
+                                   common.name=="African_Grass_Rat" ~ "Eumuroida",
+                                   common.name=="Black_rat" ~ "Eumuroida",
+                                   common.name=="Norwegian_Rat" ~ "Eumuroida",
+                                   common.name=="Mongolian_gerbil" ~ "Eumuroida",
+                                   common.name=="Desert_hamster" ~ "Eumuroida",
+                                   common.name=="North_American_deer_mouse" ~ "Eumuroida",
+                                   common.name=="Damara_mole-rat" ~ "Damara_mole-rat",
+                                   common.name=="Beaver" ~ "Beaver",
+                                   common.name=="Grey_squirrel" ~ "Other Rodentia",
+                                   common.name=="Alpine_marmot" ~ "Other Rodentia",
+                                   common.name=="Arctic_ground_squirrel" ~ "Other Rodentia",
+                                   .default = "Other Mammalia"),
+                 group = forcats::as_factor(group),
+                 group = forcats::fct_relevel(group, "Other Mammalia", "Other Rodentia",
+                                              "Damara_mole-rat","Beaver", "Eumuroida"))
 
 
-gametologue.conservation.plot <- ggplot(gametologue.conservation, aes(x=site, y=zfx, col=as.factor(conservation) ))+
-  geom_tile()+
-  scale_colour_manual(values=c("0"="darkblue", "1"="lightgrey"))+
-  labs(x="Site")+
-  theme(legend.position = "none",
-        panel.grid = element_blank())
-save.double.width(filename = "figure/gametologue.conservation.png", gametologue.conservation.plot, height = 170)
+# gametologue.conservation.plot <- ggplot(gametologue.conservation, aes(col=as.factor(conservation) ))+
+#   geom_rect(aes(xmin=site-0.5, xmax = site+0.5, ymin=y.val-0.5, ymax=y.val+0.5))+
+#   scale_colour_manual(values=c("0"="darkblue", "1"="lightgrey"))+
+#   scale_y_continuous(labels=gsub("_", " ", unique(gametologue.conservation$common.name)), 
+#                      breaks=as.integer(unique(gametologue.conservation$y.val)),
+#                      expand = c(0,0))+
+#   scale_x_continuous(expand = c(0, 0), breaks = seq(0, 900, 100))+
+#   labs(x="Site")+
+#   theme_bw()+
+#   theme(legend.position = "none",
+#         panel.grid = element_blank())
+# save.double.width(filename = "figure/gametologue.conservation.png", gametologue.conservation.plot, height = 170)
+
+
+# Create a cumulative difference plot
+gametologue.cumdiff.plot <-  ggplot(gametologue.conservation, aes(x=site, y=cum.diff, col=group, group = common.name ))+
+  geom_line()+
+  geom_line(data = gametologue.conservation[gametologue.conservation$group=="Other Rodentia",])+
+  labs(y = "Cumulative X-Y differences", x = "Site")+
+  scale_color_manual(values = c("Eumuroida"="#002AFFFF", "Other Mammalia"="#FFEE99FF", 
+                                "Other Rodentia"="#FF9932FF", "Beaver"="#FF2A00FF", "Damara_mole-rat"="#FF6619FF" ))+
+  theme_bw()+
+  theme(legend.position = c(0.2, 0.8),
+        legend.title = element_blank())
+save.double.width(filename = "figure/gametologue.cumdiff.png", gametologue.cumdiff.plot, height = 170)
+
 
 #### Plot the conservation of hydrophobicity across mammal/outgroup AA MSA ####
 cat("Plotting conservation of hydrophobicity\n")
@@ -1573,3 +1614,4 @@ save.double.width("figure/final.intron.combined.tree.png", final.intron.combined
 #### Tar the figure outputs ####
 system2("tar", "czf figure.tar.gz figure")
 cat("Done!\n")
+
