@@ -237,8 +237,8 @@ read.sequences <- function(read.fasta.output){
 read.metadata <- function(read.fasta.output){
   metadata <- do.call(rbind, lapply(read.fasta.output, function(x) x$metadata))
   
-  outgroup.sequences <-  c("Platypus_ZFX", "Opossum_ZFX", 
-                           "Australian_echidna_ZFX",
+  outgroup.sequences <-  c("Platypus_ZFX", "Australian_echidna_ZFX",
+                           "Opossum_ZFX", "Koala_ZFX",
                            "Xenopus_ZFX.S", "Xenopus_ZFX.L", 
                            "Chicken_ZFX", "Zebra_finch_ZFX")
   
