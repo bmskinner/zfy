@@ -861,6 +861,7 @@ exon5.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa
 # Export to file
 merge(exon2.patch$aa.aln, exon3.patch$aa.aln, by=c("Sequence")) %>%
   merge(., exon5.patch$aa.aln, by=c("Sequence")) %>%
+  #write_tsv(., "figure/hydrophobic_patches.tsv")
   create.xlsx(., "figure/hydrophobic_patches.xlsx")
 
 
@@ -909,7 +910,7 @@ create.relax.k.tree <- function(json.file){
   branch.lengths <- unlist(sapply(hyphy.input.tree$edge[,2], \(x)  k.vals[k.vals$node==x,"branch.length"]))
   hyphy.input.tree$edge.length <- branch.lengths
   
-  hyphy.input.tree <- reroot.tree(hyphy.input.tree, node.labels=c("Platypus_ZFX", "Australian_echidna_ZFX",  position=0.015)
+  hyphy.input.tree <- reroot.tree(hyphy.input.tree, node.labels=c("Platypus_ZFX", "Australian_echidna_ZFX"),  position=0.015)
   hyphy.input.tree <- reroot.tree(hyphy.input.tree, node.labels= c("Xenopus_ZFX_L", "Xenopus_ZFX_S"),  position = 0.015) # will fail silently for mammal-only
 
   cat(json.file,  "K=", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2), 
@@ -1044,14 +1045,14 @@ create.meme.overview.plot <- function(meme.overview, outgroup.type){
     scale_alpha_manual(values=c(0, 1))+
     
     geom_tile(data = meme.overview, aes(x=site, y = 2.5, height = 1, width=1), fill = "brown")+
-    annotate("text", x= 750, y=3.1, label = "rodentia", hjust=0, size = 2)+
-    annotate("text", x= 750, y=3.2, label = "eumuroida", hjust=0, size = 2)+
-    annotate("text", x= 750, y=3.3, label = "muridae", hjust=0, size = 2)+
-    annotate("text", x= 750, y=3.4, label = "murinae", hjust=0, size = 2)+
+    annotate("text", x= 800, y=3.1, label = "rodentia", hjust=0, size = 2)+
+    annotate("text", x= 800, y=3.2, label = "eumuroida", hjust=0, size = 2)+
+    annotate("text", x= 800, y=3.3, label = "muridae", hjust=0, size = 2)+
+    annotate("text", x= 800, y=3.4, label = "murinae", hjust=0, size = 2)+
     
     
-    scale_x_continuous(breaks = seq(0, 885, 50), expand = c(0, 0.05))+
-    coord_cartesian(xlim = c(0, 885))+
+    scale_x_continuous(breaks = seq(0, length(ALIGNMENTS$aa.combined.ape$Chicken_ZFX), 50), expand = c(0, 0.05))+
+    coord_cartesian(xlim = c(0, length(ALIGNMENTS$aa.combined.ape$Chicken_ZFX)))+
     theme_bw()+
     theme(axis.text.y = element_blank(),
           axis.title = element_blank(),
@@ -1067,18 +1068,18 @@ create.meme.overview.plot <- function(meme.overview, outgroup.type){
           axis.line.x.bottom = element_line(),
           panel.grid = element_blank())
   
-  save.double.width(filename = paste0("figure/meme.",outgroup.type,".site.locations.png"), meme.location.plot, height = 45)
+  save.double.width(filename = paste0("figure/meme.",outgroup.type,".site.locations.png"), meme.location.plot, height = 35)
   meme.location.plot
 }
 
 mammal.meme.overview <- calculate.meme.overview.data(mammal.meme.results)
 mammal.meme.overview.plot <- create.meme.overview.plot(mammal.meme.overview,"mammal")
 
-combined.meme.overview <- calculate.meme.overview.data(combined.meme.results)
-combined.meme.overview.plot <-create.meme.overview.plot(combined.meme.overview,"combined")
+# combined.meme.overview <- calculate.meme.overview.data(combined.meme.results)
+# combined.meme.overview.plot <-create.meme.overview.plot(combined.meme.overview,"combined")
 
-both.meme.overview.plot <- combined.meme.overview.plot / mammal.meme.overview.plot
-save.double.width(filename = paste0("figure/meme.all.site.locations.png"), both.meme.overview.plot, height = 90)
+# both.meme.overview.plot <- combined.meme.overview.plot / mammal.meme.overview.plot
+# save.double.width(filename = paste0("figure/meme.all.site.locations.png"), both.meme.overview.plot, height = 90)
 
 # Given an alignment region produced by `extract.alignment.region`, plot it
 plot.alignment.region <- function(region.data, meme.overview){
@@ -1199,7 +1200,7 @@ plot.individual.meme.sites <- function(meme.overview, outgroup.type){
 }
 
 plot.individual.meme.sites(mammal.meme.overview, "mammal")
-plot.individual.meme.sites(combined.meme.overview, "combined")
+# plot.individual.meme.sites(combined.meme.overview, "combined")
 
 #### codeml site models to check for site-specific and branch-site selection ####
 cat("Reading codeml results\n")
@@ -1453,6 +1454,8 @@ get.edge.time <- function(node, tree){
 # Calculate the length of each branch in Myr
 time.vals <- do.call(rbind, lapply(zfy.nt.aln.tree$edge[,2], get.edge.time, tree=zfy.nt.aln.tree))
 
+
+
 # Plot the Zfy tree, with edge lengths replaced by Myr
 subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
   time.vals +
@@ -1464,26 +1467,37 @@ subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
   geom_tiplab(size=2, color = "black")+
   geom_treescale(fontsize =2, y = -1) +
   coord_cartesian(xlim = c(-0.05, 0.4))+
-  
-  # ZF* moves to sex chromosomes
-  annotate("rect", xmin=0.02, ymin=7.8, xmax=0.04, ymax=9.2, fill="darkgreen", alpha=0.4)+
-  annotate("text", x=0.02, y=8.6,label="ZF* to\nX/Y", size=2, hjust=0)+
-  # Ssty box
-  annotate("rect", xmin=0.12, ymin=26.8, xmax=0.19, ymax=28.5, fill="darkgreen", alpha=0.4)+
-  annotate("text", x=0.13, y=28, label="Ssty appears", size=2, hjust=0)+
-  # Zfy testis specific box
-  annotate("text", x=0.13, y=27.2, label="Zfy testis specific", size=2, hjust=0)+
-  annotate("rect", xmin=0.29, ymin=30.5, xmax=0.34, ymax=32, fill="darkgreen", alpha=0.4)+
-  # Sly amplifies box
-  annotate("text", x=0.295, y=31.5, label="Sly amplifies", size=2, hjust=0)+
-  annotate("rect", xmin=0.24, ymin=28.4, xmax=0.27, ymax=30, fill="darkgreen", alpha=0.4)+
-  # Slxl1 acquired box
-  annotate("text", x=0.242, y=29, label="Slxl1\nacquired?", size=2, hjust=0)+
   theme_tree() +
   theme(legend.position = c(0.2, 0.8),
         legend.background = element_blank(),
         legend.text = element_text(size=6),
         legend.title = element_text(size=6))
+
+eumuroida.y <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Eumuroida","y"]$y
+zf.to.xy.y <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Eutheria","y"]$y
+slxl1.y <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Murinae","y"]$y
+sly.amplifies.y <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Mouse","y"]$y
+
+# Annotate plot with labels
+subs.site.mya.plot <- subs.site.mya.plot +
+
+  # ZF* moves to sex chromosomes
+  annotate("text", x=0.02, y=zf.to.xy.y,label="ZF* to\nX/Y", size=2, hjust=0)+
+  annotate("rect", xmin=0.02, ymin=zf.to.xy.y - 0.5 , xmax=0.04, ymax=zf.to.xy.y+0.5, fill="darkgreen", alpha=0.4)+
+  
+  # Ssty box
+  annotate("text", x=0.13, y=eumuroida.y, label="Ssty appears\nZfy testis specific", size=2, hjust=0)+
+  annotate("rect", xmin=0.12, ymin=eumuroida.y - 0.5, xmax=0.19, ymax=eumuroida.y +0.5, fill="darkgreen", alpha=0.4)+
+
+  # Slxl1 acquired box
+  annotate("text", x=0.242, y=slxl1.y, label="Slxl1\nacquired? ", size=2, hjust=0)+
+  annotate("rect", xmin=0.24, ymin=slxl1.y- 0.5, xmax=0.27, ymax=slxl1.y+0.5, fill="darkgreen", alpha=0.4)+
+
+  # Sly amplifies box
+  annotate("text", x=0.295, y=sly.amplifies.y, label="Sly amplifies\n ", size=2, hjust=0)+
+  annotate("rect", xmin=0.29, ymin=sly.amplifies.y-0.5, xmax=0.34, ymax=sly.amplifies.y+0.5, fill="darkgreen", alpha=0.4)
+
+
 save.double.width("figure/subs.per.site.per.Myr.png", subs.site.mya.plot)
 
 # Redraw the tree with branch lengths from the actual dates. Confirm it adds up

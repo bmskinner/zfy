@@ -1051,14 +1051,12 @@ extract.combined.alignment.region <- function(nt.start=NULL, nt.end=NULL, aa.sta
   
   nt.aln <- as.data.frame(as.matrix(ALIGNMENTS$nt.combined.biostrings)[,nt.start:nt.end]) %>%
     dplyr::mutate(Sequence = rownames(.),
-                  Sequence = str_replace_all(Sequence, "_", " "), # remove underscores for pretty printing
                   Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
     dplyr::arrange(as.integer(Sequence)) %>%
     dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+nt.start-1) )
   
   aa.aln <- as.data.frame(as.matrix(ALIGNMENTS$aa.combined.biostrings)[,aa.start:aa.end]) %>%
     dplyr::mutate(Sequence = rownames(.),
-                  Sequence = str_replace_all(Sequence, "_", " "), # remove underscores for pretty printing
                   Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
     dplyr::arrange(as.integer(Sequence)) %>%
     dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+aa.start-1) )
