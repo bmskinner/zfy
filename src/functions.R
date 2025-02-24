@@ -412,8 +412,8 @@ plot.tree <- function(tree.data, tiplab.font.size = 2, ...){
   node.label.values <- data.frame("label" = tree.data$node.label) %>%
     tidyr::separate_wider_delim(label, delim = "/", names = c("name","SHaLRT", "UFBoot"),
                                 too_few = "align_end", too_many = "merge") %>%
-    dplyr::mutate(UFBoot = as.numeric(UFBoot),
-                  SHaLRT = as.numeric(SHaLRT),
+    dplyr::mutate(UFBoot = suppressWarnings(as.numeric(UFBoot)), # warning not needed, will be NA if missing
+                  SHaLRT = suppressWarnings(as.numeric(SHaLRT)),
                   isSupportedUFBoot = UFBoot>=95 & !is.na(UFBoot),
                   isSupportedSHalRT = SHaLRT>=80 & !is.na(SHaLRT),
                   colour = case_when(isSupportedUFBoot & isSupportedSHalRT ~ "black",
@@ -788,7 +788,7 @@ read.mammal.outgroup.tree <- function(file){
   rooted.file <- gsub("treefile", "rooted.treefile", file)
   
   # Root the tree
-  outgroup.tree <- reroot.tree(outgroup.tree, c("Platypus_ZFX", "Australian_echidna_ZFX", position=0.1))
+  outgroup.tree <- reroot.tree(outgroup.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position=0.1)
   ape::write.tree(outgroup.tree, file = rooted.file)
   
   mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)

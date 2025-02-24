@@ -226,7 +226,7 @@ readr::write_tsv(locations.9aaTAD, "aln/locations.9aaTAD.mammal.tsv")
 locations.NLS <- locate.NLS.in.alignment(FILES$mammal.aa.aln, FILES$mammal.nt.aln, mammal.taxa.name.order)
 readr::write_tsv(locations.NLS, "aln/locations.NLS.mammal.tsv")
 
-#### Fetch TimeTree divergence times to highlight the rapid evolution in the rodents ####
+#### Create species trees for ZFX and ZFY using TimeTree Newick tree ####
 
 # Create a species list for use in bulk TimeTree website. Note that this may not 
 # retrieve the full species tree - check manually. The manual output is saved
@@ -242,60 +242,62 @@ species.tree$edge.length <- NULL # remove times
 species.tree$tip.label <- gsub("_", " ", species.tree$tip.label)
 
 # Set a new node label for the common ancestral node of the given species
+# tree - the tree to update
+# new.name - the new name for a node
+# ... the tip labels defining the node to update; MRCA of given tips.
 update.node.label <- function(tree, new.name, ...){
   test.node <- ape::getMRCA(tree, c(...))
   tree$node.label[test.node-length(tree$tip.label)] <- new.name
   tree
 }
 
-# Set node names for ZFX species tree
-zfx.phylogeny <- species.tree
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Mus", "Mus musculus", "Mus musculus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Arvicanthis", "Arvicanthis niloticus", "Arvicanthis niloticus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Mus-Arvicanthis", "Mus musculus", "Arvicanthis niloticus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Rattus", "Rattus norvegicus", "Rattus rattus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Murinae", "Mus musculus", "Rattus rattus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Muridae", "Mus musculus", "Meriones unguiculatus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Cricetidae", "Peromyscus maniculatus", "Phodopus roborovskii")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Eumuroida", "Mus musculus", "Phodopus roborovskii")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Muroidea", "Mus musculus", "Castor canadensis")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Muroidea-Fukomys", "Mus musculus", "Fukomys damarensis")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Xerinae", "Marmota marmota", "Urocitellus parryii")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Sciuridae", "Marmota marmota", "Sciurus carolinensis")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Rodentia", "Mus musculus", "Sciurus carolinensis")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Hominini", "Pan troglodytes", "Homo sapiens")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Homininae", "Gorilla gorilla", "Homo sapiens")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Hominidae", "Pongo pygmaeus", "Homo sapiens")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Cercopithecinae", "Macaca mulatta", "Papio anubis")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Cercopithecidae", "Rhinopithecus roxellana", "Papio anubis")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Catarrhini", "Homo sapiens", "Papio anubis")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Simiiformes", "Callithrix jacchus", "Papio anubis")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Euarchonoglires", "Mus musculus", "Papio anubis")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Otarioidea", "Zalophus californianus", "Odobenus rosmarus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Otarioidea-Mustela", "Mustela erminea", "Odobenus rosmarus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Ursus", "Ursus arctos", "Ursus maritimus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Arctoidea", "Mustela erminea", "Ursus maritimus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Canidae", "Canis lupus", "Vulpes vulpes")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Caniformia", "Canis lupus", "Odobenus rosmarus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Carnivora", "Canis lupus", "Felis catus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Felinae", "Lynx canadensis", "Felis catus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Ferae", "Manis pentadactyla", "Felis catus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Panperissodactyla", "Equus caballus", "Felis catus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Bovidae", "Capra hircus", "Bos taurus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Pecora", "Odocoileus virginianus", "Bos taurus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Cetacea", "Balaenoptera musculus", "Monodon monoceros")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Cetruminantia", "Balaenoptera musculus", "Bos taurus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Artiodactyla", "Sus scrofa", "Bos taurus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Euungulata", "Sus scrofa", "Zalophus californianus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Scrotifera", "Phyllostomus discolor", "Bos taurus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Boreoeutheria", "Mus musculus", "Bos taurus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Atlantogenata", "Choloepus didactylus", "Loxodonta africana")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Eutheria", "Mus musculus", "Loxodonta africana")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Marsupialia", "Monodelphis domestica", "Phascolarctos cinereus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Theria", "Mus musculus", "Phascolarctos cinereus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Monotremata", "Ornithorhynchus anatinus", "Tachyglossus aculeatus")
-zfx.phylogeny <- update.node.label(zfx.phylogeny, "Mammalia", "Mus musculus", "Tachyglossus aculeatus")
+# Set node names for species tree
+species.tree <- update.node.label(species.tree, "Mus-Arvicanthis", "Mus musculus", "Arvicanthis niloticus")
+species.tree <- update.node.label(species.tree, "Rattus", "Rattus norvegicus", "Rattus rattus")
+species.tree <- update.node.label(species.tree, "Murinae", "Mus musculus", "Rattus rattus")
+species.tree <- update.node.label(species.tree, "Muridae", "Mus musculus", "Meriones unguiculatus")
+species.tree <- update.node.label(species.tree, "Cricetidae", "Peromyscus maniculatus", "Phodopus roborovskii")
+species.tree <- update.node.label(species.tree, "Eumuroida", "Mus musculus", "Phodopus roborovskii")
+species.tree <- update.node.label(species.tree, "Muroidea", "Mus musculus", "Castor canadensis")
+species.tree <- update.node.label(species.tree, "Muroidea-Fukomys", "Mus musculus", "Fukomys damarensis")
+species.tree <- update.node.label(species.tree, "Xerinae", "Marmota marmota", "Urocitellus parryii")
+species.tree <- update.node.label(species.tree, "Sciuridae", "Marmota marmota", "Sciurus carolinensis")
+species.tree <- update.node.label(species.tree, "Rodentia", "Mus musculus", "Sciurus carolinensis")
+species.tree <- update.node.label(species.tree, "Hominini", "Pan troglodytes", "Homo sapiens")
+species.tree <- update.node.label(species.tree, "Homininae", "Gorilla gorilla", "Homo sapiens")
+species.tree <- update.node.label(species.tree, "Hominidae", "Pongo pygmaeus", "Homo sapiens")
+species.tree <- update.node.label(species.tree, "Cercopithecinae", "Macaca mulatta", "Papio anubis")
+species.tree <- update.node.label(species.tree, "Cercopithecidae", "Rhinopithecus roxellana", "Papio anubis")
+species.tree <- update.node.label(species.tree, "Catarrhini", "Homo sapiens", "Papio anubis")
+species.tree <- update.node.label(species.tree, "Simiiformes", "Callithrix jacchus", "Papio anubis")
+species.tree <- update.node.label(species.tree, "Euarchonoglires", "Mus musculus", "Papio anubis")
+species.tree <- update.node.label(species.tree, "Otarioidea", "Zalophus californianus", "Odobenus rosmarus")
+species.tree <- update.node.label(species.tree, "Otarioidea-Mustela", "Mustela erminea", "Odobenus rosmarus")
+species.tree <- update.node.label(species.tree, "Ursus", "Ursus arctos", "Ursus maritimus")
+species.tree <- update.node.label(species.tree, "Arctoidea", "Mustela erminea", "Ursus maritimus")
+species.tree <- update.node.label(species.tree, "Canidae", "Canis lupus", "Vulpes vulpes")
+species.tree <- update.node.label(species.tree, "Caniformia", "Canis lupus", "Odobenus rosmarus")
+species.tree <- update.node.label(species.tree, "Carnivora", "Canis lupus", "Felis catus")
+species.tree <- update.node.label(species.tree, "Felinae", "Lynx canadensis", "Felis catus")
+species.tree <- update.node.label(species.tree, "Ferae", "Manis pentadactyla", "Felis catus")
+species.tree <- update.node.label(species.tree, "Panperissodactyla", "Equus caballus", "Felis catus")
+species.tree <- update.node.label(species.tree, "Bovidae", "Capra hircus", "Bos taurus")
+species.tree <- update.node.label(species.tree, "Pecora", "Odocoileus virginianus", "Bos taurus")
+species.tree <- update.node.label(species.tree, "Cetacea", "Balaenoptera musculus", "Monodon monoceros")
+species.tree <- update.node.label(species.tree, "Cetruminantia", "Balaenoptera musculus", "Bos taurus")
+species.tree <- update.node.label(species.tree, "Artiodactyla", "Sus scrofa", "Bos taurus")
+species.tree <- update.node.label(species.tree, "Euungulata", "Sus scrofa", "Zalophus californianus")
+species.tree <- update.node.label(species.tree, "Scrotifera", "Phyllostomus discolor", "Bos taurus")
+species.tree <- update.node.label(species.tree, "Boreoeutheria", "Mus musculus", "Bos taurus")
+species.tree <- update.node.label(species.tree, "Atlantogenata", "Choloepus didactylus", "Loxodonta africana")
+species.tree <- update.node.label(species.tree, "Eutheria", "Mus musculus", "Loxodonta africana")
+species.tree <- update.node.label(species.tree, "Marsupialia", "Monodelphis domestica", "Phascolarctos cinereus")
+species.tree <- update.node.label(species.tree, "Theria", "Mus musculus", "Phascolarctos cinereus")
+species.tree <- update.node.label(species.tree, "Monotremata", "Ornithorhynchus anatinus", "Tachyglossus aculeatus")
+species.tree <- update.node.label(species.tree, "Mammalia", "Mus musculus", "Tachyglossus aculeatus")
 
+# Make the ZFX tree
+zfx.phylogeny <- species.tree
 zfx.phylogeny$tip.label <- sapply(zfx.phylogeny$tip.label, \(x) unique(METADATA$mammal[METADATA$mammal$species==x & (METADATA$mammal$group=="ZFX" | METADATA$mammal$group=="Outgroup"),]$common.name), simplify = TRUE)
 zfx.phylogeny$tip.label <- gsub(" ", "_", zfx.phylogeny$tip.label)
 ape::write.tree(zfx.phylogeny, "aln/zfx_only/zfx.nt.species.nwk")
@@ -308,52 +310,9 @@ zfy.phylogeny <- phytools::bind.tip(zfy.phylogeny, "Mus musculus", where=mus.nod
 arvicanthis.node <- which(zfy.phylogeny$tip.label=="Arvicanthis niloticus")
 zfy.phylogeny <- phytools::bind.tip(zfy.phylogeny, "Arvicanthis niloticus", where=arvicanthis.node)
 
-# Replace node numbers with closest identifiable clades
+# Replace node numbers for the newly added sequences
 zfy.phylogeny <- update.node.label(zfy.phylogeny, "Mus", "Mus musculus", "Mus musculus")
 zfy.phylogeny <- update.node.label(zfy.phylogeny, "Arvicanthis", "Arvicanthis niloticus", "Arvicanthis niloticus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Mus-Arvicanthis", "Mus musculus", "Arvicanthis niloticus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Rattus", "Rattus norvegicus", "Rattus rattus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Murinae", "Mus musculus", "Rattus rattus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Muridae", "Mus musculus", "Meriones unguiculatus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Cricetidae", "Peromyscus maniculatus", "Phodopus roborovskii")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Eumuroida", "Mus musculus", "Phodopus roborovskii")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Muroidea", "Mus musculus", "Castor canadensis")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Muroidea-Fukomys", "Mus musculus", "Fukomys damarensis")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Xerinae", "Marmota marmota", "Urocitellus parryii")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Sciuridae", "Marmota marmota", "Sciurus carolinensis")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Rodentia", "Mus musculus", "Sciurus carolinensis")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Hominini", "Pan troglodytes", "Homo sapiens")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Homininae", "Gorilla gorilla", "Homo sapiens")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Hominidae", "Pongo pygmaeus", "Homo sapiens")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Cercopithecinae", "Macaca mulatta", "Papio anubis")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Cercopithecidae", "Rhinopithecus roxellana", "Papio anubis")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Catarrhini", "Homo sapiens", "Papio anubis")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Simiiformes", "Callithrix jacchus", "Papio anubis")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Euarchonoglires", "Mus musculus", "Papio anubis")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Otarioidea", "Zalophus californianus", "Odobenus rosmarus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Otarioidea-Mustela", "Mustela erminea", "Odobenus rosmarus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Ursus", "Ursus arctos", "Ursus maritimus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Arctoidea", "Mustela erminea", "Ursus maritimus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Canidae", "Canis lupus", "Vulpes vulpes")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Caniformia", "Canis lupus", "Odobenus rosmarus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Carnivora", "Canis lupus", "Felis catus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Felinae", "Lynx canadensis", "Felis catus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Ferae", "Manis pentadactyla", "Felis catus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Panperissodactyla", "Equus caballus", "Felis catus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Bovidae", "Capra hircus", "Bos taurus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Pecora", "Odocoileus virginianus", "Bos taurus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Cetacea", "Balaenoptera musculus", "Monodon monoceros")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Cetruminantia", "Balaenoptera musculus", "Bos taurus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Artiodactyla", "Sus scrofa", "Bos taurus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Euungulata", "Sus scrofa", "Zalophus californianus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Scrotifera", "Phyllostomus discolor", "Bos taurus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Boreoeutheria", "Mus musculus", "Bos taurus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Atlantogenata", "Choloepus didactylus", "Loxodonta africana")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Eutheria", "Mus musculus", "Loxodonta africana")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Marsupialia", "Monodelphis domestica", "Phascolarctos cinereus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Theria", "Mus musculus", "Phascolarctos cinereus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Monotremata", "Ornithorhynchus anatinus", "Tachyglossus aculeatus")
-zfy.phylogeny <- update.node.label(zfy.phylogeny, "Mammalia", "Mus musculus", "Tachyglossus aculeatus")
 
 # Get the ordered set of tip labels from metadata based on the tree order. 
 # Search only unique species names, gets two hits for Mus+Arvicanthis, flatten the list result
@@ -364,6 +323,7 @@ zfy.phylogeny$tip.label <- unlist( lapply(unique(zfy.phylogeny$tip.label),
 zfy.phylogeny$tip.label <- gsub(" ", "_", zfy.phylogeny$tip.label)
 ape::write.tree(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
 
+#### Fetch TimeTree divergence times to highlight the rapid evolution in the rodents ####
 
 get.time.tree <- function(tax.a, tax.b){
   tryCatch({
