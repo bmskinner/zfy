@@ -1142,22 +1142,22 @@ plot.alignment.region <- function(region.data, meme.overview){
     dplyr::mutate(isSignificant = Site %in% (meme.overview$site*3-1)) %>%
     merge(., meme.overview, by.x = "Site", by.y = "site.nt", all.x=T) %>%
     dplyr::mutate(sequenceInt = as.integer(Sequence),
-                  clade = case_when(str_detect(Sequence, "Grass_Rat_ZFY") ~ "murinae",
-                                    str_detect(Sequence, "Mouse_Zfy") ~ "murinae",
-                                    str_detect(Sequence, "Rat_Zfy") ~ "murinae",
-                                    str_detect(Sequence, "Mongolian_gerbil_Zfx-like") ~ "muridae",
-                                    str_detect(Sequence, "deer_mouse_Zfx-like") ~ "eumuroida",
-                                    str_detect(Sequence, "hamster_Zfx-like") ~ "eumuroida",
+                  clade = case_when(str_detect(Sequence, "Grass_Rat_ZFY") ~ "rodentia eumuroida muridae murinae",
+                                    str_detect(Sequence, "Mouse_Zfy") ~ "rodentia eumuroida muridae murinae",
+                                    str_detect(Sequence, "Black_rat_Zfy") ~ "rodentia eumuroida muridae murinae",
+                                    str_detect(Sequence, "Norwegian_Rat_Zfy") ~ "rodentia eumuroida muridae murinae",
+                                    str_detect(Sequence, "Mongolian_gerbil_Zfx-like") ~ "rodentia eumuroida muridae",
+                                    str_detect(Sequence, "deer_mouse_Zfx-like") ~ "rodentia eumuroida",
+                                    str_detect(Sequence, "hamster_Zfx-like") ~ "rodentia eumuroida",
                                     str_detect(Sequence, "marmot_ZFY") ~ "rodentia",
                                     str_detect(Sequence, "squirrel_Zfx-like") ~ "rodentia",
                                     str_detect(Sequence, "squirrel_Zfy") ~ "rodentia",
+                                    str_detect(Sequence, "Damara_mole_rat_Zfy") ~ "rodentia",
                                     str_detect(Sequence, "Beaver_Zfx-like") ~ "rodentia",
                                     .default = "other"
                   ),
-                  isSignificantSite = case_when( (clade %in% c("rodentia")) & rodentia<0.01 ~ T,
-                                                 (clade %in% c("eumuroida")) & eumuroida<0.01 ~ T,
-                                                 (clade %in% c("muridae")) & muridae<0.01 ~ T,
-                                                 (clade %in% c("murinae")) & murinae<0.01 ~ T,
+                  isSignificantSite = case_when( str_detect(clade, "eumuroida") & eumuroida<0.01 ~ T,
+                                                 
                                                  .default = F)
                   
     )
@@ -1177,7 +1177,7 @@ plot.alignment.region <- function(region.data, meme.overview){
     geom_tile(data=tidy.region.aa.data,  aes(x = Site, y = Sequence, fill=Residue, width=0.5, height=1))+
     geom_text(data = tidy.region.aa.data, aes(x = Site, y = Sequence, label=Residue, col=isSignificantSite), 
               size=2, family="mono", )+
-    scale_color_manual(values = c("white", "black"))+
+    scale_color_manual(values = c(`FALSE`="white", `TRUE`="black"))+
     guides(col = FALSE)+
     guides(fill = FALSE)+
     
