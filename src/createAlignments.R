@@ -130,6 +130,11 @@ FILES$combined.aa.aln.treefile <- run.iqtree(FILES$combined.aa.aln,
                                              "-bb 1000", # number of bootstrap replicates
                                              "-alrt 1000") # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
 
+FILES$mammal.aa.aln.treefile <- run.iqtree(FILES$mammal.aa.aln, 
+                                             "-bb 1000", # number of bootstrap replicates
+                                             "-alrt 1000") # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+
+
 #### Create mammal CDS NT tree #####
 
 # Make ML tree and reconstruct ancestral sequences
@@ -193,17 +198,33 @@ combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")
 combined.taxa.name.order <- ggtree::get_taxa_name(combined.aa.tree) 
 
 # Find and export ZFs
-locations.zf <- locate.zfs.in.alignment(combined.taxa.name.order)
-readr::write_tsv(locations.zf, "aln/locations.zf.tsv")
+locations.zf <- locate.zfs.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
+readr::write_tsv(locations.zf, "aln/locations.zf.combined.tsv")
 
 # Find and export 9aaTADS
 locations.9aaTAD <- locate.9aaTADs.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
-readr::write_tsv(locations.9aaTAD, "aln/locations.9aaTAD.tsv")
+readr::write_tsv(locations.9aaTAD, "aln/locations.9aaTAD.combined.tsv")
 
 # Find and export NLS
 locations.NLS <- locate.NLS.in.alignment(FILES$combined.aa.aln, FILES$combined.nt.aln, combined.taxa.name.order)
-readr::write_tsv(locations.NLS, "aln/locations.NLS.tsv")
+readr::write_tsv(locations.NLS, "aln/locations.NLS.combined.tsv")
 
+# Also find the locations of these features in the mammal-only alignments
+
+mammal.outgroup.tree <- read.mammal.outgroup.tree(FILES$mammal.aa.aln.treefile)
+mammal.aa.tree <- plot.tree(mammal.outgroup.tree, col = "group")
+mammal.taxa.name.order <- ggtree::get_taxa_name(mammal.aa.tree) 
+
+locations.zf <- locate.zfs.in.alignment(FILES$mammal.aa.aln, FILES$mammal.nt.aln, mammal.taxa.name.order)
+readr::write_tsv(locations.zf, "aln/locations.zf.mammal.tsv")
+
+# Find and export 9aaTADS
+locations.9aaTAD <- locate.9aaTADs.in.alignment(FILES$mammal.aa.aln, FILES$mammal.nt.aln, mammal.taxa.name.order)
+readr::write_tsv(locations.9aaTAD, "aln/locations.9aaTAD.mammal.tsv")
+
+# Find and export NLS
+locations.NLS <- locate.NLS.in.alignment(FILES$mammal.aa.aln, FILES$mammal.nt.aln, mammal.taxa.name.order)
+readr::write_tsv(locations.NLS, "aln/locations.NLS.mammal.tsv")
 
 #### Fetch TimeTree divergence times to highlight the rapid evolution in the rodents ####
 

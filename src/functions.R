@@ -70,6 +70,7 @@ FILES <- list(
   mammal.nt.nexus = "aln/mammal/mammal.nt.nex",
   mammal.nt.partition = "aln/mammal/mammal.nt.partition",
   mammal.aa.aln = "aln/mammal/mammal.aa.aln",
+  mammal.aa.aln.treefile = "aln/mammal/mammal.aa.aln.treefile",
   mammal.nt.aln.treefile = "aln/mammal/mammal.nt.aln.treefile",
   combined.nt.aln.treefile = "aln/combined/combined.nt.aln.treefile",
   combined.aa.aln.treefile = "aln/combined/combined.aa.aln.treefile",
@@ -632,7 +633,7 @@ plot.kaks <- function(nt.aln.file, species.order, kaks.limits=c(0, 1)){
 
 
 #### Finding structural features #####
-locate.zfs.in.alignment <- function(taxa.order){
+locate.zfs.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.order){
   
   taxa.order <- gsub(" ", "_", taxa.order) # in case _ had previously been replaced
   
@@ -643,17 +644,24 @@ locate.zfs.in.alignment <- function(taxa.order){
   if(!file.exists("aln/pwm/combined.aa.hmm.dom.txt")){
     stop("Missing hmmsearch output, cannot find ZFs")
   }
+  
+  # Read the alignments
+  aa.aln <- Biostrings::readAAMultipleAlignment(aa.alignment.file, format="fasta")
+  nt.aln <- Biostrings::readDNAMultipleAlignment(nt.alignment.file, format="fasta")
+  
+  # Contains predictions for all sequences - filter to those we need
   zf.data <- read_table("aln/pwm/combined.aa.hmm.dom.txt", comment = "#",
                         col_names = FALSE)
-  zf.data <- zf.data[,c(1, 20, 21)]
+  zf.data <- zf.data[ ,c(1, 20, 21)]
   colnames(zf.data) <- c("sequence", "start_ungapped", "end_ungapped")
+  zf.data <- zf.data[zf.data$sequence %in% taxa.order,] # only the taxa we care about
   
   # Find ZFs in each aa sequence, then find the gapped coordinates in the nt alignment
   do.call(rbind, mapply(find.zf, 
                         sequence.name = zf.data$sequence, 
                         start = zf.data$start_ungapped,
                         end = zf.data$end_ungapped,
-                        MoreArgs = list(aa=ALIGNMENTS$aa.combined.biostrings),
+                        MoreArgs = list(aa=aa.aln),
                         SIMPLIFY = FALSE)) %>%
     dplyr::mutate(sequence = factor(sequence, 
                                     levels = rev(taxa.order))) %>% # sort reverse to match tree
@@ -661,14 +669,14 @@ locate.zfs.in.alignment <- function(taxa.order){
     dplyr::mutate(i = as.integer(sequence)) %>%  # Set the row indexes for plotting
     
     # Add the gapped nt alignment coordinates for nt sequences
-    dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(ALIGNMENTS$nt.combined.biostrings@unmasked), # we have the nt alignment
-                                            convert.to.gapped.coordinate(start_nt_ungapped,  ALIGNMENTS$nt.combined.biostrings@unmasked[[sequence]]),
+    dplyr::mutate(start_nt_gapped = ifelse( sequence %in% names(nt.aln@unmasked), # we have the nt alignment
+                                            convert.to.gapped.coordinate(start_nt_ungapped,  nt.aln@unmasked[[sequence]]),
                                             NA),
-                  end_nt_gapped = ifelse( sequence %in% names(ALIGNMENTS$nt.combined.biostrings@unmasked), # we have the nt alignment
-                                          convert.to.gapped.coordinate(end_nt_ungapped,  ALIGNMENTS$nt.combined.biostrings@unmasked[[sequence]]),
+                  end_nt_gapped = ifelse( sequence %in% names(nt.aln@unmasked), # we have the nt alignment
+                                          convert.to.gapped.coordinate(end_nt_ungapped,  nt.aln@unmasked[[sequence]]),
                                           NA)) %>%
     # Add the AA sequence covered by the ZF and motifs
-    dplyr::mutate(aa_motif_gapped = as.character(ALIGNMENTS$aa.combined.biostrings@unmasked[[sequence]][start_gapped:end_gapped]),
+    dplyr::mutate(aa_motif_gapped = as.character(aa.aln@unmasked[[sequence]][start_gapped:end_gapped]),
                   aa_motif = gsub("-", "", aa_motif_gapped),
                   # 6    32  -1
                   # find the contact motif within the ZF (if available) .*H.{3}H(.)..(..).(.).{5}C..C.*
@@ -676,37 +684,6 @@ locate.zfs.in.alignment <- function(taxa.order){
                   # but reverse to match our sequences : C..C.{5}(.).(..)..(.)H.{3,4}.H
                   contact_bases = paste(str_match(aa_motif, "C..C.....(.).(..)..(.)H.{3,4}")[,2:4], collapse = "" ),
                   contact_bases = ifelse(contact_bases=="NANANA", NA, contact_bases) # clean up NAs
-                  
-                  # Find where the contact bases motif starts with respect to the start position of the ZF already identified
-                  # contact_bases_start = str_locate(aa_motif, "C..C.....(.).(..)..(.)H.{3,4}")[,1],
-                  # contact_base_ungapped_start = start_nt_ungapped-contact_bases_start+1,
-                  # 
-                  # # Get the nt motif in the ungapped alignment
-                  # nt_seq = gsub("-", "", ALIGNMENTS$nt.combined.biostrings@unmasked[[sequence]]),
-                  # nt_motif = substr(nt_seq, contact_base_ungapped_start, end_nt_ungapped),
-                  # nt_motif_vec = ifelse(is.na(contact_bases), NA, 
-                  #                       list(s2c(nt_motif))),
-                  # nt_motif_tr = ifelse(is.na(contact_bases), NA, 
-                  #                      paste(seqinr::translate(nt_motif_vec), collapse = "")),
-                  # motif_ok = nt_motif_tr==aa_motif
-                  # 
-                  # # Find the coordinate of the contact bases in the ungapped nt alignment
-                  # contact_base_1 = ifelse(is.na(contact_bases), 
-                  #                         NA, contact_base_start+31), # 12aa from start
-                  # contact_base_1_l = ifelse(is.na(contact_bases), 
-                  #                            NA,  substr(nt_seq, contact_base_1, contact_base_1+2)),
-                  # contact_base_23 = ifelse(is.na(contact_bases), 
-                  #                         NA, contact_base_start+37), # 14+15aa from start
-                  # contact_base_23_l = ifelse(is.na(contact_bases), 
-                  #                           NA,  substr(nt_seq, contact_base_23, contact_base_23+5)),
-                  # contact_base_4 = ifelse(is.na(contact_bases), 
-                  #                         NA, contact_base_start+49), # 18aa from start
-                  # contact_base_4_l = ifelse(is.na(contact_bases), 
-                  #                           NA,  substr(nt_seq, contact_base_4, contact_base_4+2)),
-                  # contact_base_nt = paste0(contact_base_1_l, contact_base_23_l, contact_base_4_l),
-                  # contact_nt_tr = paste(seqinr::translate(s2c(contact_base_nt)), collapse = ""),
-                  # contact_motif_ok = contact_nt_tr==contact_bases
-                  
     )
 }
 
@@ -802,6 +779,21 @@ read.combined.outgroup.tree <- function(file){
   mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
   combined.outgroup.tree <- groupOTU(combined.outgroup.tree, mammal.gene.groups, group_name = "group")
   combined.outgroup.tree
+}
+
+# Read the given treefile for mammals and outgroup species
+read.mammal.outgroup.tree <- function(file){
+  outgroup.tree <- ape::read.tree(paste0(file))
+  
+  rooted.file <- gsub("treefile", "rooted.treefile", file)
+  
+  # Root the tree
+  outgroup.tree <- reroot.tree(outgroup.tree, c("Platypus_ZFX", "Australian_echidna_ZFX", position=0.1))
+  ape::write.tree(outgroup.tree, file = rooted.file)
+  
+  mammal.gene.groups <- split(METADATA$mammal$common.name, METADATA$mammal$group)
+  outgroup.tree <- groupOTU(outgroup.tree, mammal.gene.groups, group_name = "group")
+  outgroup.tree
 }
 
 #### Other functions #####
