@@ -60,6 +60,7 @@ CLUSTALO.PATH <- ifelse(installr::is.windows(), "bin/clustal-omega-1.2.2-win64/c
 # Common file paths
 FILES <- list(
   mammal.nt.fas = "fasta/mammal.nt.fas",
+  mammal.aa.fas = "fasta/mammal.aa.fas",
   combined.nt.fas = "fasta/combined.nt.fas",
   combined.nt.aln = "aln/combined/combined.nt.aln",
   combined.nt.nexus = "aln/combined/combined.nt.nex",
@@ -348,7 +349,8 @@ prepare.fas.files <- function(){
                          include.dirs = T, full.names = T)
   
   fa.read  <- lapply(fa.files, read.fasta)
-  nt.raw   <- read.sequences(fa.read)
+  mammal.nt.raw   <- read.sequences(fa.read)
+  mammal.aa.raw <- ape::trans(mammal.nt.raw)
   
   metadata <- list()
   metadata$mammal <- read.metadata(fa.read) %>%
@@ -356,8 +358,8 @@ prepare.fas.files <- function(){
                   Species_common_name = str_replace(Species_common_name, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", ""))
   
   # Write the combined fasta to file with .fas extension
-  ape::write.FASTA(nt.raw, file = FILES$mammal.nt.fas)
-  
+  ape::write.FASTA(mammal.nt.raw, file = FILES$mammal.nt.fas)
+  ape::write.FASTA(mammal.aa.raw, file = FILES$mammal.aa.fas)
   
   # Read outgroup NT FA files
   # Read all unaligned sequence files with .fa extension
@@ -374,7 +376,7 @@ prepare.fas.files <- function(){
   metadata$combined <- rbind(metadata$mammal, metadata$outgroup)
   
   # Write the unaligned combined fasta to file with .fas extension
-  combined.nt.raw <- c(outgroup.nt.raw, nt.raw) # all sequences
+  combined.nt.raw <- c(outgroup.nt.raw, mammal.nt.raw) # all sequences
   combined.aa.raw <- ape::trans(combined.nt.raw)
   
   ape::write.FASTA(combined.nt.raw, file = FILES$combined.nt.fas)
@@ -722,7 +724,18 @@ locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
   aa.aln <- Biostrings::readAAMultipleAlignment(aa.alignment.file, format="fasta")
   nt.aln <- Biostrings::readDNAMultipleAlignment(nt.alignment.file, format="fasta")
   
-  if(!file.exists("aln/nls/combined.aa.nls.filt.out")){
+  # Output file name in ./aln/nls
+  out.file <- paste0("aln/nls/", gsub("aln$", "nls.filt.out", basename(aa.alignment.file)))
+  
+  # Run NLStradamus if needed
+  if(!file.exists(out.file)){
+    
+    
+    nls.file <- paste0("aln/nls/", gsub("aln$", "nls.out", basename(aa.alignment.file)))
+    fas.file <- paste0("fasta/", gsub("aln$", "fas", basename(aa.alignment.file)))
+    
+    cat(timestamp(), "Running NLStradamus on ", fas.file, "to", nls.file,"\n" )
+    
     # Nuclear localisation sequence
     # using NLStradamus
     # Nguyen Ba AN, Pogoutse A, Provart N, Moses AM. NLStradamus: a simple Hidden Markov Model for nuclear localization signal prediction. BMC Bioinformatics. 2009 Jun 29;10(1):202. 
@@ -731,14 +744,14 @@ locate.NLS.in.alignment <- function(aa.alignment.file, nt.alignment.file, taxa.o
     # ensure relatively lax threshold for broad detection
     # look for bipartite NLS
     # perl bin/nlstradamus.pl -i fasta/combined.aa.fas -t 0.5 -m 2 > nls/combined.aa.nls.out
-    system2("perl", paste(" bin/nlstradamus.pl -i fasta/combined.aa.fas -t 0.5 > aln/nls/combined.aa.nls.out"))
+    system2("perl", paste(" bin/nlstradamus.pl -i", fas.file, " -t 0.5 > ", nls.file))
     
     # Remove the non-table output
-    system2("cat", "aln/nls/combined.aa.nls.out | grep -v 'Finished' | grep -v '=' | grep -v 'Analyzed' | grep -v 'sites' | grep -v 'Input' | grep -v 'Threshold' > aln/nls/combined.aa.nls.filt.out")
+    system2("cat",  paste(nls.file, " | grep -v 'Finished' | grep -v '=' | grep -v 'Analyzed' | grep -v 'sites' | grep -v 'Input' | grep -v 'Threshold' > ", out.file))
     
   }
   # Read in the NLS prections
-  locations.NLS <- read_table("aln/nls/combined.aa.nls.filt.out", 
+  locations.NLS <- read_table(out.file, 
                               col_names = c("sequence", "type", "posterior_prob", "start_ungapped", "end_ungapped", "aa_motif"))
   
   # Adjust the raw sequences to their positions in aa msa
