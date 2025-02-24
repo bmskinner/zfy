@@ -266,7 +266,7 @@ read.alignments <- function(){
     nt.mammal.ape = ape::read.FASTA(FILES$mammal.nt.aln),
     nt.mammal.biostrings = Biostrings::readDNAMultipleAlignment(FILES$mammal.nt.aln, format="fasta"),
     
-    aa.mammal.ape <- ape::read.FASTA(FILES$mammal.aa.aln, type="AA"),
+    aa.mammal.ape = ape::read.FASTA(FILES$mammal.aa.aln, type="AA"),
     aa.mammal.biostrings = Biostrings::readAAMultipleAlignment(FILES$mammal.aa.aln, format="fasta")
   )
 }
@@ -504,7 +504,7 @@ add.conservation.track <- function(ranges,  y.start, y.end, ...){
 }
 
 # Add an exon track to a plot
-add.exon.track <- function(y.start, y.end, start_col = "start_aa", end_col = "end_aa", ...){
+add.exon.track <- function(y.start, y.end, start_col = "start_aa_combined", end_col = "start_aa_combined", ...){
   # The second exon is alternatively spliced, so mark it with a striped fill
   # via ggpattern::geom_rect_pattern
   geom_rect_pattern(data = mouse.exons, aes(xmin = .data[[start_col]], xmax = .data[[end_col]], 
@@ -519,7 +519,7 @@ add.exon.track <- function(y.start, y.end, start_col = "start_aa", end_col = "en
                     ...)
 }
 # Add exon labels track to a plot
-add.exon.labels <- function(y.start, y.end, start_col = "start_aa", end_col = "end_aa", ...){
+add.exon.labels <- function(y.start, y.end, start_col = "start_aa_combined", end_col = "start_aa_combined", ...){
   geom_text(data=mouse.exons,
             aes(x =(.data[[start_col]]+.data[[end_col]])/2, y=(y.start+y.end)/2, label=exon), size=1.8, col="black")
 }
@@ -534,11 +534,11 @@ annotate.structure.plot <- function(plot, n.taxa){
     
     
     # Draw the structures
-    add.track(ranges.NLS.common,    n.taxa+8.5, n.taxa+11.5, fill=NLS.COLOUR, alpha = 1)+ # +8.5
-    add.track(ranges.ZF.common,     n.taxa+9, n.taxa+11, fill=ZF.COLOUR)+ # 9 - 11
-    add.track.labels(ranges.ZF.common, n.taxa+9, n.taxa+11, col="white", label_col = "motif_number")+   # Label the ZFs
-    add.track(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, fill=TAD.COLOUR,  alpha = 0.9)+  #9
-    add.track.labels(ranges.9aaTAD.common, n.taxa+9, n.taxa+11, col="white")+   # Label the 9aaTADs
+    add.track(RANGES$combined.nls,    n.taxa+8.5, n.taxa+11.5, fill=NLS.COLOUR, alpha = 1)+ # +8.5
+    add.track(RANGES$combined.zf,     n.taxa+9, n.taxa+11, fill=ZF.COLOUR)+ # 9 - 11
+    add.track.labels(RANGES$combined.zf, n.taxa+9, n.taxa+11, col="white", label_col = "motif_number")+   # Label the ZFs
+    add.track(RANGES$combined.9aaTAD, n.taxa+9, n.taxa+11, fill=TAD.COLOUR,  alpha = 0.9)+  #9
+    add.track.labels(RANGES$combined.9aaTAD, n.taxa+9, n.taxa+11, col="white")+   # Label the 9aaTADs
     
     new_scale_fill()+ 
     scale_fill_paletteer_c("grDevices::Cividis", direction = 1, limits = c(0, 1))+
@@ -834,17 +834,22 @@ convert.to.gapped.coordinate <- function(site.no.gap, gapped.seq){
 find.exons <- function(){
   
   # Mammal only NT alignment
-  mouse.zfy1.nt <- as.character(ALIGNMENTS$nt.mammal.biostrings@unmasked$Mouse_Zfy1)
-  mouse.zfy1.nt.ungapped <- str_remove_all(mouse.zfy1.nt, "-|\\*")
+  mouse.zfy1.nt.mammal <- as.character(ALIGNMENTS$nt.mammal.biostrings@unmasked$Mouse_Zfy1)
+  mouse.zfy1.nt.mammal.ungapped <- str_remove_all(mouse.zfy1.nt.mammal, "-|\\*")
+  
+  # Mammal only AA alignment
+  mouse.zfy1.aa.mammal <- as.character(ALIGNMENTS$aa.mammal.biostrings@unmasked$Mouse_Zfy1)
+  mouse.zfy1.aa.mammal.ungapped <- str_remove_all(mouse.zfy1.aa.mammal, "-|\\*")
   
   # Combined NT alignment
   mouse.zfy1.nt.combined <- as.character(ALIGNMENTS$nt.combined.biostrings@unmasked$Mouse_Zfy1)
   mouse.zfy1.nt.combined.ungapped <- str_remove_all(mouse.zfy1.nt.combined, "-|\\*")
-  
+
   # Combined AA alignment
-  mouse.zfy1.aa <- as.character(ALIGNMENTS$aa.combined.biostrings@unmasked$Mouse_Zfy1)
-  mouse.zfy1.aa.ungapped <- str_remove_all(mouse.zfy1.aa, "-|\\*")
+  mouse.zfy1.aa.combined <- as.character(ALIGNMENTS$aa.combined.biostrings@unmasked$Mouse_Zfy1)
+  mouse.zfy1.aa.combined.ungapped <- str_remove_all(mouse.zfy1.aa.combined, "-|\\*")
   
+  # Hard coded seqences at the mouse exon bounds
   mouse.exons <- data.frame("exon"     = c("1", "2", "3",  "4", "5", "6",  "7"),
                             "start_nt" = c("ATGGATGAA", "GAGCTGATGCA", "TGGATGAACC", 
                                            "GAGAAACTAT", "AAGTAATTGT", "ATAATAATTCT", "CAATATTTGTT"),
@@ -855,40 +860,64 @@ find.exons <- function(){
                             "end_aa"   = c("KSFFDGIG", "INCEDYLMMSL","ADSEVDEL", "SQKEEEDTE",
                                            "PIAWTAAYD", "PESKQYQSA", "RHHKVGLP"))
   
-  start.nt <- sapply(mouse.exons$start_nt, str_locate, string=mouse.zfy1.nt.ungapped)[1,]
-  end.nt   <- sapply(mouse.exons$end_nt,   str_locate, string=mouse.zfy1.nt.ungapped)[2,]
+  
+  start.nt.mammal <- sapply(mouse.exons$start_nt, str_locate, string=mouse.zfy1.nt.mammal.ungapped)[1,]
+  end.nt.mammal   <- sapply(mouse.exons$end_nt,   str_locate, string=mouse.zfy1.nt.mammal.ungapped)[2,]
   
   start.nt.combined <- sapply(mouse.exons$start_nt, str_locate, string=mouse.zfy1.nt.combined.ungapped)[1,]
   end.nt.combined   <- sapply(mouse.exons$end_nt,   str_locate, string=mouse.zfy1.nt.combined.ungapped)[2,]
   
-  start.aa <- sapply(mouse.exons$start_aa, str_locate, string=mouse.zfy1.aa.ungapped)[1,]
-  end.aa   <- sapply(mouse.exons$end_aa,   str_locate, string=mouse.zfy1.aa.ungapped)[2,]
+  start.aa.mammal <- sapply(mouse.exons$start_aa, str_locate, string=mouse.zfy1.aa.mammal.ungapped)[1,]
+  end.aa.mammal   <- sapply(mouse.exons$end_aa,   str_locate, string=mouse.zfy1.aa.mammal.ungapped)[2,]
+  
+  start.aa.combined <- sapply(mouse.exons$start_aa, str_locate, string=mouse.zfy1.aa.combined.ungapped)[1,]
+  end.aa.combined   <- sapply(mouse.exons$end_aa,   str_locate, string=mouse.zfy1.aa.combined.ungapped)[2,]
   
   # Note that the aa and nt positions are not from equivalent alignments!
   # NT is from mammals, AA is from mammals + outgroups
   data <- data.frame("exon"     = mouse.exons$exon,
-                     "start_nt"    = sapply(start.nt, convert.to.gapped.coordinate, mouse.zfy1.nt),
-                     "end_nt"      = sapply(end.nt,   convert.to.gapped.coordinate, mouse.zfy1.nt),
-                     "start_nt_combined"    = sapply(start.nt.combined, convert.to.gapped.coordinate, mouse.zfy1.nt),
-                     "end_nt_combined"      = sapply(end.nt.combined,   convert.to.gapped.coordinate, mouse.zfy1.nt),
-                     "start_aa" = sapply(start.aa, convert.to.gapped.coordinate, mouse.zfy1.aa),
-                     "end_aa"   = sapply(end.aa,   convert.to.gapped.coordinate, mouse.zfy1.aa),
+                     "start_nt_mammal"    = sapply(start.nt.mammal, convert.to.gapped.coordinate, mouse.zfy1.nt.mammal),
+                     "end_nt_mammal"      = sapply(end.nt.mammal,   convert.to.gapped.coordinate, mouse.zfy1.nt.mammal),
+                     
+                     "start_nt_combined"    = sapply(start.nt.combined, convert.to.gapped.coordinate, mouse.zfy1.nt.combined),
+                     "end_nt_combined"      = sapply(end.nt.combined,   convert.to.gapped.coordinate, mouse.zfy1.nt.combined),
+                     
+                     "start_aa_mammal"    = sapply(start.aa.mammal, convert.to.gapped.coordinate, mouse.zfy1.aa.mammal),
+                     "end_aa_mammal"      = sapply(end.aa.mammal,   convert.to.gapped.coordinate, mouse.zfy1.aa.mammal),
+                     
+                     "start_aa_combined" = sapply(start.aa.combined, convert.to.gapped.coordinate, mouse.zfy1.aa.combined),
+                     "end_aa_combined"   = sapply(end.aa.combined,   convert.to.gapped.coordinate, mouse.zfy1.aa.combined),
+                     
                      "is_even"  = sapply(mouse.exons$exon, function(i) as.numeric(i)%%2==0)) %>%
     dplyr::mutate(
       # Correct for gaps in the alignment affecting exon boundaries
       # Extend the next exon to start at the end of the current
-      start_nt = ifelse(lag(end_nt)+1!=start_nt & !is.na(lag(end_nt)), lag(end_nt)+1, start_nt),
+      start_nt_mammal = ifelse(lag(end_nt_mammal)+1!=start_nt_mammal & !is.na(lag(end_nt_mammal)), lag(end_nt_mammal)+1, start_nt_mammal),
+      start_nt_combined = ifelse(lag(end_nt_combined)+1!=start_nt_combined & !is.na(lag(end_nt_combined)), lag(end_nt_combined)+1, start_nt_combined),
       
-      length_nt = end_nt - start_nt + 1,
-      length_aa = end_aa - start_aa + 1,
+      
+      length_nt_mammal = end_nt_mammal - start_nt_mammal + 1,
+      length_nt_combined = end_nt_combined - start_nt_combined + 1,
+      
+      length_aa_mammal = end_aa_mammal - start_aa_mammal + 1,
+      length_aa_combined = end_aa_combined - start_aa_combined + 1,
+      
       # fix the offsets to get ORF of each exon
-      start_nt_codon_offset = case_when(exon==1 ~ start_nt, # hardcode the codon offsets for subsetting
-                                        exon>=2 ~ start_nt-1),
-      end_nt_codon_offset   = case_when(exon<7 ~ end_nt-1,
-                                        exon==7 ~ end_nt),
-      corrected_offset_length = (end_nt_codon_offset - start_nt_codon_offset +1)%%3) %>%
+      start_nt_codon_offset_mammal = case_when(exon==1 ~ start_nt_mammal, # hardcode the codon offsets for subsetting
+                                               exon>=2 ~ start_nt_mammal-1),
+      end_nt_codon_offset_mammal   = case_when(exon<7 ~ end_nt_mammal-1,
+                                               exon==7 ~ end_nt_mammal),
+      start_nt_codon_offset_combined = case_when(exon==1 ~ start_nt_combined, # hardcode the codon offsets for subsetting
+                                               exon>=2 ~ start_nt_combined-1),
+      end_nt_codon_offset_combined   = case_when(exon<7 ~ end_nt_combined-1,
+                                               exon==7 ~ end_nt_combined),
+      
+      corrected_offset_length_mammal = (end_nt_codon_offset_mammal - start_nt_codon_offset_mammal +1)%%3,
+      corrected_offset_length_combined = (end_nt_codon_offset_combined - start_nt_codon_offset_combined +1)%%3,
+      
+      ) %>%
     dplyr::rowwise() %>%
-    dplyr::mutate(exon_orf = subset.sequence(ALIGNMENTS$nt.combined.biostrings, "Mouse_Zfy1", start_nt_codon_offset, end_nt_codon_offset),
+    dplyr::mutate(exon_orf = subset.sequence(ALIGNMENTS$nt.combined.biostrings, "Mouse_Zfy1", start_nt_codon_offset_mammal, end_nt_codon_offset_mammal),
                   exon_orf_length = nchar(exon_orf),
                   exon_orf_triplet = exon_orf_length/3) # check divisible by 3
   
@@ -1112,14 +1141,12 @@ extract.mammal.alignment.region <- function(nt.start=NULL, nt.end=NULL, aa.start
   
   nt.aln <- as.data.frame(as.matrix(ALIGNMENTS$nt.mammal.biostrings)[,nt.start:nt.end]) %>%
     dplyr::mutate(Sequence = rownames(.),
-                  Sequence = str_replace_all(Sequence, "_", " "), # remove underscores for pretty printing
                   Sequence = factor(Sequence, levels = mammal.taxa.name.order)) %>%
     dplyr::arrange(as.integer(Sequence)) %>%
     dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+nt.start-1) )
   
   aa.aln <- as.data.frame(as.matrix(ALIGNMENTS$aa.mammal.biostrings)[,aa.start:aa.end]) %>%
     dplyr::mutate(Sequence = rownames(.),
-                  Sequence = str_replace_all(Sequence, "_", " "), # remove underscores for pretty printing
                   Sequence = factor(Sequence, levels = mammal.taxa.name.order)) %>%
     dplyr::arrange(as.integer(Sequence)) %>%
     dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+aa.start-1) )

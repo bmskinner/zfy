@@ -137,19 +137,19 @@ save.double.width("figure/dnds.png", kaks.pairwise.plot)
 
 # Look at the final exon versus exons 1&3-6; is purifying selection more 
 # pronounced in the ZFs versus exon 2 and exon 7?
-exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset[1]:mouse.exons$end_nt_codon_offset[1], 
-                    mouse.exons$start_nt_codon_offset[3]:mouse.exons$end_nt_codon_offset[6])
+exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset_mammal[1]:mouse.exons$end_nt_codon_offset_mammal[1], 
+                    mouse.exons$start_nt_codon_offset_mammal[3]:mouse.exons$end_nt_codon_offset_mammal[6])
 exon1.3_6.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,exon1.3_6.locs]
 
 ape::write.FASTA(exon1.3_6.aln, file = "aln/exons/exon_1_3-6.kaks.aln")
 seqin.aln.exon.1.3_6 <- seqinr::read.alignment("aln/exons/exon_1_3-6.kaks.aln", format = "fasta")
 
-exon2.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt_codon_offset[2]:(mouse.exons$end_nt_codon_offset[2])]
+exon2.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt_codon_offset_mammal[2]:(mouse.exons$end_nt_codon_offset_mammal[2])]
 ape::write.FASTA(exon2.aln, file = "aln/exons/exon_2.kaks.aln")
 seqin.aln.exon.2 <- seqinr::read.alignment("aln/exons/exon_2.kaks.aln", format = "fasta")
 exon2.aln.msa <- ape::read.FASTA("aln/exons/exon_2.kaks.aln")
 
-exon.7.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,(mouse.exons$start_nt_codon_offset[7]):mouse.exons$end_nt_codon_offset[7]] 
+exon.7.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,(mouse.exons$start_nt_codon_offset_mammal[7]):mouse.exons$end_nt_codon_offset_mammal[7]] 
 ape::write.FASTA(exon.7.aln, file = "aln/exons/exon_7.kaks.aln")
 seqin.aln.exon.7 <- seqinr::read.alignment("aln/exons/exon_7.kaks.aln", format = "fasta")
 
@@ -205,55 +205,82 @@ create.xlsx(kaks.exon.7, "figure/kaks.exon.7.xlsx")
 
 #### Identify the locations of the ZFs in the AA & NT MSAs ####
 
-locations.zf <- readr::read_tsv("aln/locations.zf.combined.tsv")
+LOCATIONS <- list()
+RANGES <- list()
 
-write_tsv(locations.zf %>% 
+LOCATIONS$combined.zf <- readr::read_tsv("aln/locations.zf.combined.tsv")
+LOCATIONS$mammal.zf <- readr::read_tsv("aln/locations.zf.mammal.tsv")
+
+write_tsv(LOCATIONS$combined.zf %>% 
             dplyr::select(sequence, aa_motif, start_ungapped, end_ungapped, 
                           start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
                           start_nt_gapped, end_nt_gapped),
           "figure/locations.zf.tsv")
 
-ranges.ZF.common <- merge(find.common.aa.overlaps(locations.zf), find.common.nt.overlaps(locations.zf), by = "motif_number")
+RANGES$combined.zf <- merge(find.common.aa.overlaps(LOCATIONS$combined.zf), find.common.nt.overlaps(LOCATIONS$combined.zf), by = "motif_number")
+RANGES$mammal.zf <- merge(find.common.aa.overlaps(LOCATIONS$mammal.zf), find.common.nt.overlaps(LOCATIONS$mammal.zf), by = "motif_number")
 
 # Annotate the individual ZFs with which consensus motif they belong to (0 if none)
-locations.zf %<>% 
+LOCATIONS$combined.zf %<>% 
   dplyr::rowwise() %>%
-  dplyr::mutate(motif_number = find.matching.range("start", "end", start_gapped, end_gapped, ranges.ZF.common )) %>%
+  dplyr::mutate(motif_number = find.matching.range("start", "end", start_gapped, end_gapped, RANGES$combined.zf )) %>%
   dplyr::ungroup()
+
+LOCATIONS$mammal.zf %<>% 
+  dplyr::rowwise() %>%
+  dplyr::mutate(motif_number = find.matching.range("start", "end", start_gapped, end_gapped, RANGES$mammal.zf )) %>%
+  dplyr::ungroup()
+
 
 #### Identify the locations of the 9aaTADs in the AA & NT MSAs ####
 
-locations.9aaTAD <- readr::read_tsv("aln/locations.9aaTAD.combined.tsv")
+LOCATIONS$combined.9aaTAD <- readr::read_tsv("aln/locations.9aaTAD.combined.tsv")
+LOCATIONS$mammal.9aaTAD <- readr::read_tsv("aln/locations.9aaTAD.mammal.tsv")
 
-write_tsv(locations.9aaTAD %>% 
+write_tsv(LOCATIONS$combined.9aaTAD %>% 
             dplyr::select(sequence, aa_motif, rc_score, start_ungapped, end_ungapped, 
                           start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
                           start_nt_gapped, end_nt_gapped),
           "figure/locations.9aaTAD.tsv")
 
 # Only keep the high confidence 9aaTADs for the track
-ranges.9aaTAD.common <-  merge(find.common.aa.9aaTADs(locations.9aaTAD, 
+RANGES$combined.9aaTAD <-  merge(find.common.aa.9aaTADs(LOCATIONS$combined.9aaTAD, 
                                                       rc.threshold = 80,
                                                       coverage.threshold = 21),
-                               find.common.nt.9aaTADs(locations.9aaTAD, 
+                               find.common.nt.9aaTADs(LOCATIONS$combined.9aaTAD, 
                                                       rc.threshold = 80,
                                                       coverage.threshold = 21), 
                                by = c("motif_number", "label"), all.x = T)
 
+RANGES$mammal.9aaTAD <- merge(find.common.aa.9aaTADs(LOCATIONS$mammal.9aaTAD, 
+                                                     rc.threshold = 80,
+                                                     coverage.threshold = 21),
+                              find.common.nt.9aaTADs(LOCATIONS$mammal.9aaTAD, 
+                                                     rc.threshold = 80,
+                                                     coverage.threshold = 21), 
+                              by = c("motif_number", "label"), all.x = T)
 
-locations.9aaTAD %<>%
+LOCATIONS$combined.9aaTAD %<>%
   dplyr::rowwise() %>%
   dplyr::mutate(motif_number = find.matching.range("start", "end", 
-                                                   start_gapped, end_gapped, ranges.9aaTAD.common )) %>%
+                                                   start_gapped, end_gapped, RANGES$combined.9aaTAD )) %>%
   dplyr::ungroup() %>%
-  merge(., ranges.9aaTAD.common, by = "motif_number", all.x = TRUE)
+  merge(., RANGES$combined.9aaTAD, by = "motif_number", all.x = TRUE)
+
+LOCATIONS$mammal.9aaTAD %<>%
+  dplyr::rowwise() %>%
+  dplyr::mutate(motif_number = find.matching.range("start", "end", 
+                                                   start_gapped, end_gapped, RANGES$mammal.9aaTAD )) %>%
+  dplyr::ungroup() %>%
+  merge(., RANGES$mammal.9aaTAD, by = "motif_number", all.x = TRUE)
 
 #### Identify the locations of the NLS in the AA & NT MSAs ####
 
-locations.NLS <- readr::read_tsv("aln/locations.NLS.combined.tsv")
+LOCATIONS$combined.NLS <- readr::read_tsv("aln/locations.NLS.combined.tsv")
+LOCATIONS$mammal.NLS <- readr::read_tsv("aln/locations.NLS.mammal.tsv")
 
 # Export the locations of the NLS
-write_tsv(locations.NLS %>% 
+write_tsv(LOCATIONS$combined.NLS %>% 
             dplyr::select(sequence, aa_motif, type, posterior_prob, start_ungapped, end_ungapped, 
                           start_gapped, end_gapped, start_nt_ungapped, end_nt_ungapped, 
                           start_nt_gapped, end_nt_gapped),
@@ -261,21 +288,28 @@ write_tsv(locations.NLS %>%
 
 # We need to combine the full set of structure locations into an overlapping set
 # to be plotted in a single row. Keep those that overlap in >=5 species
-ranges.NLS.common <- merge(find.common.aa.overlaps(locations.NLS), 
-                           find.common.nt.overlaps(locations.NLS), 
-                           by = "motif_number")
-
+RANGES$combined.nls <- merge(find.common.aa.overlaps(LOCATIONS$combined.NLS), 
+                            find.common.nt.overlaps(LOCATIONS$combined.NLS), 
+                            by = "motif_number")
+RANGES$mammal.nls <-  merge(find.common.aa.overlaps(LOCATIONS$mammal.NLS), 
+                            find.common.nt.overlaps(LOCATIONS$mammal.NLS), 
+                            by = "motif_number")
 
 # Annotate the individual NLS with which consensus motif they belong to (0 if none)
-locations.NLS %<>% 
+LOCATIONS$combined.NLS %<>% 
   dplyr::rowwise() %>%
-  dplyr::mutate(motif_number = find.matching.range("start", "end", start_gapped, end_gapped, ranges.NLS.common )) %>%
+  dplyr::mutate(motif_number = find.matching.range("start", "end", start_gapped, end_gapped, RANGES$combined.nls )) %>%
+  dplyr::ungroup()
+
+LOCATIONS$mammal.NLS %<>% 
+  dplyr::rowwise() %>%
+  dplyr::mutate(motif_number = find.matching.range("start", "end", start_gapped, end_gapped, RANGES$mammal.nls )) %>%
   dplyr::ungroup()
 
 #### Export the residues within each ZF ####
 
 # Full ZF motifs
-locations.zf %>%
+LOCATIONS$combined.zf %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
   dplyr::arrange(desc(motif_number)) %>% # so we display 13 - 1
   dplyr::mutate(motif_number = paste0("ZF_", motif_number)) %>%
@@ -286,7 +320,7 @@ locations.zf %>%
 
 #### Export the contact bases  within each ZF ####
 
-zf.contact.bases <- locations.zf %>%
+zf.contact.bases <- LOCATIONS$combined.zf %>%
   dplyr::select(Sequence = sequence, motif_number, contact_bases) %>%
   dplyr::arrange(desc(motif_number)) %>% # so we display 13 - 1
   dplyr::mutate(motif_number = paste0("ZF_", motif_number)) %>%
@@ -295,7 +329,7 @@ zf.contact.bases <- locations.zf %>%
   dplyr::arrange(as.integer(Sequence))
 
 # What are the most common ZF contact motifs?
-zf.contact.bases.conserved <- locations.zf %>%
+zf.contact.bases.conserved <- LOCATIONS$combined.zf %>%
   dplyr::select(Sequence = sequence, motif_number, contact_bases) %>%
   dplyr::arrange(desc(motif_number)) %>% # so we display 13 - 1
   dplyr::mutate(motif_number = paste0("ZF_", motif_number)) %>%
@@ -359,7 +393,7 @@ create.contact.base.xlsx(zf.contact.bases)
 
 #### Export the residues within each NLS ####
 
-locations.NLS %>%
+LOCATIONS$combined.NLS %>%
   dplyr::select(Sequence = sequence, motif_number, aa_motif) %>%
   dplyr::mutate(motif_number = paste0("NLS_", motif_number)) %>%
   tidyr::pivot_wider(id_cols = Sequence, names_from = motif_number, values_from = aa_motif,
@@ -371,7 +405,7 @@ locations.NLS %>%
 #### Export the residues within each 9aaTAD ####
 
 # All unique 9aaTADs identified
-locations.9aaTAD %>%
+LOCATIONS$combined.9aaTAD %>%
   dplyr::select(Sequence = sequence, label, aa_motif) %>%
   # summarise unique motifs
   dplyr::group_by(label, aa_motif) %>%
@@ -385,13 +419,13 @@ locations.9aaTAD %>%
 # For each high-confidence 9aaTAD region:
 # Extract the aa_motif if available, whatever the rc score
 # If there is no detected 9aaTAD, extract the superTAD region sequence
-extract.superTAD.motifs <- function(locations.9aaTAD){
+extract.superTAD.motifs <- function(locations.9aaTAD, ranges.9aaTAD){
   
   # Look at all superTAD locations in all sequences
   sequences <- unique(locations.9aaTAD$sequence)
   tad.labels <- na.omit(unique(locations.9aaTAD$label))
   combos <- expand.grid("sequence" = sequences, "tad.label"= tad.labels)
-  combos <- merge(combos, ranges.9aaTAD.common, by.x = "tad.label", by.y = "label",
+  combos <- merge(combos, ranges.9aaTAD, by.x = "tad.label", by.y = "label",
                   all.x = TRUE)
   
   # Combine the superTAD locations for each row
@@ -514,7 +548,7 @@ extract.superTAD.motifs <- function(locations.9aaTAD){
   xlsx::saveWorkbook(wb, file="figure/locations.9aaTAD.xlsx")
 }
 
-extract.superTAD.motifs(locations.9aaTAD)
+extract.superTAD.motifs(LOCATIONS$combined.9aaTAD, RANGES$combined.9aaTAD)
 
 #### Export binding motifs of the ZFs in each species ####
 
@@ -588,20 +622,20 @@ rodent.plus.anc.nt.aln.tidy$name <- factor(rodent.plus.anc.nt.aln.tidy$name,
                                            levels = rev( c(mammal.taxa.name.order, rodent.ancestor.label))) # sort reverse to match tree
 
 # Filter the zf locations and correct y locations
-rodent.plus.anc.zf <- locations.zf %>%
+rodent.plus.anc.zf <- LOCATIONS$combined.zf %>%
   dplyr::filter(sequence %in% rodent.plus.anc.nt.aln.tidy$name) %>%
   dplyr::rowwise() %>%
   # Correct for different number of taxa in the y axis
   dplyr::mutate(i = which( levels(rodent.plus.anc.nt.aln.tidy$name) == sequence ) - (1+length(unique(mammal.taxa.name.order))- length(unique(rodent.plus.anc.nt.aln.tidy$name))))
 
 # Filter 9aaTAD locations and correct the y locations
-rodent.plus.anc.9aaTAD <- locations.9aaTAD %>%
+rodent.plus.anc.9aaTAD <- LOCATIONS$combined.9aaTAD %>%
   dplyr::filter(sequence %in% rodent.plus.anc.nt.aln.tidy$name) %>%
   dplyr::rowwise() %>%
   # Correct for different number of taxa in the y axis
   dplyr::mutate(i = which( levels(rodent.plus.anc.nt.aln.tidy$name) == sequence ) - (1+length(unique(mammal.taxa.name.order))- length(unique(rodent.plus.anc.nt.aln.tidy$name))))
 
-rodent.plus.anc.NLS <- locations.NLS %>%
+rodent.plus.anc.NLS <- LOCATIONS$combined.NLS %>%
   dplyr::filter(sequence %in% rodent.plus.anc.nt.aln.tidy$name) %>%
   dplyr::rowwise() %>%
   # Correct for different number of taxa in the y axis
@@ -640,17 +674,17 @@ msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(ALIGNMENTS$aa.com
 # Combine the structural conservation plot with the aa tree
 # This should show all the 9aaTADs
 aa.structure.plot <- ggplot()+
-  geom_tile(data = locations.zf,     aes(x=(start_gapped+end_gapped)/2,
+  geom_tile(data = LOCATIONS$combined.zf,     aes(x=(start_gapped+end_gapped)/2,
                                          width = (end_gapped-start_gapped),
                                          y=sequence),
             fill="grey", alpha=0.5)+
-  geom_tile(data = locations.9aaTAD,     aes(x=(start_gapped+end_gapped)/2,
+  geom_tile(data = LOCATIONS$combined.9aaTAD,     aes(x=(start_gapped+end_gapped)/2,
                                              width = (end_gapped-start_gapped),
                                              y=sequence,
                                              fill=round(rc_score)),
             alpha=0.9)+
   paletteer::scale_fill_paletteer_c("grDevices::Blues 3", "9aaTAD RC score (%)", direction = -1, limits = c(50, 100)) +
-  geom_tile(data = locations.NLS,     aes(x=(start_gapped+end_gapped)/2,
+  geom_tile(data = LOCATIONS$combined.NLS,     aes(x=(start_gapped+end_gapped)/2,
                                           width = (end_gapped-start_gapped),
                                           y=sequence),
             fill=NLS.COLOUR, alpha=0.5)
@@ -660,17 +694,17 @@ save.double.width("figure/Figure_Sxxxx_aa.structure.png", aa.structure.plot, hei
 
 # Also create a trimmed down version that has only the 83, 92, 100% confidence 9aaTADs
 aa.structure.confident.plot <- ggplot()+
-  geom_tile(data = locations.zf,     aes(x=(start_gapped+end_gapped)/2,
+  geom_tile(data = LOCATIONS$combined.zf,     aes(x=(start_gapped+end_gapped)/2,
                                          width = (end_gapped-start_gapped),
                                          y=sequence),
             fill="grey", alpha=0.5)+
-  geom_tile(data = locations.9aaTAD[locations.9aaTAD$rc_score>80,],     aes(x=(start_gapped+end_gapped)/2,
+  geom_tile(data = LOCATIONS$combined.9aaTAD[LOCATIONS$combined.9aaTAD$rc_score>80,],     aes(x=(start_gapped+end_gapped)/2,
                                                                             width = (end_gapped-start_gapped),
                                                                             y=sequence,
                                                                             fill=round(rc_score)),
             alpha=0.9)+
   paletteer::scale_fill_paletteer_c("grDevices::Blues 3", "9aaTAD RC score (%)", direction = -1, limits = c(50, 100)) +
-  geom_tile(data = locations.NLS,     aes(x=(start_gapped+end_gapped)/2,
+  geom_tile(data = LOCATIONS$combined.NLS,     aes(x=(start_gapped+end_gapped)/2,
                                           width = (end_gapped-start_gapped),
                                           y=sequence),
             fill="green", alpha=0.5)
@@ -846,14 +880,14 @@ plot.hydrophobic.patch <- function(patch.data, patch.start, patch.end, patch.con
 
 # TODO - coordinates are hard coded from the alignments. Will need updating if more
 # sequences are added
-exon2.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa[2]+95,
-                                        aa.end   = mouse.exons$start_aa[2]+115)
+exon2.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa_combined[2]+95,
+                                        aa.end   = mouse.exons$end_aa_combined[2]+115)
 
-exon3.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa[3]+28,
-                                        aa.end   = mouse.exons$end_aa[3])
+exon3.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa_combined[3]+28,
+                                        aa.end   = mouse.exons$end_aa_combined[3])
 
-exon5.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa[5]+25,
-                                        aa.end   = mouse.exons$end_aa[5]+1)
+exon5.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa_combined[5]+25,
+                                        aa.end   = mouse.exons$end_aa_combined[5]+1)
 
 # Export to file
 merge(exon2.patch$aa.aln, exon3.patch$aa.aln, by=c("Sequence")) %>%
@@ -1005,9 +1039,23 @@ calculate.meme.overview.data <- function(meme.results){
 }
 
 # Plot MEME overview data
+# meme.overview - the output of calculate.meme.overview.data
+# outgroup.type - combined or mammal, so features are plotted wrt the correct alignment
 create.meme.overview.plot <- function(meme.overview, outgroup.type){
   
-  p.value.threshold <- 0.0025
+  if(outgroup.type=="mammal"){
+    ranges.NLS.common <- RANGES$mammal.nls
+    ranges.ZF.common <- RANGES$mammal.zf
+    ranges.9aaTAD.common <- RANGES$mammal.9aaTAD
+    aa.aln <- ALIGNMENTS$aa.mammal.ape
+  } else {
+    ranges.NLS.common <- RANGES$combined.nls
+    ranges.ZF.common <- RANGES$combined.zf
+    ranges.9aaTAD.common <- RANGES$combined.9aaTAD
+    aa.aln <- ALIGNMENTS$aa.combined.ape
+  }
+  
+  p.value.threshold <- 0.01
   
   # Annotate MEME sites over the exons
   meme.location.plot <- ggplot()+
@@ -1018,12 +1066,12 @@ create.meme.overview.plot <- function(meme.overview, outgroup.type){
     add.track(ranges.9aaTAD.common, 2, 2.5, fill=TAD.COLOUR,  alpha = 0.9)+  #9
     add.track.labels(ranges.9aaTAD.common, 2, 2.5, col="white")+   # Label the 9aaTADs
     
-    annotate("rect", xmin = exon2.patch$aa.start, xmax = exon2.patch$aa.end, 
-             ymin = 2, ymax = 2.5, fill = "pink", alpha=0.5)+
-    annotate("rect", xmin = exon3.patch$aa.start, xmax = exon3.patch$aa.end, 
-             ymin = 2, ymax = 2.5, fill = "pink", alpha=0.5)+
-    annotate("rect", xmin = exon5.patch$aa.start, xmax = exon5.patch$aa.end, 
-             ymin = 2, ymax = 2.5, fill = "pink", alpha=0.5)+
+    # annotate("rect", xmin = exon2.patch$aa.start, xmax = exon2.patch$aa.end, 
+    #          ymin = 2, ymax = 2.5, fill = "pink", alpha=0.5)+
+    # annotate("rect", xmin = exon3.patch$aa.start, xmax = exon3.patch$aa.end, 
+    #          ymin = 2, ymax = 2.5, fill = "pink", alpha=0.5)+
+    # annotate("rect", xmin = exon5.patch$aa.start, xmax = exon5.patch$aa.end, 
+    #          ymin = 2, ymax = 2.5, fill = "pink", alpha=0.5)+
     
     new_scale_fill()+
     scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
@@ -1031,8 +1079,8 @@ create.meme.overview.plot <- function(meme.overview, outgroup.type){
     
     scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
     guides(fill = "none", pattern="none")+
-    add.exon.track(y.start = 2.6, y.end = 3, col="black")+
-    add.exon.labels(y.start = 2.6, y.end = 3)+
+    add.exon.track(y.start = 2.6, y.end = 3, col="black", start_col = "start_aa_mammal", end_col = "end_aa_mammal")+
+    add.exon.labels(y.start = 2.6, y.end = 3, start_col = "start_aa_mammal", end_col = "end_aa_mammal")+
     
     # Show which test clades the sites show up in
     geom_point(data = meme.overview, aes(x=site, y = 3.1, alpha = rodentia<p.value.threshold), col="black",size = 0.2)+
@@ -1048,8 +1096,8 @@ create.meme.overview.plot <- function(meme.overview, outgroup.type){
     annotate("text", x= 800, y=3.4, label = "murinae", hjust=0, size = 2)+
     
     
-    scale_x_continuous(breaks = seq(0, length(ALIGNMENTS$aa.combined.ape$Chicken_ZFX), 50), expand = c(0, 0.05))+
-    coord_cartesian(xlim = c(0, length(ALIGNMENTS$aa.combined.ape$Chicken_ZFX)))+
+    scale_x_continuous(breaks = seq(0, length(aa.aln[[1]]), 50), expand = c(0, 0.05))+
+    coord_cartesian(xlim = c(0, length(aa.aln[[1]])))+
     theme_bw()+
     theme(axis.text.y = element_blank(),
           axis.title = element_blank(),
@@ -1070,7 +1118,7 @@ create.meme.overview.plot <- function(meme.overview, outgroup.type){
 }
 
 mammal.meme.overview <- calculate.meme.overview.data(mammal.meme.results)
-mammal.meme.overview.plot <- create.meme.overview.plot(mammal.meme.overview,"mammal")
+mammal.meme.overview.plot <- create.meme.overview.plot(mammal.meme.overview, "mammal")
 
 # combined.meme.overview <- calculate.meme.overview.data(combined.meme.results)
 # combined.meme.overview.plot <-create.meme.overview.plot(combined.meme.overview,"combined")
