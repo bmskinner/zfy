@@ -1,4 +1,4 @@
->NM_009570.4:Mus musculus Zfy1 final intron EntrezGene:22767 NC_000087.8 complement(725207..797409) 69902..70814 [Mouse Zfy1]
+>NC_000087.8 complement(725207..797409) 69902..70814 Mus musculus strain C57BL/6J chromosome Y, GRCm39, Zfy1 final intron [Mouse Zfy1]
 gtaaggaagtaataattctattgtgtagactgtaaaaattatatgaggaaatgctgtta
 catgttgacctgggtataatgatgttttcatttactgatagtcatgaatagcttgcttta
 gtaaaaaaacaaacagactgcagatcaaacattaaggaaaaattacttaactccctggtt
@@ -15,7 +15,7 @@ tttttttaaagtggaaggaatgaaattaatccaatcatagtgaatcaggttcttttctta
 tgattgcattatatatgttgaaatcagtgaaaagaatgttaaaaactgataaagtttaga
 aaatgtactttaaacttaatgaataaacaaaaaagaatgtagtttaattttttcctgttt
 tgttccctttttag
->NM_009571.2:Mus musculus Zfy2 final intron EntrezGene:22768 NC_000087.8 complement(2106175..2170409) 61920..62945 [Mouse Zfy2]
+>NC_000087.8 complement(2106175..2170409) 61920..62945 Mus musculus strain C57BL/6J chromosome Y, GRCm39, Zfy2 final intron [Mouse Zfy2]
 gtaaggaagaaataattctattgtgtacagtgttctaaaattatatgaggaaatgctgttg
 catgttgacatgagtataatgttttttttttgtttgtttttttttgttttgggttttgtt
 ttgttttgttttgttttgactaatcaccacctggtagcttttgtgcattgaatttgaaaa

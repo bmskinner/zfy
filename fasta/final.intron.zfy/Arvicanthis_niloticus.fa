@@ -1,4 +1,4 @@
->XM_034493106.1:10-2304 PREDICTED: Arvicanthis niloticus zinc finger Y-chromosomal protein 2-like (LOC117701330), final intron NW_023045021.1 12714925..2732214 [African Grass Rat ZFY2-like_1]
+>NW_023045021.1:12714925..2732214 Arvicanthis niloticus isolate mArvNil1 unplaced genomic scaffold, mArvNil1.pat.X SUPER_Y_unloc_4, whole genome shotgun sequence, ZFY2-like final intron [African Grass Rat ZFY2-like_1]
 gtaaggaagaaataattatagtgtgtagagtattctaaaattatatgagg
 aaaggctgttgcatgttcacatgggtataatgataggttttttgtttttgtttttgtttt
 tgtttttttttttttgattttgggtttgggtttgttttgttttgttgtaactgttcaact
@@ -17,7 +17,7 @@ cattaattttttttttaaagtggaagggatgaaattaatccagtcatagtgggccacatt
 ctttccttatggttgaaatataggtgttgaaaatcagtgacaagaatattaaaaactgat
 aaagttcagaaaatgtacattaaacttaatgaagaaacaaaaaggaatgtagttttgatt
 atttgcctttttctttcccttttcag
->XM_034493100.1:339-2759 PREDICTED: Arvicanthis niloticus zinc finger Y-chromosomal protein 2-like (LOC117701322), final intron NW_023045021.1 complement(2331881..2379628) [African Grass Rat ZFY2-like_2]
+>NW_023045021.1 complement(2331881..2379628) Arvicanthis niloticus isolate mArvNil1 unplaced genomic scaffold, mArvNil1.pat.X SUPER_Y_unloc_4, whole genome shotgun sequence, ZFY2-like final intron [African Grass Rat ZFY2-like_2]
 gtaagga
 agaaataattatagtgtgtagagtattctaaaattatatgaggaaaggctgttgcatgtt
 cacatgggtataatgataggtttttttggttttgttttttggttttttttgggtttgggt
