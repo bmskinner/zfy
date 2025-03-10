@@ -173,13 +173,13 @@ run.hyphy.meme <- function(nex.file, tree.file){
 # alignment.
 # aln.file - the alignment to divvy
 # Returns - the divvied alignment file path
-run.divvier <- function(aln.file){
+run.divvier <- function(aln.file, ...){
   bash.file <- paste0(aln.file, ".sh")
   write_file(paste0("#!/bin/bash\n",
                     "source activate divvier\n\n",
                     
                     "# Identify phylogenetically informatve sites with indels\n",
-                    "divvier -divvygap ", aln.file,  "\n",
+                    "divvier -divvygap ", aln.file, " ", paste(...), "\n",
                     
                     "# Ensure file extension is aln for use in IQTREE\n",
                     "mv ", paste0(aln.file, ".divvy.fas"), " ", paste0(aln.file, ".divvy.aln"), "\n"
@@ -221,7 +221,7 @@ read.fasta <- function(f){
     str_replace_all(" ", "_")
   names(fa.data) <- common.names
   
-  species.name <-gsub("_", " ",  gsub(".fa$", "", gsub("fasta/(nt|aa)/", "",  f)))
+  species.name <-gsub("_", " ",  gsub(".fa$", "", basename(f)))
   
   list("fa" = fa.data,
        metadata = data.frame(

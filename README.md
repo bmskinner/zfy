@@ -25,6 +25,7 @@ Program             | Source  | Reference  | Version used in this study
 `PAML ` | http://abacus.gene.ucl.ac.uk/software/paml.html | [doi:10.1093/molbev/msm088](https://pubmed.ncbi.nlm.nih.gov/17483113/) | 4.9h
 `IQ-TREE` | www.iqtree.org/ | [doi:10.1093/molbev/msu300](https://doi.org/10.1093/molbev/msu300) | 1.6.12
 `hmmsearch` | http://hmmer.org/ | [doi:10.1371/journal.pcbi.1002195](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1002195) | HMMER v3.3
+`RepeatMasker` | https://www.repeatmasker.org/ | Smit, AFA, Hubley, R & Green, P. RepeatMasker Open-4.0. 2013-2015 <http://www.repeatmasker.org>. | 4.1.4
 
 Other software:
 
