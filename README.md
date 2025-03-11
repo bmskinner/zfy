@@ -62,15 +62,15 @@ FASTA sequences are provided in the `fasta` directory.
 
 Invoke the primary analysis via:
 ```
-Rscript alignNucleotide.R
+Rscript analyseSequences.R
 ```
 
 This will generate output data in the directory `aln`.
 
-`codeml` takes a long time to run, so `alignNucleotide.R` generates a batch submission script for the cluster instead. Modify this as needed for your own system.
+`codeml` takes a long time to run, so `analyseSequences.R` generates a batch submission script for the cluster instead. Modify this as needed for your own system.
 
 ```
-bash run_paml.sh
+bash run_codeml.sh
 ```
 
 ### Testing for gene conversion
