@@ -16,7 +16,7 @@ filesstrings::dir.remove(c("aln/final.intron.zfy", "aln/final.intron.zfx", "aln/
 filesstrings::create_dir(c("aln/final.intron.zfy", "aln/final.intron.zfx", "aln/final.intron"))
 
 #### Read sequences #####
-
+cat("Reading sequences\n")
 # Read all unaligned sequence files with .fa extension
 zfy.files <- list.files(path = "fasta/final.intron.zfy", pattern = "*.fa$", 
                        include.dirs = T, full.names = T)
@@ -98,6 +98,8 @@ run.muscle("aln/final.intron.zfy/final.intron.zfy.nt.trim.fas", FILES$final.intr
 run.muscle("aln/final.intron.zfx/final.intron.zfx.nt.trim.fas", FILES$final.intron.zfx.nt.aln)
 run.muscle("aln/final.intron/final.intron.nt.trim.fas", FILES$final.intron.nt.aln)
 
+#### Filter MSAs to only sites without too many gaps #####
+
 # Filter a Biostrings multiple sequence alignment to mask sites with more than a
 # given number of gaps. Returns the masked Biostrings alignment
 # aln - the Biostrings alignment
@@ -148,10 +150,13 @@ seqinr::write.fasta(zf.aln.vec, names(zf.aln.vec), "aln/final.intron/final.intro
 
 
 #### Run divvier to improve high-confidence homologies in alignments ####
+cat("Running divvier\n")
 
-final.intron.zfy.nt.divvy.aln <- run.divvier(FILES$final.intron.zfy.nt.aln, "-mincol 4")
-final.intron.zfx.nt.divvy.aln <- run.divvier(FILES$final.intron.zfx.nt.aln, "-mincol 4")
-final.intron.nt.divvy.aln <- run.divvier(FILES$final.intron.nt.aln, "-mincol 4")
+# Note that divvier is not run on the filtered sequences above - we want to
+# compare the two methods
+final.intron.zfy.nt.divvy.aln <- run.divvier(FILES$final.intron.zfy.nt.aln, "-mincol 2")
+final.intron.zfx.nt.divvy.aln <- run.divvier(FILES$final.intron.zfx.nt.aln, "-mincol 2")
+final.intron.nt.divvy.aln <- run.divvier(FILES$final.intron.nt.aln, "-mincol 2")
 
 #### Make species phylogenies for Zfx and Zfy #####
 
@@ -199,7 +204,7 @@ final.intron.zfy.nt.aln.treefile <- run.iqtree("aln/final.intron.zfy/final.intro
 ) 
 
 final.intron.zfy.nt.aln.tree <- ape::read.tree(final.intron.zfy.nt.aln.treefile) %>%
-        reroot.tree(., c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
+        reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
 
 # Make ZFX tree without species phylogeny
 final.intron.zfx.nt.aln.treefile <- run.iqtree("aln/final.intron.zfx/final.intron.zfx.nt.filt.aln", 
@@ -210,7 +215,7 @@ final.intron.zfx.nt.aln.treefile <- run.iqtree("aln/final.intron.zfx/final.intro
 )
 
 final.intron.zfx.nt.aln.tree <- ape::read.tree(final.intron.zfx.nt.aln.treefile) %>%
-        reroot.tree(., c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
+        reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
 
 final.intron.nt.aln.treefile <- run.iqtree("aln/final.intron/final.intron.nt.filt.aln", 
                                            "-nt AUTO",
@@ -219,7 +224,7 @@ final.intron.nt.aln.treefile <- run.iqtree("aln/final.intron/final.intron.nt.fil
                                            "-keep-ident"
 ) 
 final.intron.nt.aln.tree <- ape::read.tree(final.intron.nt.aln.treefile) %>%
-  reroot.tree(., c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
+  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
 mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
 final.intron.nt.aln.tree <- tidytree::groupOTU(final.intron.nt.aln.tree, mammal.gene.groups, group_name = "group")
 
@@ -234,8 +239,8 @@ final.intron.zfy.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfy.nt.divvy.a
                                                      "-keep-ident"
 )
 
-final.intron.zfy.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.zfy.nt.aln.divvy.aln.treefile) %>%
-  reroot.tree(., c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
+final.intron.zfy.nt.divvy.aln.tree <- ape::read.tree(final.intron.zfy.nt.divvy.aln.treefile) %>%
+  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
 
 # ZFX
 final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfx.nt.divvy.aln,
@@ -244,8 +249,8 @@ final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfx.nt.divvy.a
                                                      "-alrt 1000",
                                                      "-keep-ident"
 )
-final.intron.zfx.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.zfx.nt.aln.divvy.aln.treefile) %>%
-  reroot.tree(.,c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
+final.intron.zfx.nt.divvy.aln.tree <- ape::read.tree(final.intron.zfx.nt.divvy.aln.treefile) %>%
+  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
 
 # ZFX/Y
 final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.nt.divvy.aln,
@@ -254,9 +259,9 @@ final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.nt.divvy.aln,
                                                      "-alrt 1000",
                                                      "-keep-ident"
 )
-final.intron.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.nt.aln.divvy.aln.treefile) %>%
-  reroot.tree(.,c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
-
+final.intron.nt.divvy.aln.tree <- ape::read.tree(final.intron.zfx.nt.divvy.aln.treefile) %>%
+  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
+final.intron.nt.divvy.aln.tree <- tidytree::groupOTU(final.intron.nt.divvy.aln.tree, mammal.gene.groups, group_name = "group")
 
 #### Plot the trees ####
 
@@ -275,12 +280,60 @@ final.intron.nt.aln.tree.plot <- plot.tree(final.intron.nt.aln.tree, col= "group
 save.double.width("figure/final.intron.zfx.zfy.tree.png", final.intron.nt.aln.tree.plot)
 
 # Divvied ZFX/Y
-final.intron.nt.divvy.aln.tree.plot <- plot.tree(final.intron.nt.divvy.aln.tree)  + xlim(0, 2) + labs(title = "ZFX/Y (divvied)")
+final.intron.nt.divvy.aln.tree.plot <- plot.tree(final.intron.nt.divvy.aln.tree, col= "group")  + xlim(0, 2) + labs(title = "ZFX/Y (divvied)")
 save.double.width("figure/final.intron.zfx.zfy.divvy.tree.png", final.intron.nt.divvy.aln.tree.plot)
 
 # Panel figure
 # combined.plot <- (final.intron.zfy.nt.aln.tree.plot + final.intron.zfy.nt.divvy.aln.tree.plot) / (final.intron.zfx.nt.aln.tree.plot + final.intron.zfx.nt.divvy.aln.tree.plot)
 # save.double.width("figure/final.intron.combined.tree.png", combined.plot)
 
+#### Plot the MSAs ####
+
+plot.msa <- function(tidy.aln){
+  ggplot()+
+    geom_msa(data = tidy.aln, seq_name = T, font=NULL, 
+             border=NA, color="Chemistry_NT", consensus_views = F )+
+    coord_cartesian(expand = FALSE)+
+    scale_x_continuous(breaks = seq(0, max(tidy.aln$position), 100))+
+    scale_y_discrete( labels = \(x) str_replace_all(x, "_", " ") )+
+    theme_bw()+
+    theme(axis.title = element_blank())
+}
+
+# Read alignment, set order to match phylogeny
+
+zfy.raw.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron.zfy/final.intron.zfy.nt.aln", format="fasta"))
+zfy.raw.aln$name <- factor(zfy.raw.aln$name, levels = mammal.taxa.name.order)
+
+zfy.divvy.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron.zfy/final.intron.zfy.nt.aln.divvy.aln", format="fasta"))
+zfy.divvy.aln$name <- factor(zfy.divvy.aln$name, levels = mammal.taxa.name.order)
+
+zfx.raw.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron.zfx/final.intron.zfx.nt.aln", format="fasta"))
+zfx.raw.aln$name <- factor(zfx.raw.aln$name, levels = mammal.taxa.name.order)
+
+zfx.divvy.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron.zfx/final.intron.zfx.nt.aln.divvy.aln", format="fasta"))
+zfx.divvy.aln$name <- factor(zfx.divvy.aln$name, levels = mammal.taxa.name.order)
+
+zf.raw.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron/final.intron.nt.aln", format="fasta"))
+zf.raw.aln$name <- factor(zf.raw.aln$name, levels = mammal.taxa.name.order)
+
+zf.divvy.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron/final.intron.nt.aln.divvy.aln", format="fasta"))
+zf.divvy.aln$name <- factor(zf.divvy.aln$name, levels = mammal.taxa.name.order)
+
+zfy.msa.raw.plot <- plot.msa(zfy.raw.aln)
+zfy.msa.plot <- plot.msa(zfy.divvy.aln)
+
+zfx.msa.raw.plot <- plot.msa(zfx.raw.aln)
+zfx.msa.plot <- plot.msa(zfx.divvy.aln)
+
+zf.msa.raw.plot <- plot.msa(zf.raw.aln)
+zf.msa.plot <- plot.msa(zf.divvy.aln)
+
+save.plot("figure/final.intron.msa.zfy.raw.png", zfy.msa.raw.plot, width=270, height = 170)
+save.plot("figure/final.intron.msa.zfy.divvy.png", zfy.msa.plot, width=270, height = 170)
+save.plot("figure/final.intron.msa.zfx.raw.png", zfx.msa.raw.plot, width=270, height = 170)
+save.plot("figure/final.intron.msa.zfx.divvy.png", zfx.msa.plot, width=270, height = 170)
+save.plot("figure/final.intron.msa.zf.raw.png", zf.msa.raw.plot, width=270, height = 170)
+save.plot("figure/final.intron.msa.zf.divvy.png", zf.msa.plot, width=270, height = 170)
 #### End ####
-cat("Done!")
+cat("Done!\n")

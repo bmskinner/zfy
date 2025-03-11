@@ -172,6 +172,7 @@ run.hyphy.meme <- function(nex.file, tree.file){
 # Run divvier from within a conda environment (named divvier).Creates a divvied
 # alignment.
 # aln.file - the alignment to divvy
+# ... - other options to divvier
 # Returns - the divvied alignment file path
 run.divvier <- function(aln.file, ...){
   bash.file <- paste0(aln.file, ".sh")
@@ -179,7 +180,7 @@ run.divvier <- function(aln.file, ...){
                     "source activate divvier\n\n",
                     
                     "# Identify phylogenetically informatve sites with indels\n",
-                    "divvier -divvygap ", aln.file, " ", paste(...), "\n",
+                    "divvier -divvygap ", paste(...), " ", aln.file, "\n",
                     
                     "# Ensure file extension is aln for use in IQTREE\n",
                     "mv ", paste0(aln.file, ".divvy.fas"), " ", paste0(aln.file, ".divvy.aln"), "\n"
@@ -397,10 +398,14 @@ prepare.fas.files <- function(){
 
 #### Plotting functions ####
 
-save.double.width <- function(filename, plot, height=170){ 
-  ggsave(filename, plot, dpi = 600, units = "mm", width = 170, height = height)
+save.plot <- function(filename, plot, width, height){
+  ggsave(filename, plot, dpi = 600, units = "mm", width = width, height = height)
   ggsave(str_replace(filename, ".png$", ".svg"), plot,dpi = 300, 
-         units = "mm", width = 170, height = height)
+         units = "mm", width = width, height = height)
+}
+
+save.double.width <- function(filename, plot, height=170){ 
+  save.plot(filename, plot, width = 170, height)
 }
 
 plot.tree <- function(tree.data, tiplab.font.size = 2, ...){

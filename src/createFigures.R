@@ -967,17 +967,18 @@ create.relax.k.tree <- function(json.file){
 
 if(file.exists("aln/hyphy/combined.rodentia.relax.json")){
   
-  node.names <- c("rodentia", "eumuroida", "muridae", "murinae")
+  # node.names <- c("rodentia", "eumuroida", "muridae", "murinae")
   
   make.tree <- \(name){
-    relax.tree <- create.relax.k.tree(paste0("aln/hyphy/combined.", name, ".relax.json"))
-    save.double.width(paste0("figure/RELAX.combined.", name, ".png"), relax.tree)
+    relax.combined.tree <- create.relax.k.tree(paste0("aln/hyphy/combined.", name, ".relax.json"))
+    save.double.width(paste0("figure/RELAX.combined.", name, ".png"), relax.combined.tree)
     
     relax.mammal.tree <- create.relax.k.tree(paste0("aln/hyphy/mammal.", name, ".relax.json"))
     save.double.width(paste0("figure/RELAX.mammal.", name, ".png"), relax.mammal.tree)
   } 
   
-  sapply(node.names, make.tree)
+  # sapply(node.names, make.tree)
+  make.tree("eumuroida")
 }
 
 #### Plot HyPhy MEME test for directional selection ####
@@ -1024,17 +1025,16 @@ read.meme.results <- function(node.name="rodentia", outgroup.type="combined"){
        meme.sites = meme.sites)
 }
 
+combined.meme.results <- lapply( c("eumuroida") , read.meme.results, outgroup.type="combined") # node.names
 
-combined.meme.results <- lapply(node.names, read.meme.results)
-
-mammal.meme.results <- lapply(node.names, read.meme.results, outgroup.type="mammal")
+mammal.meme.results <- lapply(c("eumuroida") , read.meme.results, outgroup.type="mammal") #node.names
 
 # Summarise the MEME results to give an overview of the significant sites at each test branch
 calculate.meme.overview.data <- function(meme.results){
   # Find the unique set of sites in the meme data
   do.call(rbind, lapply(meme.results, \(x) x$meme.data)) %>%
     tidyr::pivot_wider(id_cols = c(site, partition), names_from = node, values_from = `p-value`) %>%
-    dplyr::filter(if_any(.cols= rodentia:murinae, ~.<0.0025)) # filter to sites significant in any node
+    dplyr::filter(if_any(.cols= eumuroida, ~.<0.01)) # filter to sites significant in any node
   
 }
 
@@ -1083,17 +1083,19 @@ create.meme.overview.plot <- function(meme.overview, outgroup.type){
     add.exon.labels(y.start = 2.6, y.end = 3, start_col = "start_aa_mammal", end_col = "end_aa_mammal")+
     
     # Show which test clades the sites show up in
-    geom_point(data = meme.overview, aes(x=site, y = 3.1, alpha = rodentia<p.value.threshold), col="black",size = 0.2)+
-    geom_point(data = meme.overview, aes(x=site, y = 3.2, alpha = eumuroida<p.value.threshold), col="black",size = 0.2)+
-    geom_point(data = meme.overview, aes(x=site, y = 3.3, alpha = muridae<p.value.threshold), col="black",size = 0.2)+
-    geom_point(data = meme.overview, aes(x=site, y = 3.4, alpha = murinae<p.value.threshold), col="black", size = 0.2)+
-    scale_alpha_manual(values=c(0, 1))+
+    # geom_point(data = meme.overview, aes(x=site, y = 3.1, alpha = rodentia<p.value.threshold), col="black",size = 0.2)+
+    geom_point(data = meme.overview, aes(x=site, y = 3.2, col = eumuroida), size = 0.2)+
+    # geom_point(data = meme.overview, aes(x=site, y = 3.3, alpha = muridae<p.value.threshold), col="black",size = 0.2)+
+    # geom_point(data = meme.overview, aes(x=site, y = 3.4, alpha = murinae<p.value.threshold), col="black", size = 0.2)+
+    # scale_alpha_manual(values=c(0, 1))+
+    # scale_color_viridis_c()+
+    scale_color_paletteer_c("ggthemes::Classic Red-Black", direction = 1, limits = c(0, p.value.threshold))+
     
     geom_tile(data = meme.overview, aes(x=site, y = 2.5, height = 1, width=1), fill = "brown")+
-    annotate("text", x= 800, y=3.1, label = "rodentia", hjust=0, size = 2)+
-    annotate("text", x= 800, y=3.2, label = "eumuroida", hjust=0, size = 2)+
-    annotate("text", x= 800, y=3.3, label = "muridae", hjust=0, size = 2)+
-    annotate("text", x= 800, y=3.4, label = "murinae", hjust=0, size = 2)+
+    # annotate("text", x= 800, y=3.1, label = "rodentia", hjust=0, size = 2)+
+    annotate("text", x= 800, y=3.2, label = "eumuroida p-value", hjust=0, size = 2)+
+    # annotate("text", x= 800, y=3.3, label = "muridae", hjust=0, size = 2)+
+    # annotate("text", x= 800, y=3.4, label = "murinae", hjust=0, size = 2)+
     
     
     scale_x_continuous(breaks = seq(0, length(aa.aln[[1]]), 50), expand = c(0, 0.05))+
@@ -1118,7 +1120,7 @@ create.meme.overview.plot <- function(meme.overview, outgroup.type){
 }
 
 mammal.meme.overview <- calculate.meme.overview.data(mammal.meme.results)
-mammal.meme.overview.plot <- create.meme.overview.plot(mammal.meme.overview, "mammal")
+mammal.meme.overview.plot <- create.meme.overview.plot(mammal.meme.overview, outgroup.type="mammal")
 
 # combined.meme.overview <- calculate.meme.overview.data(combined.meme.results)
 # combined.meme.overview.plot <-create.meme.overview.plot(combined.meme.overview,"combined")
@@ -1669,6 +1671,13 @@ save.double.width("figure/final.intron.divvy.tree.png", final.intron.zfy.nt.divv
 final.intron.combined.plot <- (final.intron.zfy.nt.aln.tree.plot + final.intron.zfy.nt.divvy.aln.tree.plot) / (final.intron.zfx.nt.aln.tree.plot + final.intron.zfx.nt.divvy.aln.tree.plot)
 save.double.width("figure/final.intron.combined.tree.png", final.intron.combined.plot)
 
+#### Create skyline plot from ZFX and ZFY data ####
+
+# Combined tree
+ape::skylineplot.deluxe(nt.aln.tree)
+
+# What is the substitution rate estimate over time? Need that to convert to time
+# axis
 
 #### Tar the figure outputs ####
 system2("tar", "czf figure.tar.gz figure")

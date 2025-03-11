@@ -95,24 +95,22 @@ ALIGNMENTS <- read.alignments()
 # Based on the mouse Zfy1 sequence
 mouse.exons <- find.exons()
 
-# Create NEXUS format alignment with partition information
-# We consider three partitions:
-#   Exons 1 & 3-6
-#   Exon 2
-#   Exon 7
+# Create NEXUS format alignments with partition information for the mammal and
+# combined alignments 
+# We consider three partitions: Exons 1 & 3-6 Exon 2 Exon 7
 write_file(paste0("BEGIN SETS;\n",
-                  "\tcharset exon13456 = ", mouse.exons$start_nt_codon_offset[1], "-", mouse.exons$end_nt_codon_offset[1],
-                  " ", mouse.exons$start_nt_codon_offset[3], "-", mouse.exons$end_nt_codon_offset[6],";\n",
-                  "\tcharset exon2 = ", mouse.exons$start_nt_codon_offset[2], "-", mouse.exons$end_nt_codon_offset[2],";\n",
-                  "\tcharset exon7 = ", mouse.exons$start_nt_codon_offset[7], "-", mouse.exons$end_nt_codon_offset[7],";\n",
+                  "\tcharset exon13456 = ", mouse.exons$start_nt_codon_offset_mammal[1], "-", mouse.exons$end_nt_codon_offset_mammal[1],
+                  " ", mouse.exons$start_nt_codon_offset_mammal[3], "-", mouse.exons$end_nt_codon_offset_mammal[6],";\n",
+                  "\tcharset exon2 = ", mouse.exons$start_nt_codon_offset_mammal[2], "-", mouse.exons$end_nt_codon_offset_mammal[2],";\n",
+                  "\tcharset exon7 = ", mouse.exons$start_nt_codon_offset_mammal[7], "-", mouse.exons$end_nt_codon_offset_mammal[7],";\n",
                   "END;\n"),
            FILES$mammal.nt.partition)
 
 write_file(paste0("BEGIN SETS;\n",
-                  "\tcharset exon13456 = ", mouse.exons$start_nt_codon_offset[1], "-", mouse.exons$end_nt_codon_offset[1],
-                  " ", mouse.exons$start_nt_codon_offset[3], "-", mouse.exons$end_nt_codon_offset[6],";\n",
-                  "\tcharset exon2 = ", mouse.exons$start_nt_codon_offset[2], "-", mouse.exons$end_nt_codon_offset[2],";\n",
-                  "\tcharset exon7 = ", mouse.exons$start_nt_codon_offset[7], "-", mouse.exons$end_nt_codon_offset[7],";\n",
+                  "\tcharset exon13456 = ", mouse.exons$start_nt_codon_offset_combined[1], "-", mouse.exons$end_nt_codon_offset_combined[1],
+                  " ", mouse.exons$start_nt_codon_offset_combined[3], "-", mouse.exons$end_nt_codon_offset_combined[6],";\n",
+                  "\tcharset exon2 = ", mouse.exons$start_nt_codon_offset_combined[2], "-", mouse.exons$end_nt_codon_offset_combined[2],";\n",
+                  "\tcharset exon7 = ", mouse.exons$start_nt_codon_offset_combined[7], "-", mouse.exons$end_nt_codon_offset_combined[7],";\n",
                   "END;\n"),
            FILES$combined.nt.partition)
 
@@ -124,29 +122,32 @@ alg2nex(FILES$combined.nt.aln, format = "fasta", interleaved = FALSE, gap = "-",
         missing = "?", partition.file = FILES$combined.nt.partition)
 
 
-#### Create combined mammal/outgroup AA tree ####
+#### Create combined mammal/outgroup AA trees ####
 cat(timestamp(), "Creating trees\n")
+# All outgroups
 FILES$combined.aa.aln.treefile <- run.iqtree(FILES$combined.aa.aln, 
                                              "-bb 1000", # number of bootstrap replicates
                                              "-alrt 1000") # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
-
+# Mammal only
 FILES$mammal.aa.aln.treefile <- run.iqtree(FILES$mammal.aa.aln, 
                                              "-bb 1000", # number of bootstrap replicates
                                              "-alrt 1000") # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
 
 
-#### Create mammal CDS NT tree #####
+#### Create CDS NT trees #####
 
 # Make ML tree and reconstruct ancestral sequences
 # Expect iqtree on the PATH.
 # Note model testing is automatically performed in v1.5.4 onwards
-# Note: we can use a partition model if we specify exon coordinates
-# -st to use codon model rather than pure DNA model
+
+# All outgroups
 FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln, 
                                              "-bb 1000", # number of bootstrap replicates
                                              "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
                                              "-asr" # Ancestral sequence resconstruction
                                              )
+
+# Mammal only
 FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln,
                                            "-bb 1000", # number of bootstrap replicates
                                            "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
@@ -170,19 +171,19 @@ create.exon.alignment <- function(exon.aln, name){
           stderr = paste0(exon.aln.file, ".iqtree.log"))
 }
 
-exon.2.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt[2]:mouse.exons$end_nt[2]]
+exon.2.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt_mammal[2]:mouse.exons$end_nt_mammal[2]]
 create.exon.alignment(exon.2.aln, "exon_2.aln")
 
-exon.7.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt[7]:mouse.exons$end_nt[7]]
+exon.7.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt_mammal[7]:mouse.exons$end_nt_mammal[7]]
 create.exon.alignment(exon.7.aln, "exon_7.aln")
 
 # All except exon 7
-exon.1.6.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt[1]:mouse.exons$end_nt[6]]
+exon.1.6.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,mouse.exons$start_nt_mammal[1]:mouse.exons$end_nt_mammal[6]]
 create.exon.alignment(exon.1.6.aln, "exon_1-6.aln")
 
 # All except exon 2 and 7
-exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset[1]:mouse.exons$end_nt_codon_offset[1],
-                    mouse.exons$start_nt_codon_offset[3]:mouse.exons$end_nt_codon_offset[6])
+exon1.3_6.locs <- c(mouse.exons$start_nt_codon_offset_mammal[1]:mouse.exons$end_nt_codon_offset_mammal[1],
+                    mouse.exons$start_nt_codon_offset_mammal[3]:mouse.exons$end_nt_codon_offset_mammal[6])
 exon1.3_6.aln <- as.matrix(ALIGNMENTS$nt.mammal.ape)[,exon1.3_6.locs]
 create.exon.alignment(exon1.3_6.aln, "exon_1.3-6.aln")
 
@@ -975,7 +976,7 @@ create.combined.hyphy.meme.tree.file <- function(fg.node, node.name){
 }
 
 nodes <- c(rodentia.node, eumuroida.node, muridae.node, murinae.node)
-node.names <- c("rodentia", "eumuroida", "muridae", "murinae")
+node.names <- c("rodentia", "eumuroida") #, "muridae", "murinae"
 
 mapply(create.combined.hyphy.relax.tree.file, nodes, node.names)
 mapply(create.mammal.hyphy.relax.tree.file,   nodes, node.names)
