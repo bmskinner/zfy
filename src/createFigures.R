@@ -23,7 +23,7 @@ mouse.exons <- find.exons()
 combined.outgroup.tree <- read.combined.outgroup.tree(FILES$combined.aa.aln.treefile)
 
 combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")+
-  coord_cartesian(clip="off", xlim = c(0, 0.7), ylim= c(-2, length(combined.outgroup.tree$tip.label)))
+  coord_cartesian(clip="off", xlim = c(0, 0.85), ylim= c(-2, length(combined.outgroup.tree$tip.label)))
   
 # Find the location of the Eumuroida clade in the plot
 eumuroida.node <- ape::getMRCA(combined.outgroup.tree, c("Mouse_Zfy1", "North_American_deer_mouse_Zfx-like_putative-Zfy"))
@@ -54,7 +54,7 @@ ape::write.tree(nt.aln.tree, file = paste0(FILES$combined.nt.aln, ".rooted.treef
 mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
 nt.aln.tree <- tidytree::groupOTU(nt.aln.tree, mammal.gene.groups, group_name = "group")
 
-plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off", xlim = c(0, 0.6)) 
+plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off", xlim = c(0, 0.65)) 
 
 # Find the location of the Eumuroida clade in the plot
 eumuroida.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy1", "North_American_deer_mouse_Zfx-like_putative-Zfy"))
@@ -80,14 +80,14 @@ mammal.taxa.name.order <- get_taxa_name(plot.zfx.zfy)
 tree.zfx <- ape::drop.tip(nt.aln.tree, mammal.gene.groups$ZFY)
 tree.zfx <- groupOTU(tree.zfx, mammal.gene.groups, group_name = "group")
 ape::write.tree(tree.zfx, file = paste0(FILES$mammal.nt.aln, ".zfx.treefile"))
-plot.zfx <- plot.tree(tree.zfx) + coord_cartesian(clip="off", xlim = c(0, 0.6))
+plot.zfx <- plot.tree(tree.zfx) + coord_cartesian(clip="off", xlim = c(0, 0.65))
 save.double.width("figure/mammal.zfx.tree.png", plot.zfx)
 
 # Keep Zfy and outgroups, drop other tips
 tree.zfy <- ape::keep.tip(nt.aln.tree, c(mammal.gene.groups$ZFY, mammal.gene.groups$Outgroup))
 tree.zfy <- groupOTU(tree.zfy, mammal.gene.groups, group_name = "group")
 ape::write.tree(tree.zfy, file = paste0(FILES$mammal.nt.aln, ".zfy.treefile"))
-plot.zfy <- plot.tree(tree.zfy) + coord_cartesian(clip="off", xlim = c(0, 0.6))
+plot.zfy <- plot.tree(tree.zfy) + coord_cartesian(clip="off", xlim = c(0, 0.65))
 save.double.width("figure/mammal.zfy.tree.png", plot.zfy)
 
 #### Plot mammal exon NT trees ####
@@ -122,7 +122,7 @@ exon.joint.tree <- exon.plots[[4]] + exon.plots[[2]] + exon.plots[[3]] +
   patchwork::plot_annotation(tag_levels = list(c("Exons 1,3-6", "Exon 2", "Exon 7"))) &
   theme(plot.tag = element_text(size = 6),
         plot.margin = margin(t=0, l=0, r=0, b=0))
-save.double.width("figure/Figure_Sxxxx_exons_tree.png", exon.joint.tree, height=120)
+save.plot("figure/Figure_Sxxxx_exons_tree.png", exon.joint.tree, width=270, height=170)
 
 #### Test selection globally in mammals ####
 
@@ -434,6 +434,8 @@ extract.superTAD.motifs <- function(locations.9aaTAD, ranges.9aaTAD){
                                        "end","width", "motif_number"),
                               by.y = c("sequence", "label", "start",
                                        "end", "width", "motif_number"), all.x = TRUE) %>%
+    merge(., METADATA$combined, by.x=c("sequence"), by.y = c("common.name")) %>%
+    
     # Reduce overlapping TAD ranges for each sequence
     dplyr::group_by(sequence, tad.label) %>%
     dplyr::mutate(tad.start = min(start_gapped),
@@ -447,7 +449,8 @@ extract.superTAD.motifs <- function(locations.9aaTAD, ranges.9aaTAD){
                                                  tad.start,
                                                  tad.end)) %>%
     # Drop unneeded columns
-    dplyr::select(Sequence = sequence, tad.label, rc_score, tad.sequence) %>%
+    dplyr::select(Sequence = sequence, tad.label, rc_score, tad.sequence, Group = group) %>%
+    dplyr::mutate(Sequence = factor(Sequence, levels = str_replace_all(combined.taxa.name.order, " ", "_"))) %>%
     dplyr::ungroup() %>%
     dplyr::group_by(Sequence, tad.label) %>%
     dplyr::arrange(Sequence, tad.label, desc(rc_score)) %>%
@@ -455,13 +458,13 @@ extract.superTAD.motifs <- function(locations.9aaTAD, ranges.9aaTAD){
     dplyr::distinct() %>%
     
     # Pivot to each 9aaTAD as a separate column
-    tidyr::pivot_wider(id_cols = c(Sequence), names_from = tad.label, 
+    tidyr::pivot_wider(id_cols = c(Sequence, Group), names_from = tad.label, 
                        values_from = c(tad.sequence, rc_score), values_fn = ~paste(.x, collapse = ", "),
                        names_glue = "9aaTAD_{tad.label}_{.value}") %>%
     as.data.frame %>%
     dplyr::mutate(across(`9aaTAD_A_rc_score`:`9aaTAD_G_rc_score`, as.numeric)) %>%
     dplyr::rename_with(.fn = function(x) gsub("_tad.sequence", "", x)) %>%
-    dplyr::arrange(as.integer(Sequence))
+    dplyr::arrange(Group, Sequence)
   
   # Create a custom xlsx colouring background of cells by rc score
   # Set rich text formatting and highlight VV motifs in the given column index
@@ -497,13 +500,19 @@ extract.superTAD.motifs <- function(locations.9aaTAD, ranges.9aaTAD){
         # Set the new cell value and cast to a rich text string
         rJava::.jcall(cell, "V", "setCellValue",
                       rJava::.jcast(new.value, "org/apache/poi/ss/usermodel/RichTextString"))
+      } else {
+        # Set entire cell to normal style
+        new.value <- rJava::.jnew("org/apache/poi/xssf/usermodel/XSSFRichTextString",
+                                  oldval )
+        rJava::.jcall(obj=new.value, returnSig = "V",  # void return
+                      method="applyFont", normal.font.ref)
       }
     }
   }
   
   wb = xlsx::createWorkbook(type = "xlsx")
   sh = xlsx::createSheet(wb)
-  xlsx::addDataFrame(locations.superTAD[,1:8], sh, row.names = F)
+  xlsx::addDataFrame(locations.superTAD[,1:9], sh, row.names = F)
   xlsx::createFreezePane(sh, 2, 2, 2, 2) # freeze top row and first column
   
   fixed.style <- xlsx::CellStyle(wb) + 
@@ -521,31 +530,63 @@ extract.superTAD.motifs <- function(locations.9aaTAD, ranges.9aaTAD){
   
   
   rows <- getRows(sh) 
-  for(i in 2:length(xlsx::getRows(sh))){
-    cells <- getCells(rows[i]) 
-    cell.names <- names(cells)
-    for(col in 2:8){
-      cell.name <- cell.names[col]
-      cell.ref <- cells[[cell.name]]
-      rc.val <-  locations.superTAD[i-1, col+7]
-      
-      if( is.na(rc.val)){
-        xlsx::setCellStyle(cell.ref, fixed.style.missing)
-      } else {
-        if(rc.val < 80){
-          xlsx::setCellStyle(cell.ref, fixed.style.low.rc)
+  
+  set.cell.formatting <- function(sh, data, row.indexes){
+    for(i in row.indexes){
+      cells <- getCells(rows[i]) 
+      cell.names <- names(cells)
+      for(col in 3:9){
+        cell.name <- cell.names[col]
+        cell.ref <- cells[[cell.name]]
+        rc.val <-  data[i-1, col+7]
+        
+        if( is.na(rc.val)){
+          xlsx::setCellStyle(cell.ref, fixed.style.missing)
         } else {
-          xlsx::setCellStyle(cell.ref, fixed.style)
+          if(rc.val < 80){
+            xlsx::setCellStyle(cell.ref, fixed.style.low.rc)
+          } else {
+            xlsx::setCellStyle(cell.ref, fixed.style)
+          }
         }
       }
     }
   }
   
-  for(col in 2:8) set.rich.text.on.vv(wb, sh, col)
+  set.cell.formatting(sh, locations.superTAD, 2:length(xlsx::getRows(sh)))
   
   
+  for(col in 3:9) set.rich.text.on.vv(wb, sh, col)
+  
+  # Save the full table
   xlsx::autoSizeColumn(sh, 1:ncol(locations.superTAD))
   xlsx::saveWorkbook(wb, file="figure/locations.9aaTAD.xlsx")
+  
+  # Save only the rows needed for an in-text table of rodents and human
+  table.values <- locations.superTAD %>% 
+    dplyr::filter(Sequence %in% c("Human_ZFY", "Mouse_Zfy1", "Mouse_Zfy2",
+                                  "African_Grass_Rat_ZFY2-like_1", "African_Grass_Rat_ZFY2-like_2",
+                                  "Black_rat_Zfy2",
+                                  "Norwegian_Rat_Zfy2",
+                                  "Mongolian_gerbil_Zfx-like_putative-Zfy",
+                                  "Desert_hamster_Zfx-like_putative-Zfy",
+                                  "North_American_deer_mouse_Zfx-like_putative-Zfy",
+                                  "Alpine_marmot_ZFY",
+                                  "Arctic_ground_squirrel_Zfx-like_putative-Zfy",
+                                  "Gray_squirrel_Zfy",
+                                  "Beaver_Zfx-like_putative-Zfy",
+                                  "Damara_mole-rat_Zfy"),
+                  Group == "ZFY")
+  
+  wb = xlsx::createWorkbook(type = "xlsx")
+  sh = xlsx::createSheet(wb)
+  xlsx::addDataFrame(table.values[,1:9], sh, row.names = F)
+  xlsx::createFreezePane(sh, 2, 2, 2, 2) # freeze top row and first column
+  xlsx::autoSizeColumn(sh, 1:ncol(table.values))
+  set.cell.formatting(sh, table.values, 2:length(xlsx::getRows(sh)))
+  for(col in 3:9) set.rich.text.on.vv(wb, sh, col)
+  xlsx::saveWorkbook(wb, file="figure/locations.9aaTAD.table.xlsx")
+  
 }
 
 extract.superTAD.motifs(LOCATIONS$combined.9aaTAD, RANGES$combined.9aaTAD)
@@ -671,6 +712,8 @@ msa.aa.aln.tidy.frog.conservation    <- calculate.conservation(ALIGNMENTS$aa.com
 msa.aa.aln.tidy.chicken.conservation <- calculate.conservation(ALIGNMENTS$aa.combined.biostrings,"Chicken_ZFX" )
 msa.aa.aln.tidy.opossum.conservation <- calculate.conservation(ALIGNMENTS$aa.combined.biostrings,"Opossum_ZFX" )
 
+#### Create overall structure plot ####
+
 # Combine the structural conservation plot with the aa tree
 # This should show all the 9aaTADs
 aa.structure.plot <- ggplot()+
@@ -766,42 +809,43 @@ gametologue.conservation <- do.call(rbind, mapply(calculate.gametologue.conserva
                                    common.name=="Mongolian_gerbil" ~ "Eumuroida",
                                    common.name=="Desert_hamster" ~ "Eumuroida",
                                    common.name=="North_American_deer_mouse" ~ "Eumuroida",
-                                   common.name=="Damara_mole-rat" ~ "Damara_mole-rat",
-                                   common.name=="Beaver" ~ "Beaver",
+                                   common.name=="Damara_mole-rat" ~ "Damara mole-rat & beaver",
+                                   common.name=="Beaver" ~ "Damara mole-rat & beaver",
                                    common.name=="Grey_squirrel" ~ "Other Rodentia",
                                    common.name=="Alpine_marmot" ~ "Other Rodentia",
                                    common.name=="Arctic_ground_squirrel" ~ "Other Rodentia",
                                    .default = "Other Mammalia"),
                  group = forcats::as_factor(group),
-                 group = forcats::fct_relevel(group, "Other Mammalia", "Other Rodentia",
-                                              "Damara_mole-rat","Beaver", "Eumuroida"))
-
-
-# gametologue.conservation.plot <- ggplot(gametologue.conservation, aes(col=as.factor(conservation) ))+
-#   geom_rect(aes(xmin=site-0.5, xmax = site+0.5, ymin=y.val-0.5, ymax=y.val+0.5))+
-#   scale_colour_manual(values=c("0"="darkblue", "1"="lightgrey"))+
-#   scale_y_continuous(labels=gsub("_", " ", unique(gametologue.conservation$common.name)), 
-#                      breaks=as.integer(unique(gametologue.conservation$y.val)),
-#                      expand = c(0,0))+
-#   scale_x_continuous(expand = c(0, 0), breaks = seq(0, 900, 100))+
-#   labs(x="Site")+
-#   theme_bw()+
-#   theme(legend.position = "none",
-#         panel.grid = element_blank())
-# save.double.width(filename = "figure/gametologue.conservation.png", gametologue.conservation.plot, height = 170)
+                 group = forcats::fct_relevel(group, "Eumuroida", "Damara mole-rat & beaver", 
+                                              "Other Rodentia", "Other Mammalia"))
 
 
 # Create a cumulative difference plot
-gametologue.cumdiff.plot <-  ggplot(gametologue.conservation, aes(x=site, y=cum.diff, col=group, group = common.name ))+
-  geom_line()+
-  geom_line(data = gametologue.conservation[gametologue.conservation$group=="Other Rodentia",])+
-  labs(y = "Cumulative X-Y differences", x = "Site")+
-  scale_color_manual(values = c("Eumuroida"="#002AFFFF", "Other Mammalia"="#FFEE99FF", 
-                                "Other Rodentia"="#FF9932FF", "Beaver"="#FF2A00FF", "Damara_mole-rat"="#FF6619FF" ))+
+gametologue.cumdiff.plot <-  ggplot()+
+  geom_line(data = gametologue.conservation, aes(x=site, y=cum.diff, col=group, group = common.name ))+
+  geom_line(data = gametologue.conservation[gametologue.conservation$group=="Other Rodentia",], 
+            aes(x=site, y=cum.diff, col=group, group = common.name ))+
+  labs(y = "Cumulative X-Y differences", x = "Site in alignment")+
+  scale_color_manual(values = c("Eumuroida"="#002AFFFF", "Other Mammalia"="#bbbbbbFF", 
+                                "Other Rodentia"="#FF6619FF", "Damara mole-rat & beaver"="darkgreen"))+
+  scale_x_continuous(breaks = seq(0, 900, 100))+
+  scale_y_continuous(breaks = seq(0, 300, 50))+
   theme_bw()+
-  theme(legend.position = c(0.2, 0.8),
-        legend.title = element_blank())
-save.double.width(filename = "figure/gametologue.cumdiff.png", gametologue.cumdiff.plot, height = 170)
+  theme(legend.position = c(0.2, 0.7),
+        legend.title = element_blank(),
+        legend.background = element_blank())
+
+gametologue.cumdiff.plot <- gametologue.cumdiff.plot +
+new_scale_fill()+
+  scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
+  scale_pattern_color_manual(values=c("white", "white"))+
+  scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
+  guides(fill = "none", pattern="none")+
+  add.exon.track(270, 285, col = "black")+ # color of border
+  add.exon.labels(270, 285)
+
+
+save.double.width(filename = "figure/gametologue.cumdiff.png", gametologue.cumdiff.plot, height = 100)
 
 
 #### Plot the conservation of hydrophobicity across mammal/outgroup AA MSA ####
@@ -858,9 +902,8 @@ structure.plot <- (charge.plot / hydrophobicity.plot)+ plot_layout(ncol = 1)
 save.double.width("figure/Figure_xxxx_combined_structure.plot.png", structure.plot, height = 230)
 
 
-#### What are the hydrophobic patches in exons 2, 3 and 5 that are not 9aaTADs? ####
+#### Plot the hydrophobic patches in exons 2, 3 and 5 that are not 9aaTADs ####
 cat("Identifying hydrophobic patches\n")
-
 
 plot.hydrophobic.patch <- function(patch.data, patch.start, patch.end, patch.consensus){
   
@@ -880,25 +923,29 @@ plot.hydrophobic.patch <- function(patch.data, patch.start, patch.end, patch.con
 
 # TODO - coordinates are hard coded from the alignments. Will need updating if more
 # sequences are added
-exon2.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa_combined[2]+95,
-                                        aa.end   = mouse.exons$end_aa_combined[2]+115)
+exon2.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa_combined[2]+93,
+                                                 aa.end   = mouse.exons$start_aa_combined[2]+108)
 
 exon3.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa_combined[3]+28,
-                                        aa.end   = mouse.exons$end_aa_combined[3])
+                                        aa.end   = mouse.exons$end_aa_combined[3]-2)
 
-exon5.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa_combined[5]+25,
+exon5.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa_combined[5]+27,
                                         aa.end   = mouse.exons$end_aa_combined[5]+1)
 
-# Export to file
+exon7.patch <- extract.combined.alignment.region(aa.start = mouse.exons$start_aa_combined[7]-2,
+                                                 aa.end   = mouse.exons$start_aa_combined[7]+22)
+
+# Export patches to file
 merge(exon2.patch$aa.aln, exon3.patch$aa.aln, by=c("Sequence")) %>%
   merge(., exon5.patch$aa.aln, by=c("Sequence")) %>%
-  #write_tsv(., "figure/hydrophobic_patches.tsv")
+  merge(., exon7.patch$aa.aln, by=c("Sequence")) %>%
   create.xlsx(., "figure/hydrophobic_patches.xlsx")
 
-
-exon2.hydro.plot <-plot.hydrophobic.patch(msa.aa.aln.hydrophobicity, exon2.patch$aa.start, exon2.patch$aa.end, exon2.patch$aa.consensus)
-exon3.hydro.plot <-plot.hydrophobic.patch(msa.aa.aln.hydrophobicity, exon3.patch$aa.start, exon3.patch$aa.end, exon3.patch$aa.consensus)
-exon5.hydro.plot <-plot.hydrophobic.patch(msa.aa.aln.hydrophobicity, exon5.patch$aa.start, exon5.patch$aa.end, exon5.patch$aa.consensus)
+# Plot the patch MSAs
+exon2.hydro.plot <- plot.hydrophobic.patch(msa.aa.aln.hydrophobicity, exon2.patch$aa.start, exon2.patch$aa.end, exon2.patch$aa.consensus)
+exon3.hydro.plot <- plot.hydrophobic.patch(msa.aa.aln.hydrophobicity, exon3.patch$aa.start, exon3.patch$aa.end, exon3.patch$aa.consensus)
+exon5.hydro.plot <- plot.hydrophobic.patch(msa.aa.aln.hydrophobicity, exon5.patch$aa.start, exon5.patch$aa.end, exon5.patch$aa.consensus)
+exon7.hydro.plot <- plot.hydrophobic.patch(msa.aa.aln.hydrophobicity, exon7.patch$aa.start, exon7.patch$aa.end, exon7.patch$aa.consensus)
 
 # Collect the plots
 
@@ -1408,12 +1455,9 @@ zfy.nt.aln.tree <- ape::read.tree("aln/zfy_only/zfy.aln.treefile")
 zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2") 
 zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "African_Grass_Rat_ZFY2-like_1") 
 
-
-# Root the trees on platypus
+# Root the trees on monotremes
 zfx.nt.aln.tree <- reroot.tree(zfx.nt.aln.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
 zfy.nt.aln.tree <- reroot.tree(zfy.nt.aln.tree, c("Platypus_ZFX", "Australian_echidna_ZFX"), position = 0.015)
-# zfx.nt.aln.tree <- phytools::reroot(zfx.nt.aln.tree, which(zfx.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
-# zfy.nt.aln.tree <- phytools::reroot(zfy.nt.aln.tree, which(zfy.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
 
 # Remove gene names so tip labels are comparable
 zfx.nt.aln.tree$tip.label <- str_replace(zfx.nt.aln.tree$tip.label, "_Z[F|f][X|x].*", "")
@@ -1422,42 +1466,15 @@ zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "(_putative)
 # Replace underscores for tidy names
 zfy.nt.aln.tree$tip.label <- str_replace_all(zfy.nt.aln.tree$tip.label, "_", " ")
 
-# pairwise.times <- read.time.tree.data() # used manually to determine divergence times
 mammal.nt.tree.data <- tidytree::as_tibble(zfy.nt.aln.tree)
 
-# Manually match the divergence times from the TimeTree data
-divergence.point.data <- c(
-  "Mammalia" = 180.06610,
-  "Theria" = 160,
-  "Eutheria" = 99.18870,
-  "Atlantogenata" = 97,
-  "Boreoeutheria" = 94.00000,
-  "Laurasiatheria" = 76.00000,
-  "Carnivora" = 55.36164,
-  "Caniformia" = 45.10000,
-  "Arctoidea" = 40.12000,
-  "Euungulata" = 72.7,
-  "Artiodactyla" = 61.84265,
-  "Pecora" = 23.7,
-  "Bovidae" = 21.62563,
-  "Euarchonoglires" = 87.20000,
-  "Simiiformes" = 42.90000,
-  "Catarrhini" = 28.82000,
-  "Hominidae" = 8.60000,
-  "Hominini" = 6.40000,
-  "Cercopithecidae" = 17.75500,
-  "Cercopithecinae" = 10.45400,
-  "Rodentia" = 70.20250,
-  "Sciuridae" = 34.46259,
-  "Xerinae" = 11.38264,
-  "Muroidea-Fukomys" = 70.0, 
-  "Muroidea" = 68.31756,
-  "Eumuroida" = 26.2,
-  "Cricetidae" = 18.6,
-  "Muridae" = 12.44458,
-  "Murinae" = 11.64917,
-  "Mus-Arvicanthis" = 10.05224
-)
+# Read the species tree with divergence times to get the node divergences
+species.tree <- ape::read.tree("aln/node.labeled.species.tree.nwk")
+# Note node positions are reversed (0 is root). Convert to times.
+node.times <- max(node.depth.edgelength(species.tree)) - node.depth.edgelength(species.tree)
+# Get only the node times, ignore tips
+divergence.point.data <- node.times[(length(species.tree$tip.label)+1):(length(species.tree$edge.length)+1)]
+names(divergence.point.data) <- species.tree$node.label
 
 # Create an zero vector for each tip (time for extant species is 0Mya)
 divergence.point.species <- rep(0, length(zfy.nt.aln.tree$tip.label))
@@ -1502,7 +1519,6 @@ get.edge.time <- function(node, tree){
 time.vals <- do.call(rbind, lapply(zfy.nt.aln.tree$edge[,2], get.edge.time, tree=zfy.nt.aln.tree))
 
 
-
 # Plot the Zfy tree, with edge lengths replaced by Myr
 subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
   time.vals +
@@ -1510,7 +1526,7 @@ subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
   scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
                           direction = -1, limits =c(-9, -3))+
   labs(color = "Log substitutions per site\nper million years")+
-  geom_nodelab(size=2, nudge_x = -0.005, nudge_y = 0.5, hjust = 1, color = "black")+
+
   geom_tiplab(size=2, color = "black")+
   geom_treescale(fontsize =2, y = -1) +
   coord_cartesian(xlim = c(-0.05, 0.4))+
@@ -1520,32 +1536,47 @@ subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
         legend.text = element_text(size=6),
         legend.title = element_text(size=6))
 
-eumuroida.y <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Eumuroida","y"]$y
+# Find the coordinates for the labels in the plot
 zf.to.xy.y <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Eutheria","y"]$y
+eumuroida.y <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Eumuroida","y"]$y
 slxl1.y <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Murinae","y"]$y
 sly.amplifies.y <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Mouse","y"]$y
+
+zf.to.xy.x <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Eutheria","x"]$x
+eumuroida.x <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Eumuroida","x"]$x
+slxl1.x <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Murinae","x"]$x
+sly.amplifies.x <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Mouse","x"]$x
 
 # Annotate plot with labels
 subs.site.mya.plot <- subs.site.mya.plot +
 
   # ZF* moves to sex chromosomes
-  annotate("text", x=0.02, y=zf.to.xy.y,label="ZF* to\nX/Y", size=2, hjust=0)+
-  annotate("rect", xmin=0.02, ymin=zf.to.xy.y - 0.5 , xmax=0.04, ymax=zf.to.xy.y+0.5, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=zf.to.xy.x-0.04, y=zf.to.xy.y, label="ZF* to\nX/Y", size=2, hjust=0)+
+  annotate("rect", xmin=zf.to.xy.x-0.05, xmax=zf.to.xy.x-0.01, 
+           ymin=zf.to.xy.y - 1, ymax=zf.to.xy.y+1, fill="darkgreen", alpha=0.4)+
   
   # Ssty box
-  annotate("text", x=0.13, y=eumuroida.y, label="Ssty appears\nZfy testis specific", size=2, hjust=0)+
-  annotate("rect", xmin=0.12, ymin=eumuroida.y - 0.5, xmax=0.19, ymax=eumuroida.y +0.5, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=eumuroida.x-0.08, y=eumuroida.y, label="Ssty appears\nZfy testis specific", size=2, hjust=0)+
+  annotate("rect", xmin=eumuroida.x-0.09,  xmax=eumuroida.x-0.01,
+           ymin=eumuroida.y - 1, ymax=eumuroida.y + 1, fill="darkgreen", alpha=0.4)+
 
   # Slxl1 acquired box
-  annotate("text", x=0.242, y=slxl1.y, label="Slxl1\nacquired? ", size=2, hjust=0)+
-  annotate("rect", xmin=0.24, ymin=slxl1.y- 0.5, xmax=0.27, ymax=slxl1.y+0.5, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=slxl1.x-0.0325, y=slxl1.y, label="Slxl1\nacquired? ", size=2, hjust=0)+
+  annotate("rect", xmin=slxl1.x-0.035,  xmax=slxl1.x-0.005, 
+           ymin=slxl1.y - 1,ymax=slxl1.y + 1, fill="darkgreen", alpha=0.4)+
 
   # Sly amplifies box
-  annotate("text", x=0.295, y=sly.amplifies.y, label="Sly amplifies\n ", size=2, hjust=0)+
-  annotate("rect", xmin=0.29, ymin=sly.amplifies.y-0.5, xmax=0.34, ymax=sly.amplifies.y+0.5, fill="darkgreen", alpha=0.4)
+  annotate("text", x=sly.amplifies.x-0.05, y=sly.amplifies.y, label="Sly amplifies\n ", size=2, hjust=0)+
+  annotate("rect", xmin=sly.amplifies.x-0.06, xmax=sly.amplifies.x-0.005, 
+           ymin=sly.amplifies.y-0.75, ymax=sly.amplifies.y+0.75, fill="darkgreen", alpha=0.4)
 
 
 save.double.width("figure/subs.per.site.per.Myr.png", subs.site.mya.plot)
+
+# Also create a copy with node labels for reference
+subs.site.mya.plot <- subs.site.mya.plot+ geom_nodelab(size=2, nudge_x = -0.005, nudge_y = 0.5, hjust = 1, color = "black")
+save.double.width("figure/subs.per.site.per.Myr.node.labels.png", subs.site.mya.plot)
+
 
 # Redraw the tree with branch lengths from the actual dates. Confirm it adds up
 # to about the same length per species.
@@ -1564,31 +1595,34 @@ time.plot <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
   scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
                           direction = -1, limits =c(-9, -3))+
   labs(color = "Log substitutions per site\nper million years")+
-  geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
+  # geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
   geom_tiplab(size=2, color = "black")+
-  geom_treescale(fontsize =2, y = -1, width = 10) +
-  coord_cartesian(xlim = c(-5, 210))+ # Mya
-  theme_tree() +
+  theme_tree2() +
   theme(legend.position = c(0.2, 0.8),
         legend.background = element_blank(),
         legend.text = element_text(size=6),
         legend.title = element_text(size=6))
+time.plot <- revts(time.plot)+scale_x_continuous(breaks=seq(0, -180, -20), labels=abs, limits = c(-185, 30))
 save.double.width("figure/subs.per.site.time.png", time.plot)
 
 # Make figures for presentations. These build up the tree and colors
 
+eumuroida.x <- time.plot$data[time.plot$data$label=="Eumuroida","x"]$x
+zf.to.xy.x <- time.plot$data[time.plot$data$label=="Eutheria","x"]$x
+slxl1.x <- time.plot$data[time.plot$data$label=="Murinae","x"]$x
+sly.amplifies.x <- time.plot$data[time.plot$data$label=="Mouse","x"]$x
+
 # Scaled timetree view, no colours
 time.plot.base <- ggtree(zfy.nt.aln.tree.time, size = 1, color="black") %<+%
   time.vals +
-  geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
+  # geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
   geom_tiplab(size=2, color = "black")+
-  geom_treescale(fontsize =2, y = -1, width = 10) +
-  coord_cartesian(xlim = c(-5, 210), ylim=c(-1, 32))+
-  theme_tree() +
+  theme_tree2() +
   theme(legend.position = "none",
         legend.background = element_blank(),
         legend.text = element_text(size=6),
         legend.title = element_text(size=6))
+time.plot.base <- revts(time.plot.base)+scale_x_continuous(breaks=seq(0, -180, -20), labels=abs, limits = c(-185, 30))
 save.double.width("figure/subs.per.site.time.base.png", time.plot.base)
 
 # Scaled timetree view, with colours
@@ -1598,83 +1632,167 @@ time.plot.colours <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
   scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
                           direction = -1, limits =c(-9, -3))+
   labs(color = "Log substitutions per site\nper million years")+
-  geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
+  # geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
   geom_tiplab(size=2, color = "black")+
   geom_treescale(fontsize =2, y = -1, width = 10) +
-  coord_cartesian(xlim = c(-5, 210), ylim=c(-1, 32))+
-  theme_tree() +
+  theme_tree2() +
   theme(legend.position = c(0.2, 0.8),
         legend.background = element_blank(),
         legend.text = element_text(size=6),
         legend.title = element_text(size=6))
+time.plot.colours <- revts(time.plot.colours)+scale_x_continuous(breaks=seq(0, -180, -20), labels=abs, limits = c(-185, 30))
 save.double.width("figure/subs.per.site.time.colours.png", time.plot.colours)
 
 # Annotate with labels
 time.plot.annotated <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
   time.vals +
   # ZF* moves to sex chromosomes
-  annotate("rect", xmin=30, ymin=7.8, xmax=60, ymax=9.5, fill="darkgreen", alpha=0.4)+
-  annotate("text", x=40, y=9,label="ZF* to X/Y", size=2, hjust=0)+
+  annotate("rect", xmin=zf.to.xy.x-50, xmax=zf.to.xy.x-20,
+           ymin=zf.to.xy.y - 0.75 , ymax=zf.to.xy.y+0.75, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=zf.to.xy.x-45, y=zf.to.xy.y,label="ZFX moves to\nsex chromosomes", size=2, hjust=0)+
+  
+  
   # Ssty box
-  annotate("rect", xmin=113, ymin=26.8, xmax=138, ymax=28.5, fill="darkgreen", alpha=0.4)+
-  annotate("text", x=115, y=28, label="Ssty appears", size=2, hjust=0)+
-  # Zfy testis specific
-  annotate("text", x=115, y=27.2, label="Zfy testis specific", size=2, hjust=0)+
-  # Sly amplifies box
-  annotate("text", x=170, y=31.7, label="Sly\namplifies", size=2, hjust=0)+
-  annotate("rect", xmin=170, ymin=30.8, xmax=180, ymax=32.5, fill="darkgreen", alpha=0.4)+
+  annotate("rect", xmin=eumuroida.x-40, xmax=eumuroida.x-10, 
+           ymin=eumuroida.y - 0.75, ymax=eumuroida.y +0.75, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=eumuroida.x-35, y=eumuroida.y, label="Ssty appears\nZfy testis specific", size=2, hjust=0)+
+  
+  
   # Slxl1 acquired box
-  # annotate("text", x=0.242, y=28, label="Slxl1\nacquired?", size=2, hjust=0)+
+  annotate("rect", xmin=slxl1.x-27, xmax=slxl1.x-4,
+           ymin=slxl1.y + 0.25, ymax=slxl1.y+1.75, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=slxl1.x-5, y=slxl1.y+1, label="Slxl1 acquired? ", size=2, hjust=1)+
+  annotate("segment", slxl1.x-5, xend = slxl1.x, y = slxl1.y+1, yend = slxl1.y, col ="darkgreen")+
+  
+  
+  # Sly amplifies box
+  annotate("rect", 
+           xmin=sly.amplifies.x-10, xmax=sly.amplifies.x, 
+           ymin=sly.amplifies.y-0.75, ymax=sly.amplifies.y+0.75, fill="darkgreen", alpha=0.4)+
+  annotate("text", x=sly.amplifies.x-10, y=sly.amplifies.y-0.5, label="Sly\namplifies\n ", size=2, hjust=0)+
+
   aes(colour = log(subsPerMyr)) +
   scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
                           direction = -1, limits =c(-9, -3))+
   labs(color = "Log substitutions per site\nper million years")+
-  geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
+  # geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
   geom_tiplab(size=2, color = "black")+
-  geom_treescale(fontsize =2, y = -1, width = 10) +
-  coord_cartesian(xlim = c(-5, 210), ylim=c(-1, 32))+
-  theme_tree() +
+  theme_tree2() +
   theme(legend.position = c(0.2, 0.8),
         legend.background = element_blank(),
         legend.text = element_text(size=6),
         legend.title = element_text(size=6))
+
+time.plot.annotated <- revts(time.plot.annotated)+scale_x_continuous(breaks=seq(0, -180, -20), labels=abs, limits = c(-185, 30))
 save.double.width("figure/subs.per.site.time.annotated.png", time.plot.annotated)
 
 #### Read final intron ML trees ####
 cat("Reading final intron trees\n")
 
-final.intron.zfy.nt.aln.tree <- ape::read.tree(FILES$final.intron.zfy.nt.aln.treefile) %>%
-  reroot.tree(., c("African_bush_elephant_ZFY", "Southern_two-toed_sloth_ZFY"), position = 0.015)
+final.intron.zfy.nt.aln.tree <- ape::read.tree(FILES$final.intron.zfy.nt.filt.aln.treefile) %>%
+  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
 
-final.intron.zfx.nt.aln.tree <- ape::read.tree(FILES$final.intron.zfx.nt.aln.treefile) %>%
-  reroot.tree(., c("African_bush_elephant_ZFX", "Southern_two-toed_sloth_ZFX"), position = 0.015)
+final.intron.zfx.nt.aln.tree <- ape::read.tree(FILES$final.intron.zfx.nt.filt.aln.treefile) %>%
+  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
 
 final.intron.zfy.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.zfy.nt.aln.divvy.aln.treefile) %>%
-  reroot.tree(., c("African_bush_elephant_ZFY", "Southern_two-toed_sloth_ZFY"), position = 0.015)
+  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
 
 final.intron.zfx.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.zfx.nt.aln.divvy.aln.treefile) %>%
-  reroot.tree(.,c("African_bush_elephant_ZFX", "Southern_two-toed_sloth_ZFX"), position = 0.015)
+  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
+
+mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
+
+final.intron.nt.aln.tree <- ape::read.tree(FILES$final.intron.nt.filt.aln.treefile) %>%
+  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015) %>%
+  tidytree::groupOTU(., mammal.gene.groups, group_name = "group")
+
+final.intron.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.nt.aln.divvy.aln.treefile) %>%
+  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015) %>%
+  tidytree::groupOTU(., mammal.gene.groups, group_name = "group")
 
 #### Plot the final intron trees ####
 
-x.min <- -0.1
-x.max <- 1.6
-
-final.intron.zfy.nt.aln.tree.plot <- plot.tree(final.intron.zfy.nt.aln.tree)  + xlim(x.min, x.max) + labs(title = "ZFY")
-final.intron.zfx.nt.aln.tree.plot <- plot.tree(final.intron.zfx.nt.aln.tree) + xlim(x.min, x.max)+ labs(title = "ZFX")
+# Raw
+final.intron.zfy.nt.aln.tree.plot <- plot.tree(final.intron.zfy.nt.aln.tree)  + xlim(-0.1, 2) + labs(title = "ZFY")
+final.intron.zfx.nt.aln.tree.plot <- plot.tree(final.intron.zfx.nt.aln.tree) + xlim(0, 2)+ labs(title = "ZFX")
 save.double.width("figure/final.intron.tree.png", final.intron.zfx.nt.aln.tree.plot/final.intron.zfy.nt.aln.tree.plot)
 
-final.intron.zfy.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfy.nt.divvy.aln.tree)  + xlim(x.min, x.max) + labs(title = "ZFY (filtered)")
-final.intron.zfx.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfx.nt.divvy.aln.tree) + xlim(x.min, x.max)+ labs(title = "ZFX (filtered)")
+# Divvied
+final.intron.zfy.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfy.nt.divvy.aln.tree)  + xlim(0, 2) + labs(title = "ZFY (divvied)")
+final.intron.zfx.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfx.nt.divvy.aln.tree) + xlim(0, 2)+ labs(title = "ZFX (divvied)")
 save.double.width("figure/final.intron.divvy.tree.png", final.intron.zfy.nt.divvy.aln.tree.plot/final.intron.zfx.nt.divvy.aln.tree.plot)
 
-final.intron.combined.plot <- (final.intron.zfy.nt.aln.tree.plot + final.intron.zfy.nt.divvy.aln.tree.plot) / (final.intron.zfx.nt.aln.tree.plot + final.intron.zfx.nt.divvy.aln.tree.plot)
-save.double.width("figure/final.intron.combined.tree.png", final.intron.combined.plot)
+# Raw ZFX/Y
+final.intron.nt.aln.tree.plot <- plot.tree(final.intron.nt.aln.tree, col= "group")  + xlim(-0.1, 1.5) + labs(title = "ZFX/Y final intron")
+save.double.width("figure/final.intron.zfx.zfy.tree.png", final.intron.nt.aln.tree.plot)
+
+# Divvied ZFX/Y
+final.intron.nt.divvy.aln.tree.plot <- plot.tree(final.intron.nt.divvy.aln.tree, col= "group")  + xlim(0, 2) + labs(title = "ZFX/Y (divvied)")
+save.double.width("figure/final.intron.zfx.zfy.divvy.tree.png", final.intron.nt.divvy.aln.tree.plot)
+
+# Panel figure
+# combined.plot <- (final.intron.zfy.nt.aln.tree.plot + final.intron.zfy.nt.divvy.aln.tree.plot) / (final.intron.zfx.nt.aln.tree.plot + final.intron.zfx.nt.divvy.aln.tree.plot)
+# save.double.width("figure/final.intron.combined.tree.png", combined.plot)
+
+#### Plot the final intron MSAs ####
+
+plot.msa <- function(tidy.aln){
+  ggplot()+
+    geom_msa(data = tidy.aln, seq_name = T, font=NULL, 
+             border=NA, color="Chemistry_NT", consensus_views = F )+
+    coord_cartesian(expand = FALSE)+
+    scale_x_continuous(breaks = seq(0, max(tidy.aln$position), 100))+
+    scale_y_discrete( labels = \(x) str_replace_all(x, "_", " ") )+
+    theme_bw()+
+    theme(axis.title = element_blank())
+}
+
+# Read alignment, set order to match phylogeny
+
+zfy.raw.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron.zfy/final.intron.zfy.nt.aln", format="fasta"))
+zfy.raw.aln$name <- factor(zfy.raw.aln$name, levels = mammal.taxa.name.order)
+
+zfy.divvy.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron.zfy/final.intron.zfy.nt.aln.divvy.aln", format="fasta"))
+zfy.divvy.aln$name <- factor(zfy.divvy.aln$name, levels = mammal.taxa.name.order)
+
+zfx.raw.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron.zfx/final.intron.zfx.nt.aln", format="fasta"))
+zfx.raw.aln$name <- factor(zfx.raw.aln$name, levels = mammal.taxa.name.order)
+
+zfx.divvy.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron.zfx/final.intron.zfx.nt.aln.divvy.aln", format="fasta"))
+zfx.divvy.aln$name <- factor(zfx.divvy.aln$name, levels = mammal.taxa.name.order)
+
+zf.raw.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron/final.intron.nt.aln", format="fasta"))
+zf.raw.aln$name <- factor(zf.raw.aln$name, levels = mammal.taxa.name.order)
+
+zf.divvy.aln <- tidy_msa(Biostrings::readDNAMultipleAlignment("aln/final.intron/final.intron.nt.aln.divvy.aln", format="fasta"))
+zf.divvy.aln$name <- factor(zf.divvy.aln$name, levels = mammal.taxa.name.order)
+
+zfy.msa.raw.plot <- plot.msa(zfy.raw.aln)
+zfy.msa.plot <- plot.msa(zfy.divvy.aln)
+
+zfx.msa.raw.plot <- plot.msa(zfx.raw.aln)
+zfx.msa.plot <- plot.msa(zfx.divvy.aln)
+
+zf.msa.raw.plot <- plot.msa(zf.raw.aln)
+zf.msa.plot <- plot.msa(zf.divvy.aln)
+
+save.plot("figure/final.intron.msa.zfy.raw.png", zfy.msa.raw.plot, width=270, height = 170)
+save.plot("figure/final.intron.msa.zfy.divvy.png", zfy.msa.plot, width=270, height = 170)
+save.plot("figure/final.intron.msa.zfx.raw.png", zfx.msa.raw.plot, width=270, height = 170)
+save.plot("figure/final.intron.msa.zfx.divvy.png", zfx.msa.plot, width=270, height = 170)
+save.plot("figure/final.intron.msa.zf.raw.png", zf.msa.raw.plot, width=270, height = 170)
+save.plot("figure/final.intron.msa.zf.divvy.png", zf.msa.plot, width=270, height = 170)
 
 #### Create skyline plot from ZFX and ZFY data ####
-
+# But this is not a reliable data set - use published estimates instead
 # Combined tree
-ape::skylineplot.deluxe(nt.aln.tree)
+# Note 4e-9 is around the mode for the subs/site/mya plot (runs 1e-9 to 1e-3)
+ape::skylineplot.deluxe(final.intron.nt.aln.tree, subst.rate=4e-9, show.years = T, present.year=0)
+
+png(filename = "figure/zfx.zfy.skyline.png")
+ape::skylineplot.deluxe(nt.aln.tree, subst.rate=2e-9, show.years = T, present.year=0)
+dev.off()
 
 # What is the substitution rate estimate over time? Need that to convert to time
 # axis

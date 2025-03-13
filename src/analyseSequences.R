@@ -239,7 +239,6 @@ write.table(unique(METADATA$mammal$species), file = "figure/species_names.tsv",
 # Replace the Latin names with common names, and ZFX/ZFY suffix to make
 # gene specific species trees
 species.tree <- ape::read.tree("species_names.nwk")
-species.tree$edge.length <- NULL # remove times
 species.tree$tip.label <- gsub("_", " ", species.tree$tip.label)
 
 # Set a new node label for the common ancestral node of the given species
@@ -296,6 +295,10 @@ species.tree <- update.node.label(species.tree, "Marsupialia", "Monodelphis dome
 species.tree <- update.node.label(species.tree, "Theria", "Mus musculus", "Phascolarctos cinereus")
 species.tree <- update.node.label(species.tree, "Monotremata", "Ornithorhynchus anatinus", "Tachyglossus aculeatus")
 species.tree <- update.node.label(species.tree, "Mammalia", "Mus musculus", "Tachyglossus aculeatus")
+ape::write.tree(species.tree, "aln/node.labeled.species.tree.nwk")
+
+# Now remove time info
+species.tree$edge.length <- NULL # remove times
 
 # Make the ZFX tree
 zfx.phylogeny <- species.tree
@@ -414,14 +417,13 @@ zfy.nt.aln.tree <- ape::read.tree("aln/zfy_only/zfy.aln.treefile")
 zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2") 
 zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "African_Grass_Rat_ZFY2-like_1") 
 
-# Root the trees on platypus
-zfx.nt.aln.tree <- phytools::reroot(zfx.nt.aln.tree, which(zfx.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
-zfy.nt.aln.tree <- phytools::reroot(zfy.nt.aln.tree, which(zfy.nt.aln.tree$tip.label=="Platypus_ZFX"), position = 0.015)
+# Root the trees on monotremes
+zfx.nt.aln.tree <- reroot.tree(zfx.nt.aln.tree, c("Platypus_ZFX", "Autralian_echidna_ZFX"), position = 0.015)
+zfy.nt.aln.tree <- reroot.tree(zfy.nt.aln.tree, c("Platypus_ZFX", "Autralian_echidna_ZFX"), position = 0.015)
 
 # Remove gene names so tip labels are comparable
 zfx.nt.aln.tree$tip.label <- str_replace(zfx.nt.aln.tree$tip.label, "_Z[F|f][X|x].*", "")
 zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", "")
-
 
 #### Plot ZFX / ZFY tree comparisons  ####
 

@@ -1,6 +1,5 @@
 # Find Zinc Fingers in a sequence
-# We can use the regex .C.{2,4}C.{12}H.{3,5}H to find ZFs 
-# based on https://pubmed.ncbi.nlm.nih.gov/21572177/
+# Process ZF locations identified by hmmsearch
 
 # aa - the amino acid sequence. May have gaps if part of a multiple sequence alignment
 # sequence.name - the name of the sequence
@@ -9,8 +8,7 @@
 # the coordinates will be with respect to the gapped alignment.
 find.zf <- function(aa, sequence.name, start, end){
   if(!require(dplyr)) stop("dplyr is required")
-  # zf.regex <- ".C(.{2,4}?)C.{12}H(.{3,5}?)H"
-  
+
   aa <- aa@unmasked[[sequence.name]]
   
   # Convert ungapped coordinates back to gapped

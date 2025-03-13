@@ -76,11 +76,7 @@ FILES <- list(
   combined.nt.aln.treefile = "aln/combined/combined.nt.aln.treefile",
   combined.aa.aln.treefile = "aln/combined/combined.aa.aln.treefile",
   paml.branch.site.output = "paml/branch-site/zfy.branch-site.positive.sites.txt",
-  
-  cox1.nt.fas = "fasta/cox1.nt.fas",
-  cox1.nt.aln = "aln/cox1/cox1.nt.aln",
-  cox1.aa.aln = "aln/cox1/cox1.aa.aln",
-  
+
   final.intron.nt.fas     = "fasta/final.intron.nt.fas", # combined Zfx and Zfy
   final.intron.nt.aln     = "aln/final.intron/final.intron.nt.aln", # combined Zfx and Zfy
   final.intron.zfy.nt.fas = "fasta/final.intron.zfy.nt.fas",
@@ -88,15 +84,13 @@ FILES <- list(
   final.intron.zfy.nt.aln = "aln/final.intron.zfy/final.intron.zfy.nt.aln",
   final.intron.zfx.nt.aln = "aln/final.intron.zfx/final.intron.zfx.nt.aln",
   
-  final.intron.zfy.nt.aln.treefile = "aln/final.intron.zfy/final.intron.zfy.nt.aln.treefile",
-  final.intron.zfx.nt.aln.treefile = "aln/final.intron.zfx/final.intron.zfx.nt.aln.treefile",
+  final.intron.zfy.nt.filt.aln.treefile = "aln/final.intron.zfy/final.intron.zfy.nt.filt.aln.treefile",
+  final.intron.zfx.nt.filt.aln.treefile = "aln/final.intron.zfx/final.intron.zfx.nt.filt.aln.treefile",
+  final.intron.nt.filt.aln.treefile = "aln/final.intron/final.intron.nt.filt.aln.treefile",
   
   final.intron.zfy.nt.aln.divvy.aln.treefile = "aln/final.intron.zfy/final.intron.zfy.nt.aln.divvy.aln.treefile",
-  final.intron.zfx.nt.aln.divvy.aln.treefile = "aln/final.intron.zfx/final.intron.zfx.nt.aln.divvy.aln.treefile"
-  
-  
-  
-  
+  final.intron.zfx.nt.aln.divvy.aln.treefile = "aln/final.intron.zfx/final.intron.zfx.nt.aln.divvy.aln.treefile",
+  final.intron.nt.aln.divvy.aln.treefile = "aln/final.intron/final.intron.nt.aln.divvy.aln.treefile"
 )
 
 #### Invokations of external binaries #####
@@ -509,7 +503,7 @@ add.conservation.track <- function(ranges,  y.start, y.end, ...){
 }
 
 # Add an exon track to a plot
-add.exon.track <- function(y.start, y.end, start_col = "start_aa_combined", end_col = "start_aa_combined", ...){
+add.exon.track <- function(y.start, y.end, start_col = "start_aa_combined", end_col = "end_aa_combined", ...){
   # The second exon is alternatively spliced, so mark it with a striped fill
   # via ggpattern::geom_rect_pattern
   geom_rect_pattern(data = mouse.exons, aes(xmin = .data[[start_col]], xmax = .data[[end_col]], 
@@ -524,7 +518,7 @@ add.exon.track <- function(y.start, y.end, start_col = "start_aa_combined", end_
                     ...)
 }
 # Add exon labels track to a plot
-add.exon.labels <- function(y.start, y.end, start_col = "start_aa_combined", end_col = "start_aa_combined", ...){
+add.exon.labels <- function(y.start, y.end, start_col = "start_aa_combined", end_col = "end_aa_combined", ...){
   geom_text(data=mouse.exons,
             aes(x =(.data[[start_col]]+.data[[end_col]])/2, y=(y.start+y.end)/2, label=exon), size=1.8, col="black")
 }
@@ -535,9 +529,6 @@ add.exon.labels <- function(y.start, y.end, start_col = "start_aa_combined", end
 annotate.structure.plot <- function(plot, n.taxa){
   
   plot <- plot+
-    # Draw the conservation with Xenopus, chicken and opossum
-    
-    
     # Draw the structures
     add.track(RANGES$combined.nls,    n.taxa+8.5, n.taxa+11.5, fill=NLS.COLOUR, alpha = 1)+ # +8.5
     add.track(RANGES$combined.zf,     n.taxa+9, n.taxa+11, fill=ZF.COLOUR)+ # 9 - 11
@@ -545,6 +536,7 @@ annotate.structure.plot <- function(plot, n.taxa){
     add.track(RANGES$combined.9aaTAD, n.taxa+9, n.taxa+11, fill=TAD.COLOUR,  alpha = 0.9)+  #9
     add.track.labels(RANGES$combined.9aaTAD, n.taxa+9, n.taxa+11, col="white")+   # Label the 9aaTADs
     
+    # Draw the conservation with Xenopus, chicken and opossum
     new_scale_fill()+ 
     scale_fill_paletteer_c("grDevices::Cividis", direction = 1, limits = c(0, 1))+
     labs(fill="Conservation (5 site average)")+
@@ -552,10 +544,10 @@ annotate.structure.plot <- function(plot, n.taxa){
     add.conservation.track(msa.aa.aln.tidy.chicken.conservation, n.taxa+3, n.taxa+5)+
     add.conservation.track(msa.aa.aln.tidy.opossum.conservation, n.taxa+6, n.taxa+8)+
     
+    # Draw exons
     new_scale_fill()+
     scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
     scale_pattern_color_manual(values=c("white", "white"))+
-    
     scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
     guides(fill = "none", pattern="none")+
     add.exon.track(n.taxa+12, n.taxa+14, col = "black")+ # color of border
@@ -1090,13 +1082,13 @@ extract.combined.alignment.region <- function(nt.start=NULL, nt.end=NULL, aa.sta
   
   nt.aln <- as.data.frame(as.matrix(ALIGNMENTS$nt.combined.biostrings)[,nt.start:nt.end]) %>%
     dplyr::mutate(Sequence = rownames(.),
-                  Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+                  Sequence = factor(Sequence, levels = str_replace_all(combined.taxa.name.order, " ", "_"))) %>%
     dplyr::arrange(as.integer(Sequence)) %>%
     dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+nt.start-1) )
   
   aa.aln <- as.data.frame(as.matrix(ALIGNMENTS$aa.combined.biostrings)[,aa.start:aa.end]) %>%
     dplyr::mutate(Sequence = rownames(.),
-                  Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+                  Sequence = factor(Sequence, levels = str_replace_all(combined.taxa.name.order, " ", "_"))) %>%
     dplyr::arrange(as.integer(Sequence)) %>%
     dplyr::rename_with(.cols=starts_with("V"), .fn=\(x) paste0("Site_",as.integer(gsub("V", "", x))+aa.start-1) )
   
