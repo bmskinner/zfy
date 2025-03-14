@@ -847,6 +847,54 @@ new_scale_fill()+
 
 save.double.width(filename = "figure/gametologue.cumdiff.png", gametologue.cumdiff.plot, height = 100)
 
+#### Calculate conservation between X and Y gametologues for ancestral nodes species ####
+# # Read the ancestral states for the nodes
+ancestral.zfx.seqs <- read.table("aln/zfx_only/zfx.aln.state", header=TRUE) %>%
+  dplyr::mutate(Type = "ZFX") %>%
+  dplyr::select(Node, Type, Site, State)
+
+ancestral.zfy.seqs <- read.table("aln/zfy_only/zfy.aln.state", header=TRUE) %>%
+  dplyr::mutate(Type = "ZFY") %>%
+  dplyr::select(Node, Type, Site, State)
+
+
+ancestral.seqs <- rbind(ancestral.zfx.seqs, ancestral.zfy.seqs) %>%
+  dplyr::filter(Node != "Arvicanthis", Node != "Mus", Node !="Monotremata", 
+                Node != "Mammalia", Node !="Marsupialia")
+
+calculate.ancestral.conservation <- function(node.name){
+  ancestral.seqs %>% 
+    dplyr::filter(Node==node.name) %>%
+    tidyr::pivot_wider(id_cols = c(Node, Site), names_from = Type, values_from = State) %>%
+    dplyr::mutate(Conservation = as.numeric(ZFX==ZFY | (ZFX=="-" | ZFY=="-" )),
+                  CumSum = cumsum(Conservation==0))
+}
+
+ancestral.conservation <- do.call(rbind, lapply(unique(ancestral.seqs$Node), calculate.ancestral.conservation))
+
+
+ancestral.cumdiff.plot <-  ggplot()+
+  geom_line(data = ancestral.conservation, aes(x=Site, y=CumSum, group=Node), col="#bbbbbbFF")+
+  geom_line(data = ancestral.conservation[ancestral.conservation$Node %in% c("Muroidea","Eumuroida","Theria","Murinae", ),], aes(x=Site, y=CumSum, col=Node))+
+  labs(y = "Cumulative X-Y differences", x = "Site in alignment")+
+  scale_color_manual(values = c("Muroidea"="purple","Eumuroida"="#002AFFFF","Theria"="darkgreen", "Murinae"="orange", "Eutheria"="red"))+
+  scale_x_continuous(breaks = seq(0, 3000, 200))+
+  scale_y_continuous(breaks = seq(0, 900, 50))+
+  theme_bw()+
+  theme(legend.position = c(0.2, 0.7),
+        legend.title = element_blank(),
+        legend.background = element_blank())
+
+ancestral.cumdiff.plot <- ancestral.cumdiff.plot +
+  new_scale_fill()+
+  scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
+  scale_pattern_color_manual(values=c("white", "white"))+
+  scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
+  guides(fill = "none", pattern="none")+
+  add.exon.track(450, 470, col = "black", start_col = "start_nt_mammal", end_col = "end_nt_mammal")+ # color of border
+  add.exon.labels(450, 470, start_col = "start_nt_mammal", end_col = "end_nt_mammal")
+
+save.double.width(filename = "figure/ancestral.cumdiff.png", ancestral.cumdiff.plot, height = 100)
 
 #### Plot the conservation of hydrophobicity across mammal/outgroup AA MSA ####
 cat("Plotting conservation of hydrophobicity\n")
