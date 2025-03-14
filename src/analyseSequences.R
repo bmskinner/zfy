@@ -434,21 +434,9 @@ zfy.nt.aln.tree.plot <- plot.tree(zfy.nt.aln.tree) + geom_nodelab(size=2, nudge_
 save.double.width("figure/species.tree.zfx.png", zfx.nt.aln.tree.plot)
 save.double.width("figure/species.tree.zfy.png", zfy.nt.aln.tree.plot)
 
-#### Find matching nodes in the two trees and get ancestral reconstructions ####
+#### Export ancestral ZFX/Y reconstructions for each node in the species tree ####
 
-# Nodes with the same branching order will be viable for comparison of ancestral
-# reconstructions
-
-# Find the matching nodes
-zfy.zfx.common.nodes <- ape::comparePhylo(zfx.nt.aln.tree, zfy.nt.aln.tree)$NODES %>%
-  tidyr::separate_wider_delim(cols = zfx.nt.aln.tree, delim = " ", names = c("ZFX_node", "zfx_nnodes") ) %>%
-  tidyr::separate_wider_delim(cols = zfy.nt.aln.tree, delim = " ", names = c("ZFY_node", "zfy_nnodes") ) %>%
-  # Remove booststrap values from node names
-  dplyr::mutate(ZFX_node = str_replace(ZFX_node, "\\/\\d.*", ""),
-                ZFY_node = str_replace(ZFY_node, "\\/\\d.*", "")) %>% 
-  dplyr::filter(ZFX_node!="Mammalia" & ZFX_node!="Root" & ZFX_node!="") 
-
-# Read the ancestral states for the nodes
+# # Read the ancestral states for the nodes
 ancestral.zfx.seqs <- read.table("aln/zfx_only/zfx.aln.state", header=TRUE)
 ancestral.zfy.seqs <- read.table("aln/zfy_only/zfy.aln.state", header=TRUE)
 
@@ -460,16 +448,18 @@ get.node.sequence <- function(node.name, ancestral.seq.table, type){
     dplyr::summarise(Seq =  paste0(">", type, "_", node.name, "\n", paste(State, collapse = "")))
 }
 
-# Get the ancestral sequences for these node pairs
-zfy.zfx.common.nodes$anc.zfx <- sapply(zfy.zfx.common.nodes$ZFX_node, 
-                                       get.node.sequence, 
+# 
+# # Get the ancestral sequences for these node pairs
+anc.zfx <- sapply(species.tree$node.label[-1], # skip Mammalia
+                                       get.node.sequence,
                                        ancestral.seq.table=ancestral.zfx.seqs, type="ZFX")
-zfy.zfx.common.nodes$anc.zfy <- sapply(zfy.zfx.common.nodes$ZFY_node, 
-                                       get.node.sequence, 
+anc.zfy <- sapply(species.tree$node.label[-1], # skip Mammalia
+                                       get.node.sequence,
                                        ancestral.seq.table=ancestral.zfy.seqs, type="ZFY")
 
+
 # Write the node sequences to fasta
-anc.node.seqs <- paste0(c(zfy.zfx.common.nodes$anc.zfx, zfy.zfx.common.nodes$anc.zfy, "\n"), collapse = "\n")
+anc.node.seqs <- paste0(c(anc.zfx, anc.zfy, "\n"), collapse = "\n")
 write_file(anc.node.seqs, "aln/ancestral.zfx.zfy.nodes.fa")
 
 # Combine with existing ZFX/Y sequence file
@@ -478,11 +468,10 @@ ape::write.dna(ALIGNMENTS$nt.mammal.ape, "aln/ancestral.zfx.zfy.nodes.fa", forma
 
 #### Write geneconv configuration file ####
 
-# Zfx and Zfy for each species / node are in the same group
-node.string.names <- zfy.zfx.common.nodes %>% 
-  dplyr::mutate(GroupString= paste0("-group ZFX_", ZFX_node, "_ZFY_",ZFY_node, " ZFX_", ZFX_node, " ZFY_",ZFY_node ))
-node.string <- paste(node.string.names$GroupString, collapse = "\n")
+# Put Zfx and Zfy for each ancestral node in a group string
+ancestral.node.string <- paste( paste0("-group ", species.tree$node.label[-1], " ZFX_", species.tree$node.label[-1], " ZFY_", species.tree$node.label[-1]), collapse = "\n")
 
+# Now do the same for the species sequences
 split.gene.names <- METADATA$mammal %>%
   # Since we're about to split on 'Z', remove secondary instances of the string
   # keeping whatever - or _ was in the original name
@@ -504,7 +493,7 @@ split.gene.names <- METADATA$mammal %>%
   dplyr::distinct()
 
 
-group.string <- paste(split.gene.names$GroupString, collapse = "\n")
+species.string <- paste(split.gene.names$GroupString, collapse = "\n")
 
 # Make the geneconv control file
 # e.g 
@@ -516,13 +505,9 @@ group.string <- paste(split.gene.names$GroupString, collapse = "\n")
 # -group GRPIII G1 G2 R1 R2 
 anc.gene.conv.control <- paste0("#GCONV_CONFIG\n",
                                 "-Startseed=123   -MaxSimGlobalPval=0.05\n",
-                                group.string, "\n", node.string)
+                                species.string, "\n", ancestral.node.string, "\n")
 
 write_file(anc.gene.conv.control, "aln/anc.zfx.zfy.geneconv.cfg")
-
-# Invoke geneconv via:
-# geneconv aln/anc.zfx.zfy.geneconv.cfg aln/ancestral.zfx.zfy.nodes.fa
-
 
 #### Read final intron sequences #####
 cat(timestamp(), "Processing final intron sequences\n")

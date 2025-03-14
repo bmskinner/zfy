@@ -29,8 +29,7 @@ aln.geneconv.data <- read_table("aln/anc.zfx.zfy.geneconv.frags", comment = "#",
                 Type = case_when(Type == "GO" ~ "Global outer",
                                  Type == "GI" ~ "Global inner",
                                  Type == "PO" ~ "Pairwise outer",
-                                 Type == "PI" ~ "Pairwise inner",)) %>%
-  # dplyr::filter(str_detect(Type, "Global" )) %>%
+                                 Type == "PI" ~ "Pairwise inner")) %>%
   dplyr::mutate(
                 # Get just the ZFX node names for ancestral nodes
                 SingleSpecies = ifelse(str_detect(Species, ";"), str_extract(Species, "^[^;]+"), Species),
@@ -38,37 +37,37 @@ aln.geneconv.data <- read_table("aln/anc.zfx.zfy.geneconv.frags", comment = "#",
                 isNode = str_detect(Species, "ZFX"),
                 nodeType = ifelse(isNode, "Ancestral node", "Species"),
                 ManualPosition = as.factor(SingleSpecies),
-                ManualPosition = fct_relevel(ManualPosition,
-                                             "African_Grass_Rat",
-                                             "Mouse",
-                                             "Mus-Arvicanthis",
-                                             "Rat",
-                                             "Murinae",
-                                             "Mongolian_gerbil",
-                                             "Muridae",
-                                             "North_American_deer_mouse",
-                                             "Cricetidae",
-                                             "Eumuroida",
-                                             "Beaver",
-                                             "Arctic_ground_squirrel",
-                                             "Xerinae",
-                                             "Gray_squirrel",
-                                             "Sciuridae",
-                                             "Simiiformes",
-                                             "Cattle",
-                                             "Polar_bear",
-                                             "Stoat",
-                                             "Arctoidea",
-                                             "Caniformia",
-                                             "Cat",
-                                             "Carnivora",
-                                             "Laurasiatheria",
-                                             "Boreoeutheria",
-                                             "African_bush_elephant",
-                                             "Atlantogenata",
-                                             "Eutheria"
-                                             
-                )) %>%
+                # ManualPosition = fct_relevel(ManualPosition,
+                #                              "African_Grass_Rat",
+                #                              "Mouse",
+                #                              "Mus-Arvicanthis",
+                #                              "Rat",
+                #                              "Murinae",
+                #                              "Mongolian_gerbil",
+                #                              "Muridae",
+                #                              "North_American_deer_mouse",
+                #                              "Cricetidae",
+                #                              "Eumuroida",
+                #                              "Beaver",
+                #                              "Arctic_ground_squirrel",
+                #                              "Xerinae",
+                #                              "Gray_squirrel",
+                #                              "Sciuridae",
+                #                              "Simiiformes",
+                #                              "Cattle",
+                #                              "Polar_bear",
+                #                              "Stoat",
+                #                              "Arctoidea",
+                #                              "Caniformia",
+                #                              "Cat",
+                #                              "Carnivora",
+                #                              "Laurasiatheria",
+                #                              "Boreoeutheria",
+                #                              "African_bush_elephant",
+                #                              "Atlantogenata",
+                #                              "Eutheria"
+                # )
+) %>%
   # What are the species descending from each of the ancestral nodes? Make labels clearer
   dplyr::rowwise() %>%
   dplyr::group_by(ManualPosition) %>%
@@ -89,40 +88,35 @@ aln.geneconv.data <- read_table("aln/anc.zfx.zfy.geneconv.frags", comment = "#",
 # PO: Pairwise outer-sequence
 
 # We only really care about pairwise inner
+
+
+# Get the structural features
+
+
+
 # Plot the geneconv fragments in the ancestral nodes
 
 aln.geneconv.plot <- ggplot(aln.geneconv.data)+
-  
-  # Add shaded boxes to show the phylogeny
-  annotate("rect", xmin = -880, xmax = 0, ymin = -1, ymax = 29, fill = "grey", col="black", alpha=0.5)+ # Eutheria
-  annotate("rect", xmin = -850, xmax = 0, ymin = 25.6, ymax = 27.5, fill = "grey", col="black",  alpha=0.5)+ # Atlantogenata
-  annotate("rect", xmin = -850, xmax = 0, ymin = 0, ymax = 25.4, fill = "grey", col="black",  alpha=0.5)+ # Boreoeutheria
-  annotate("rect", xmin = -750, xmax = 0, ymin = 16.5, ymax = 24.5, fill = "grey",col="black",  alpha=0.5)+ # Laurasiatheria
-  
-  annotate("rect", xmin = -700, xmax = 0, ymin = 17.5, ymax = 23.5, fill = "grey",col="black",  alpha=0.5)+ # Carnivora
-  annotate("rect", xmin = -700, xmax = 0, ymin = 11.5, ymax = 15.5, fill = "grey",col="black",  alpha=0.5)+ # Sciuridae
-  annotate("rect", xmin = -780, xmax = 0, ymin = 0.25, ymax = 10.5, fill = "grey",col="black",  alpha=0.5)+ # Eumuroida
-  annotate("rect", xmin = -700, xmax = 0, ymin = 0.5, ymax = 7.5, fill = "grey",col="black",  alpha=0.5)+ # Muridae
-  
+
   labs(x = "Position", y = "Species")+
-  scale_x_continuous(expand = c(0, 0), breaks = seq(0, 2800, 200))+
+  scale_x_continuous(expand = c(0,5), breaks = seq(0, 3000, 200))+
   scale_y_discrete(labels = function(x) str_wrap( str_replace_all(x, "_", " "), width = 30))+
   
   # Draw the structures
-  add.track(ranges.ZF.common,     -Inf, Inf, start_col = "start_nt", end_col = "end_nt", fill=ZF.COLOUR)+
-  add.track(ranges.NLS.common,    -Inf, Inf,  start_col = "start_nt", end_col = "end_nt",fill=NLS.COLOUR, alpha = 0.5)+
-  add.track(ranges.9aaTAD.common,  -Inf, Inf,   start_col = "start_nt", end_col = "end_nt",fill=TAD.COLOUR,  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
-  add.track.labels(ranges.9aaTAD.common,  0.5, 1, start_col = "start_nt", end_col = "end_nt", col="white")+   # Label the 9aaTADs
-  add.track.labels(ranges.ZF.common,  0.5, 1, start_col = "start_nt", end_col = "end_nt",
-                   label_col = "motif_number", col="black")+   # Label the ZFs
+  # add.track(ranges.ZF.common,     -Inf, Inf, start_col = "start_nt", end_col = "end_nt", fill=ZF.COLOUR)+
+  # add.track(ranges.NLS.common,    -Inf, Inf,  start_col = "start_nt", end_col = "end_nt",fill=NLS.COLOUR, alpha = 0.5)+
+  # add.track(ranges.9aaTAD.common,  -Inf, Inf,   start_col = "start_nt", end_col = "end_nt",fill=TAD.COLOUR,  alpha = 0.9)+ # fill color max from "grDevices::Blues 3"
+  # add.track.labels(ranges.9aaTAD.common,  0.5, 1, start_col = "start_nt", end_col = "end_nt", col="white")+   # Label the 9aaTADs
+  # add.track.labels(ranges.ZF.common,  0.5, 1, start_col = "start_nt", end_col = "end_nt",
+  #                  label_col = "motif_number", col="black")+   # Label the ZFs
   
-  new_scale_fill()+
+  # new_scale_fill()+
   scale_fill_manual(values=c("white", "grey", "white", "grey", "white", "grey", "white"))+
   scale_pattern_color_manual(values=c("white", "white"))+
   scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
   guides(fill = "none", pattern="none")+
-  add.exon.track(-0.5, 0.5, start_col = "start_nt", end_col = "end_nt", col = "black")+
-  add.exon.labels(-0.5, 0.5, start_col = "start_nt", end_col = "end_nt")+
+  add.exon.track(-0.5, 0.5, start_col = "start_nt_mammal", end_col = "end_nt_mammal", col = "black")+
+  add.exon.labels(-0.5, 0.5, start_col = "start_nt_mammal", end_col = "end_nt_mammal")+
   
   # Draw the fragments
   geom_segment(aes(x=begin, y = ManualPosition, xend = end, yend = ManualPosition, col=Type), linewidth = 2, alpha = 0.5)+
@@ -130,14 +124,9 @@ aln.geneconv.plot <- ggplot(aln.geneconv.data)+
                                  "Pairwise outer"="green", 
                                  "Global inner"="blue", 
                                  "Global outer"="red"))+
-  coord_cartesian(xlim = c(0, max(mouse.exons$end_nt)), clip = "off")+
+  coord_cartesian(xlim = c(0, max(mouse.exons$end_nt_mammal)), 
+                           ylim = c(-1, max(as.integer(aln.geneconv.data$ManualPosition))), clip = "off")+
   
-  # Internal phylogeny boxes
-  annotate("rect", xmin = 0, xmax = Inf, ymin = 17.5, ymax = 23.5, col="black", fill=NA)+ # Carnivora
-  annotate("rect", xmin = 0, xmax = Inf, ymin = 11.5, ymax = 15.5, fill = NA ,col="black",  alpha=0.5)+ # Sciuridae
-  annotate("rect", xmin = 0, xmax = Inf, ymin = 0.5, ymax = 7.5, fill = NA,col="black",  alpha=0.5)+ # Muridae
- 
-  # facet_wrap(~Type, ncol = 1)+
 
   theme_bw()+
   theme(axis.title = element_blank(),
