@@ -715,7 +715,7 @@ paml.site.file <- paste0("seqfile   = ../../", FILES$mammal.nt.aln, " * alignmen
                          "omega     = 0.5 * initial omega value\n")
 write_file(paml.site.file, "paml/site-specific/zfy.site-specific.paml.ctl")
 
-#### Prepare codeml branch-site model to look for selection specifically in Muroidea ####
+#### Prepare codeml branch-site model to look for selection specifically in Eumuroida ####
 
 cat(timestamp(), "Creating CODEML branch-site model control files\n")
 # To look at the rodent clade, we need a rooted tree
@@ -818,14 +818,6 @@ eumuroida.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Desert_hamster_Zfx-
 write.paml.fg.tree(eumuroida.node, 
                    "paml/branch-site-eumuroida")
 
-muridae.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Mongolian_gerbil_Zfx-like_putative-Zfy"))
-write.paml.fg.tree(muridae.node, 
-                   "paml/branch-site-muridae")
-
-murinae.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy2", "Norwegian_Rat_Zfy2"))
-write.paml.fg.tree(murinae.node, 
-                   "paml/branch-site-murinae")
-
 cat(timestamp(), "Creating CODEML control script\n")
 # Add a script to submit these jobs to the cluster
 # Run the commands manually - this takes a long time to run, so only invoke when needed
@@ -836,26 +828,12 @@ paml.shell.script <- paste0("#!/bin/bash\n\n",
                             "cd paml/site-specific\n",
                             "# codeml zfy.site-specific.paml.ctl\n",
                             "qsubme codeml zfy.site-specific.paml.ctl\n\n",
-                            
-                            "cd ../branch-site-rodentia\n",
-                            "qsubme codeml paml.ctl\n",
-                            "cd ../branch-site-rodentia-null\n",
-                            "qsubme codeml paml.ctl\n\n",
-                            
+
                             "cd ../branch-site-eumuroida\n",
                             "qsubme codeml paml.ctl\n",
                             "cd ../branch-site-eumuroida-null\n",
                             "qsubme codeml paml.ctl\n\n",
-                            
-                            "cd ../branch-site-muridae\n",
-                            "qsubme codeml paml.ctl\n",
-                            "cd ../branch-site-muridae-null\n",
-                            "qsubme codeml paml.ctl\n\n",
-                            
-                            "cd ../branch-site-murinae\n",
-                            "qsubme codeml paml.ctl\n",
-                            "cd ../branch-site-murinae-null\n",
-                            "qsubme codeml paml.ctl\n\n"
+
 )
 write_file(paml.shell.script, "run_paml.sh")
 
