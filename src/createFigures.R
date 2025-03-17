@@ -127,10 +127,23 @@ save.plot("figure/Figure_Sxxxx_exons_tree.png", exon.joint.tree, width=270, heig
 #### Plot dN/dS globally in mammals ####
 
 kaks.pairwise.plot <- plot.kaks(FILES$mammal.nt.aln, 
-                                #species.order = mammal.taxa.name.order,
                                 species.order = combined.taxa.name.order[1:which(combined.taxa.name.order=="Platypus ZFX")], # use the aa tree order so ZFX and ZFY are grouped
                                 kaks.limits = c(0, 1.5))
 
+
+# Annotate plot with lines to delineate eumuroida Zfx
+# 
+# eumuroida.zfx.ymin <- which(levels(kaks.pairwise.plot$data$row) =="Black rat Zfx")-0.5
+# eumuroida.zfx.ymax <- which(levels(kaks.pairwise.plot$data$row) =="Mongolian gerbil Zfx")+0.5
+# 
+# eumuroida.zfx.xmin <- which(rev(levels(kaks.pairwise.plot$data$col)) =="Black rat Zfx")+0.5
+# eumuroida.zfx.xmax <- which(rev(levels(kaks.pairwise.plot$data$col)) =="Mongolian gerbil Zfx")-0.5
+# 
+# kaks.pairwise.plot <-kaks.pairwise.plot +
+#   annotate(geom = "segment", x = 0, xend = eumuroida.zfx.xmax, y = eumuroida.zfx.ymin, yend =  eumuroida.zfx.ymin)+
+#   annotate(geom = "segment", x = 0, xend = eumuroida.zfx.xmin, y = eumuroida.zfx.ymax, yend =  eumuroida.zfx.ymax)+
+#   annotate(geom = "segment", x = eumuroida.zfx.xmin, xend = eumuroida.zfx.xmin, y = 0, yend =  eumuroida.zfx.ymax)+
+#   annotate(geom = "segment", x = eumuroida.zfx.xmax, xend = eumuroida.zfx.xmax, y = 0, yend =  eumuroida.zfx.ymin)
 
 save.plot("figure/dnds.png", kaks.pairwise.plot, width = 270, height = 170)
 
@@ -198,7 +211,7 @@ exon.7.kaks.pairwise.plot <- plot.pairwise.kaks(kaks.exon.7)
 exon.kaks.plot <- exon.1.3_6.kaks.pairwise.plot + exon.2.kaks.pairwise.plot + exon.7.kaks.pairwise.plot +
   patchwork::plot_annotation(tag_levels = c("A")) + plot_layout(axes="collect")
 
-save.double.width("figure/exon.1_3-6.2.7.dnds.png", exon.kaks.plot, height=110)
+save.plot("figure/exon.1_3-6.2.7.dnds.png", exon.kaks.plot,  width = 270, height = 170)
 
 # Create supplementary data tables with the pairwise values
 create.xlsx(kaks.exon.1.3_6, "figure/kaks.exon.1.3-6.xlsx")
@@ -764,7 +777,7 @@ save.double.width("figure/Figure_2_aa.structure.confident.png", aa.structure.con
 # Generate a vector of 0 (diferent aa at a site) or 1 (same aa at a site).
 calculate.gametologue.conservation <- function(zfx, zfy, common.name){
   
-  cat(zfx, "\n")
+  # cat(zfx, "\n")
   tryCatch({
     # Find the characters in the reference sequence
     aa.aln <- ggmsa::tidy_msa(ALIGNMENTS$aa.combined.biostrings)  %>%
@@ -828,7 +841,7 @@ gametologue.cumdiff.plot <-  ggplot()+
   geom_line(data = gametologue.conservation[gametologue.conservation$group=="Other Rodentia",], 
             aes(x=site, y=cum.diff, col=group, group = common.name ))+
   labs(y = "Cumulative X-Y differences", x = "Site in alignment")+
-  scale_color_manual(values = c("Eumuroida"="#002AFFFF", "Other Mammalia"="#bbbbbbFF", 
+  scale_color_manual(values = c("Eumuroida"="#002AFFFF", "Other Mammalia"="#ccccccFF", 
                                 "Other Rodentia"="#FF6619FF", "Damara mole-rat & beaver"="darkgreen"))+
   scale_x_continuous(breaks = seq(0, 900, 100))+
   scale_y_continuous(breaks = seq(0, 300, 50))+
@@ -874,13 +887,21 @@ calculate.ancestral.conservation <- function(node.name){
 
 ancestral.conservation <- do.call(rbind, lapply(unique(ancestral.seqs$Node), calculate.ancestral.conservation))
 
+# Reorder the nodes that will be highlighted so legend ordering is sensible
+ancestral.conservation$Node <- as.factor(ancestral.conservation$Node)
+ancestral.conservation$Node <- forcats::fct_relevel(ancestral.conservation$Node, "Theria", "Eutheria", "Muroidea","Eumuroida","Murinae",, after = 0)
+
+highlight.colours <- RColorBrewer::brewer.pal(5, "Dark2")
 
 ancestral.cumdiff.plot <-  ggplot()+
-  geom_line(data = ancestral.conservation, aes(x=Site, y=CumSum, group=Node), col="#bbbbbbFF")+
+  geom_line(data = ancestral.conservation, aes(x=Site, y=CumSum, group=Node), col="#ccccccFF")+
   geom_line(data = ancestral.conservation[ancestral.conservation$Node %in% c("Muroidea","Eumuroida","Theria","Murinae","Eutheria" ),], aes(x=Site, y=CumSum, col=Node))+
   labs(y = "Cumulative X-Y differences", x = "Site in alignment")+
-  scale_color_manual(values = c("Muroidea"="purple","Eumuroida"="#002AFFFF","Theria"="darkgreen", "Murinae"="orange", "Eutheria"="red"))+
-  scale_x_continuous(breaks = seq(0, 3000, 200))+
+  scale_color_manual(values = c("Theria"=highlight.colours[1],"Eutheria"=highlight.colours[2], 
+                                "Muroidea"=highlight.colours[3],"Eumuroida"=highlight.colours[4],
+                                "Murinae"=highlight.colours[5]))+
+  # scale_color_manual(values = c("Muroidea"="purple","Eumuroida"="#002AFFFF","Theria"="darkgreen", "Murinae"="orange", "Eutheria"="red"))+
+  scale_x_continuous(breaks = seq(0, 2600, 200))+
   scale_y_continuous(breaks = seq(0, 900, 50))+
   theme_bw()+
   theme(legend.position = c(0.2, 0.7),
@@ -1039,10 +1060,10 @@ create.relax.k.tree <- function(json.file){
   hyphy.input.tree$edge.length <- branch.lengths
   
   hyphy.input.tree <- reroot.tree(hyphy.input.tree, node.labels=c("Platypus_ZFX", "Australian_echidna_ZFX"),  position=0.015)
-  hyphy.input.tree <- reroot.tree(hyphy.input.tree, node.labels= c("Xenopus_ZFX_L", "Xenopus_ZFX_S"),  position = 0.015) # will fail silently for mammal-only
+  hyphy.input.tree <- reroot.tree(hyphy.input.tree, node.labels= c("Xenopus_ZFX_L", "Xenopus_ZFX_S"),  position = 0.015) # will fail for mammal-only
 
-  cat(json.file,  "K=", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2), 
-      "p=", round(hyphy.data$`test results`$`p-value`, digits = 2), "\n", sep = "\t")
+  cat(json.file,  paste("K =", round(hyphy.data$`test results`$`relaxation or intensification parameter`, digits = 2), 
+      "p =", round(hyphy.data$`test results`$`p-value`, digits = 2), collapse = " "), "\n", sep = "\t")
   
   p <- ggtree(hyphy.input.tree, size=1) + 
     geom_tiplab(size=2)
@@ -1062,7 +1083,7 @@ create.relax.k.tree <- function(json.file){
   p
 }
 
-if(file.exists("aln/hyphy/combined.rodentia.relax.json")){
+if(file.exists("aln/hyphy/mammal.eumuroida.relax.json")){
   
   # node.names <- c("rodentia", "eumuroida", "muridae", "murinae")
   

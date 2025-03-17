@@ -941,7 +941,7 @@ create.combined.hyphy.meme.tree.file <- function(fg.node, node.name){
 }
 
 nodes <- c(rodentia.node, eumuroida.node, muridae.node, murinae.node)
-node.names <- c("rodentia", "eumuroida") #, "muridae", "murinae"
+node.names <- c("eumuroida") #, "muridae", "murinae", "rodentia", 
 
 mapply(create.combined.hyphy.relax.tree.file, nodes, node.names)
 mapply(create.mammal.hyphy.relax.tree.file,   nodes, node.names)
