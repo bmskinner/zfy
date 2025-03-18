@@ -1176,4 +1176,10 @@ extract.mammal.alignment.region <- function(nt.start=NULL, nt.end=NULL, aa.start
   )
 }
 
+# Convert a Biostrings MSA to a character list format that can be exported as FASTA
+biostrings.aln.to.list <- function(aln) as.list(apply(as.matrix(aln), 1, paste, collapse=""))
+
+# Convert a matrix MSA to a character list format that can be exported as FASTA
+matrix.aln.to.list <- function(aln) as.list(apply(aln, 1, paste, collapse=""))
+
 #### ####

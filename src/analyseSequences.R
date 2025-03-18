@@ -382,19 +382,35 @@ zfy.nt.aln <- ALIGNMENTS$nt.mammal.biostrings@unmasked[names(ALIGNMENTS$nt.mamma
                                                                                                               METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
 Biostrings::writeXStringSet(zfy.nt.aln,  file = "aln/zfy_only/zfy.aln", format = "fasta")
 
+
+# Write ZFX sequences to file
+zfx.aa.aln <- ALIGNMENTS$aa.mammal.biostrings@unmasked[names(ALIGNMENTS$aa.mammal.biostrings@unmasked) %in% c(METADATA$mammal$common.name[METADATA$mammal$group=="ZFX"], 
+                                                                                                              METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
+Biostrings::writeXStringSet(zfx.aa.aln,  file = "aln/zfx_only/zfx.aa.aln", format = "fasta")
+
+# Write ZFY sequences to file
+zfy.aa.aln <- ALIGNMENTS$aa.mammal.biostrings@unmasked[names(ALIGNMENTS$aa.mammal.biostrings@unmasked) %in% c(METADATA$mammal$common.name[METADATA$mammal$group=="ZFY"], 
+                                                                                                              METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
+Biostrings::writeXStringSet(zfy.aa.aln,  file = "aln/zfy_only/zfy.aa.aln", format = "fasta")
+
+
 #### Create independent trees for ZFX and ZFY sequences with species trees ####
 
 cat(timestamp(), "Running ancestral sequence reconstruction with species tree\n")
 
 # Run the ancestral reconstructions
-run.iqtree("aln/zfx_only/zfx.aln", 
+run.iqtree("aln/zfx_only/zfx.aa.aln", 
            "-nt AUTO", # number of threads
            "-te aln/zfx_only/zfx.nt.species.nwk", # user tree guide
+           # "-st CODON",
+           "-keep_empty_seq",
            "-asr") # ancestral sequence reconstruction
 
-run.iqtree("aln/zfy_only/zfy.aln", 
+run.iqtree("aln/zfy_only/zfy.aa.aln", 
            "-nt AUTO", # number of threads
            "-te aln/zfy_only/zfy.nt.species.nwk", # user tree guide
+           # "-st CODON",
+           "-keep_empty_seq",
            "-asr") # ancestral sequence reconstruction
 
 #### Remove duplicate species nodes from the trees  ####
@@ -427,18 +443,73 @@ zfy.nt.aln.tree.plot <- plot.tree(zfy.nt.aln.tree) + geom_nodelab(size=2, nudge_
 save.double.width("figure/species.tree.zfx.png", zfx.nt.aln.tree.plot)
 save.double.width("figure/species.tree.zfy.png", zfy.nt.aln.tree.plot)
 
-#### Export ancestral ZFX/Y reconstructions for each node in the species tree ####
+#### Create ancestral sequence reconstructions including indels as per ancseq ####
 
-# # Read the ancestral states for the nodes
-ancestral.zfx.seqs <- read.table("aln/zfx_only/zfx.aln.state", header=TRUE)
-ancestral.zfy.seqs <- read.table("aln/zfy_only/zfy.aln.state", header=TRUE)
+# Find indels from alignment
+convert.indels.to.binary <- function(aln.file){
+
+  aln <- Biostrings::readAAMultipleAlignment(aln.file, format="fasta")
+  # Find the indels, mark as binary character
+  mat <- as.matrix(aln)
+  mat <- apply(mat, 2, \(x) ifelse(x=="-"|x=="X", 1, 0))
+  
+  # Convert back to FASTA
+  bin.aln <- matrix.aln.to.list(mat)
+  
+  out.file <- paste0(aln.file, ".indel.aln")
+  seqinr::write.fasta(bin.aln, names(bin.aln), out.file)
+  out.file
+}
+
+zfy.indels <- convert.indels.to.binary("aln/zfy_only/zfy.aa.aln")
+zfx.indels <- convert.indels.to.binary("aln/zfx_only/zfx.aa.aln")
+
+# Create ancestral indel states
+
+# ZFY
+run.iqtree(zfy.indels, "-asr",
+           "-te aln/zfy_only/zfy.nt.species.nwk",
+           "-st BIN", # binary data
+           "-blfix", # Fix branch lengths of tree passed via -te.
+           "-m JC2", # Jukes-Cantor binary model
+           "-keep_empty_seq"
+           )
+
+# ZFX
+run.iqtree(zfx.indels, "-asr",
+           "-te aln/zfx_only/zfx.nt.species.nwk",
+           "-st BIN", # binary data
+           "-blfix", # Fix branch lengths of tree passed via -te.
+           "-m JC2", # Jukes-Cantor binary model
+           "-keep_empty_seq"
+)
+
+# Read ancestral indel states
+ancestral.zfy.indels <- read.table("aln/zfy_only/zfy.aa.aln.indel.aln.state", header=TRUE)
+ancestral.zfx.indels <- read.table("aln/zfx_only/zfx.aa.aln.indel.aln.state", header=TRUE)
+
+# Read the ancestral states for the nodes
+ancestral.zfy.seqs <- read.table("aln/zfy_only/zfy.aa.aln.state", header=TRUE)
+ancestral.zfx.seqs <- read.table("aln/zfx_only/zfx.aa.aln.state", header=TRUE)
+
+# Remove ancestral sites marked as indels
+
+ancestral.zfy.seqs <- merge(ancestral.zfy.seqs, ancestral.zfy.indels, by = c("Node", "Site"), all.x = TRUE) %>%
+  dplyr::mutate(State.x = ifelse(State.y == 0, State.x, "-"))
+ancestral.zfx.seqs <- merge(ancestral.zfx.seqs, ancestral.zfx.indels, by = c("Node", "Site"), all.x = TRUE) %>%
+  dplyr::mutate(State.x = ifelse(State.y == 0, State.x, "-"))
+
+write.table(ancestral.zfy.seqs, "aln/zfy_only/zfy.indel.filtered.state")
+write.table(ancestral.zfx.seqs, "aln/zfx_only/zfx.indel.filtered.state")
+
+#### Export ancestral ZFX/Y reconstructions for each node in the species tree ####
 
 get.node.sequence <- function(node.name, ancestral.seq.table, type){
   ancestral.seq.table %>%
     dplyr::filter(Node==node.name) %>%
     dplyr::arrange(Site) %>%
-    dplyr::select(State) %>%
-    dplyr::summarise(Seq =  paste0(">", type, "_", node.name, "\n", paste(State, collapse = "")))
+    dplyr::select(State.x) %>%
+    dplyr::summarise(Seq =  paste0(">", type, "_", node.name, "\n", paste(State.x, collapse = "")))
 }
 
 # 

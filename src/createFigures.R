@@ -864,13 +864,13 @@ save.double.width(filename = "figure/gametologue.cumdiff.png", gametologue.cumdi
 
 #### Calculate conservation between X and Y gametologues for ancestral nodes species ####
 # # Read the ancestral states for the nodes
-ancestral.zfx.seqs <- read.table("aln/zfx_only/zfx.aln.state", header=TRUE) %>%
+ancestral.zfx.seqs <- read.table("aln/zfx_only/zfx.indel.filtered.state", header=TRUE) %>%
   dplyr::mutate(Type = "ZFX") %>%
-  dplyr::select(Node, Type, Site, State)
+  dplyr::select(Node, Type, Site, State = State.x)
 
-ancestral.zfy.seqs <- read.table("aln/zfy_only/zfy.aln.state", header=TRUE) %>%
+ancestral.zfy.seqs <- read.table("aln/zfy_only/zfy.indel.filtered.state", header=TRUE) %>%
   dplyr::mutate(Type = "ZFY") %>%
-  dplyr::select(Node, Type, Site, State)
+  dplyr::select(Node, Type, Site, State = State.x)
 
 
 ancestral.seqs <- rbind(ancestral.zfx.seqs, ancestral.zfy.seqs) %>%
@@ -881,7 +881,8 @@ calculate.ancestral.conservation <- function(node.name){
   ancestral.seqs %>% 
     dplyr::filter(Node==node.name) %>%
     tidyr::pivot_wider(id_cols = c(Node, Site), names_from = Type, values_from = State) %>%
-    dplyr::mutate(Conservation = as.numeric(ZFX==ZFY | (ZFX=="-" | ZFY=="-" )),
+    dplyr::arrange(Node, Site) %>%
+    dplyr::mutate(Conservation = as.numeric(ZFX==ZFY),
                   CumSum = cumsum(Conservation==0))
 }
 
@@ -889,7 +890,7 @@ ancestral.conservation <- do.call(rbind, lapply(unique(ancestral.seqs$Node), cal
 
 # Reorder the nodes that will be highlighted so legend ordering is sensible
 ancestral.conservation$Node <- as.factor(ancestral.conservation$Node)
-ancestral.conservation$Node <- forcats::fct_relevel(ancestral.conservation$Node, "Theria", "Eutheria", "Muroidea","Eumuroida","Murinae",, after = 0)
+ancestral.conservation$Node <- forcats::fct_relevel(ancestral.conservation$Node, "Murinae","Eumuroida", "Muroidea","Eutheria","Theria", after = 0)
 
 highlight.colours <- RColorBrewer::brewer.pal(5, "Dark2")
 
@@ -901,10 +902,10 @@ ancestral.cumdiff.plot <-  ggplot()+
                                 "Muroidea"=highlight.colours[3],"Eumuroida"=highlight.colours[4],
                                 "Murinae"=highlight.colours[5]))+
   # scale_color_manual(values = c("Muroidea"="purple","Eumuroida"="#002AFFFF","Theria"="darkgreen", "Murinae"="orange", "Eutheria"="red"))+
-  scale_x_continuous(breaks = seq(0, 2600, 200))+
+  scale_x_continuous(breaks = seq(0, 900, 200))+
   scale_y_continuous(breaks = seq(0, 900, 50))+
   theme_bw()+
-  theme(legend.position = c(0.2, 0.7),
+  theme(legend.position = c(0.15, 0.7),
         legend.title = element_blank(),
         legend.background = element_blank())
 
@@ -914,8 +915,8 @@ ancestral.cumdiff.plot <- ancestral.cumdiff.plot +
   scale_pattern_color_manual(values=c("white", "white"))+
   scale_pattern_manual(values = c("none", "stripe")) + # which exons are patterned
   guides(fill = "none", pattern="none")+
-  add.exon.track(450, 470, col = "black", start_col = "start_nt_mammal", end_col = "end_nt_mammal")+ # color of border
-  add.exon.labels(450, 470, start_col = "start_nt_mammal", end_col = "end_nt_mammal")
+  add.exon.track(250, 270, col = "black", start_col = "start_aa_mammal", end_col = "end_aa_mammal")+ # color of border
+  add.exon.labels(250, 270, start_col = "start_aa_mammal", end_col = "end_aa_mammal")
 
 save.double.width(filename = "figure/ancestral.cumdiff.png", ancestral.cumdiff.plot, height = 100)
 
@@ -1854,18 +1855,27 @@ save.plot("figure/final.intron.msa.zfx.divvy.png", zfx.msa.plot, width=270, heig
 save.plot("figure/final.intron.msa.zf.raw.png", zf.msa.raw.plot, width=270, height = 170)
 save.plot("figure/final.intron.msa.zf.divvy.png", zf.msa.plot, width=270, height = 170)
 
-#### Create skyline plot from ZFX and ZFY data ####
-# But this is not a reliable data set - use published estimates instead
-# Combined tree
-# Note 4e-9 is around the mode for the subs/site/mya plot (runs 1e-9 to 1e-3)
-ape::skylineplot.deluxe(final.intron.nt.aln.tree, subst.rate=4e-9, show.years = T, present.year=0)
+#### Plot Therian and Eutherian ancestral ZFX/ZFY MSAs ####
 
-png(filename = "figure/zfx.zfy.skyline.png")
-ape::skylineplot.deluxe(nt.aln.tree, subst.rate=2e-9, show.years = T, present.year=0)
-dev.off()
+# How similar are the reconstructed sequences?
 
-# What is the substitution rate estimate over time? Need that to convert to time
-# axis
+ancestral.msa <- ancestral.seqs %>% 
+  dplyr::filter(Node %in% c("Theria", "Eutheria")) %>%
+  dplyr::mutate(name = paste0(Node,"_", Type),
+                name = factor(name, levels = c("Theria_ZFY", "Eutheria_ZFY", "Theria_ZFX", "Eutheria_ZFX"))) %>%
+  dplyr::select(name, position = Site, character = State)
+
+ancestral.msa.plot <- ggplot()+
+  geom_msa(data = ancestral.msa, seq_name = T, font=NULL, 
+           border=NA, color="Chemistry_AA", consensus_views = T )+
+  coord_cartesian(expand = FALSE)+
+  scale_x_continuous(breaks = seq(0, max(ancestral.msa$position), 100))+
+  scale_y_discrete( labels = \(x) str_replace_all(x, "_", " ") )+
+  theme_bw()+
+  theme(axis.title = element_blank())
+
+save.plot("figure/ancestral.msa.png", ancestral.msa.plot, width=270, height = 50)
+
 
 #### Tar the figure outputs ####
 system2("tar", "czf figure.tar.gz figure")
