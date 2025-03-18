@@ -523,6 +523,21 @@ add.exon.labels <- function(y.start, y.end, start_col = "start_aa_combined", end
             aes(x =(.data[[start_col]]+.data[[end_col]])/2, y=(y.start+y.end)/2, label=exon), size=1.8, col="black")
 }
 
+# Add strucutral features to a plot.
+# plot - the plot to draw on
+# y.start - the min y position for the track
+# y.end - the max y position for the track
+add.structures <- function(plot, y.start, y.end, alpha = 1, ...){
+  
+  plot +
+    # Draw the structures
+    add.track(RANGES$mammal.nls,    y.start, y.end, fill=NLS.COLOUR, alpha = alpha )+ 
+    add.track(RANGES$mammal.zf,     y.start, y.end, fill=ZF.COLOUR, alpha= alpha)+
+    add.track(RANGES$mammal.9aaTAD, y.start, y.end, fill=TAD.COLOUR,  alpha = alpha)+ 
+    add.track.labels(RANGES$mammal.zf, y.start, y.end, col="white", label_col = "motif_number")+   # Label the ZFs
+    add.track.labels(RANGES$mammal.9aaTAD, y.start, y.end, col="white")  # Label the 9aaTADs
+}
+
 # Annotate Zfy structures to a plot
 # plot - the plot to annotate
 # n.taxa - the number of rows within data; annotation tracks are above this

@@ -337,11 +337,16 @@ LOCATIONS$combined.zf %>%
 
 zf.contact.bases <- LOCATIONS$combined.zf %>%
   dplyr::select(Sequence = sequence, motif_number, contact_bases) %>%
-  dplyr::arrange(desc(motif_number)) %>% # so we display 13 - 1
-  dplyr::mutate(motif_number = paste0("ZF_", motif_number)) %>%
-  tidyr::pivot_wider(id_cols = Sequence, names_from = motif_number, values_from = contact_bases) %>%
+  merge(., METADATA$combined, by.x="Sequence", by.y = "common.name") %>%
+  dplyr::rename_with(., str_to_title) %>%
+  dplyr::arrange(desc(Motif_number)) %>% # so we display 13 - 1
+  dplyr::mutate(Motif_number = paste0("ZF_", sprintf("%02d", Motif_number))) %>%
+  dplyr::select(-c(Species, Species_common_name, Accession, Original.name)) %>%
+  tidyr::pivot_wider(id_cols = c(Sequence, Group), names_from = Motif_number, values_from = Contact_bases) %>%
   as.data.frame %>%
-  dplyr::arrange(as.integer(Sequence))
+  dplyr::mutate(Sequence = factor(Sequence, levels = combined.taxa.name.order)) %>%
+  dplyr::arrange(Group, as.integer(Sequence)) %>%
+  dplyr::mutate(Sequence = str_replace_all(Sequence, "_", " "))
 
 # What are the most common ZF contact motifs?
 zf.contact.bases.conserved <- LOCATIONS$combined.zf %>%
@@ -379,10 +384,10 @@ create.contact.base.xlsx <- function(contact.bases){
   for(i in 2:length(xlsx::getRows(sh))){
     cells <- getCells(rows[i]) 
     cell.names <- names(cells)
-    for(col in 2:14){
+    for(col in 3:15){
       cell.name <- cell.names[col]
       cell.ref <- cells[[cell.name]]
-      zf.motif <- paste0("ZF_",(15-col)) # zfs are in descending order
+      zf.motif <- paste0("ZF_",(16-col)) # zfs are in descending order
       cell.val <-  contact.bases[i-1, col]
       
       
@@ -627,10 +632,15 @@ pwm.predictions <- do.call(rbind, lapply(pwm.files, read.pwm)) %>%
                 species = str_replace_all(species, ">", "")) %>%
   dplyr::rename(sequence = species) %>%
   tidyr::pivot_wider(id_cols = sequence, names_from = zf, values_from = consensus) %>%
-  dplyr::group_by(zf_target_1, zf_target_2) %>%
+  tidyr::replace_na(list(zf_target_1="", zf_target_2="")) %>%
+  dplyr::mutate(zf_target = paste0(zf_target_1, zf_target_2)) %>%
+  dplyr::group_by(zf_target) %>%
   dplyr::summarise(total = n(), sequences = paste(sequence, collapse = ", ")) %>%
-  dplyr::mutate(sequences = ifelse(total>40, "All others", sequences))
-write_tsv(pwm.predictions, "figure/zf_targets.tsv")
+  dplyr::mutate(sequences = ifelse(total>40, "All others", sequences)) %>%
+  as.data.frame
+
+
+create.xlsx(pwm.predictions, "figure/zf_binding_targets.xlsx", cols.to.fixed.size.font = 1)
 
 #### Ancestral sequence reconstruction #####
 
@@ -836,19 +846,20 @@ gametologue.conservation <- do.call(rbind, mapply(calculate.gametologue.conserva
 
 
 # Create a cumulative difference plot
-gametologue.cumdiff.plot <-  ggplot()+
+gametologue.cumdiff.plot <-  ggplot()
+gametologue.cumdiff.plot <- add.structures(gametologue.cumdiff.plot, y.start= 0, y.end = 270, alpha=0.5)
+gametologue.cumdiff.plot <- gametologue.cumdiff.plot+
   geom_line(data = gametologue.conservation, aes(x=site, y=cum.diff, col=group, group = common.name ))+
   geom_line(data = gametologue.conservation[gametologue.conservation$group=="Other Rodentia",], 
             aes(x=site, y=cum.diff, col=group, group = common.name ))+
   labs(y = "Cumulative X-Y differences", x = "Site in alignment")+
-  scale_color_manual(values = c("Eumuroida"="#002AFFFF", "Other Mammalia"="#ccccccFF", 
+  scale_color_manual(values = c("Eumuroida"="#002AFFFF", "Other Mammalia"="#bbbbbbFF", 
                                 "Other Rodentia"="#FF6619FF", "Damara mole-rat & beaver"="darkgreen"))+
   scale_x_continuous(breaks = seq(0, 900, 100))+
   scale_y_continuous(breaks = seq(0, 300, 50))+
   theme_bw()+
   theme(legend.position = c(0.2, 0.7),
-        legend.title = element_blank(),
-        legend.background = element_blank())
+        legend.title = element_blank())
 
 gametologue.cumdiff.plot <- gametologue.cumdiff.plot +
 new_scale_fill()+
@@ -860,6 +871,7 @@ new_scale_fill()+
   add.exon.labels(270, 285)
 
 
+  
 save.double.width(filename = "figure/gametologue.cumdiff.png", gametologue.cumdiff.plot, height = 100)
 
 #### Calculate conservation between X and Y gametologues for ancestral nodes species ####
@@ -894,20 +906,22 @@ ancestral.conservation$Node <- forcats::fct_relevel(ancestral.conservation$Node,
 
 highlight.colours <- RColorBrewer::brewer.pal(5, "Dark2")
 
-ancestral.cumdiff.plot <-  ggplot()+
-  geom_line(data = ancestral.conservation, aes(x=Site, y=CumSum, group=Node), col="#ccccccFF")+
+ancestral.cumdiff.plot <-  ggplot()
+ancestral.cumdiff.plot <- add.structures(ancestral.cumdiff.plot, y.start= 0, y.end = 250, alpha=0.5, 
+                                         start_col="start_aa_mammal", end_col = "end_aa_mammal")
+ancestral.cumdiff.plot <-  ancestral.cumdiff.plot+
+  geom_line(data = ancestral.conservation, aes(x=Site, y=CumSum, group=Node), col="#bbbbbbFF")+
   geom_line(data = ancestral.conservation[ancestral.conservation$Node %in% c("Muroidea","Eumuroida","Theria","Murinae","Eutheria" ),], aes(x=Site, y=CumSum, col=Node))+
   labs(y = "Cumulative X-Y differences", x = "Site in alignment")+
   scale_color_manual(values = c("Theria"=highlight.colours[1],"Eutheria"=highlight.colours[2], 
                                 "Muroidea"=highlight.colours[3],"Eumuroida"=highlight.colours[4],
                                 "Murinae"=highlight.colours[5]))+
   # scale_color_manual(values = c("Muroidea"="purple","Eumuroida"="#002AFFFF","Theria"="darkgreen", "Murinae"="orange", "Eutheria"="red"))+
-  scale_x_continuous(breaks = seq(0, 900, 200))+
+  scale_x_continuous(breaks = seq(0, 900, 100))+
   scale_y_continuous(breaks = seq(0, 900, 50))+
   theme_bw()+
-  theme(legend.position = c(0.15, 0.7),
-        legend.title = element_blank(),
-        legend.background = element_blank())
+  theme(legend.position = c(0.15, 0.68),
+        legend.title = element_blank())
 
 ancestral.cumdiff.plot <- ancestral.cumdiff.plot +
   new_scale_fill()+
@@ -967,10 +981,12 @@ charge.plot <- ggplot()+
 charge.plot <- annotate.structure.plot(charge.plot, n.taxa)
 save.double.width("figure/charge.convervation.tree.png", charge.plot, height = 120)
 
-#### Combine all structure plots ####
+#### Combine charge and hydorphobicity structure plots ####
 cat("Plotting combined hydrophobicity and charge\n")
 # To test spacing and balance
-structure.plot <- (charge.plot / hydrophobicity.plot)+ plot_layout(ncol = 1)
+structure.plot <- (charge.plot / hydrophobicity.plot) +
+  plot_layout(ncol = 1)+ 
+  plot_annotation(tag_levels = list(c("A", "", "B", "")))
 save.double.width("figure/Figure_xxxx_combined_structure.plot.png", structure.plot, height = 230)
 
 
@@ -1212,7 +1228,7 @@ create.meme.overview.plot <- function(meme.overview, outgroup.type){
     
     geom_tile(data = meme.overview, aes(x=site, y = 2.5, height = 1, width=1), fill = "brown")+
     # annotate("text", x= 800, y=3.1, label = "rodentia", hjust=0, size = 2)+
-    annotate("text", x= 800, y=3.2, label = "eumuroida p-value", hjust=0, size = 2)+
+    annotate("text", x= 790, y=3.2, label = "Eumuroida p-value", hjust=0, size = 2)+
     # annotate("text", x= 800, y=3.3, label = "muridae", hjust=0, size = 2)+
     # annotate("text", x= 800, y=3.4, label = "murinae", hjust=0, size = 2)+
     
@@ -1854,6 +1870,22 @@ save.plot("figure/final.intron.msa.zfx.raw.png", zfx.msa.raw.plot, width=270, he
 save.plot("figure/final.intron.msa.zfx.divvy.png", zfx.msa.plot, width=270, height = 170)
 save.plot("figure/final.intron.msa.zf.raw.png", zf.msa.raw.plot, width=270, height = 170)
 save.plot("figure/final.intron.msa.zf.divvy.png", zf.msa.plot, width=270, height = 170)
+
+
+#### Plot full protein MSA ####
+full.aa.msa <- tidy_msa(Biostrings::readAAMultipleAlignment("aln/combined/combined.aa.aln", format="fasta")) %>%
+  dplyr::mutate(name = factor(name, levels = rev(combined.taxa.name.order) ))
+full.aa.msa.plot <- ggplot()+
+  geom_msa(data = full.aa.msa, seq_name = T, font=NULL, 
+           border=NA, color="Chemistry_AA", consensus_views = F )+
+  coord_cartesian(expand = FALSE)+
+  scale_x_continuous(breaks = seq(0, max(full.aa.msa$position), 100))+
+  scale_y_discrete( labels = \(x) str_replace_all(x, "_", " ") )+
+  theme_bw()+
+  theme(axis.title = element_blank(),
+        axis.text.y = element_text(size = 6))
+
+save.plot("figure/full.msa.png", full.aa.msa.plot, width=270, height = 170)
 
 #### Plot Therian and Eutherian ancestral ZFX/ZFY MSAs ####
 
