@@ -1,20 +1,13 @@
 # Analysis pipeline for ZFX/ZFY evolutionary analysis
 
-# The following binaries must be supplied in ./bin:
-# macse_v2.07.jar
-# muscle5.1.win64.exe / muscle5.1.linux_intelx64
-# nlstradamus.pl
-# pwm_predict/pwm_predict
-
-if(!file.exists("./bin/macse_v2.07.jar")) stop("MACSE not found in ./bin/\nwget https://www.agap-ge2pop.org/wp-content/uploads/macse/releases/macse_v2.07.jar")
-if(!file.exists("./bin/nlstradamus.pl")) stop("NLStradamus not found in ./bin/\nwget http://www.moseslab.csb.utoronto.ca/NLStradamus/NLStradamus/NLStradamus.1.8.tar.gz")
-if(!file.exists("./bin/pwm_predict/pwm_predict")) stop("pwm_predict not found in ./bin/\nwget https://zf.princeton.edu/downloads/pwm_predict.1.0.tar.gz")
-if(!file.exists("./bin/muscle5.1.linux_intel64")) stop("Muscle not found in ./bin/\nwget https://github.com/rcedgar/muscle/releases/download/v5.1/muscle5.1.linux_intel64")
-
-# Other binaries are expected on the PATH:
+# Binaries are expected on the PATH:
 # PAML
 # IQ-TREE
 # hmmsearch (HMMR v3.3)
+# MACSE        https://www.agap-ge2pop.org/wp-content/uploads/macse/releases/macse_v2.07.jar
+# NLStradamus  http://www.moseslab.csb.utoronto.ca/NLStradamus/NLStradamus/NLStradamus.1.8.tar.gz
+# pwm_predict  https://zf.princeton.edu/downloads/pwm_predict.1.0.tar.gz
+# muscle5.1    https://github.com/rcedgar/muscle/releases/download/v5.1/muscle5.1.linux_intel64
 
 # HyPhy is a python package installed into a conda environment:
 # conda create -n hyphy # create conda environment

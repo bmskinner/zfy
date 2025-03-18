@@ -53,9 +53,9 @@ TAD.COLOUR      <- "#00366C" # fill color max from "grDevices::Blues 3"
 NLS.COLOUR      <- "#3CB22D"  #60CC52 #2CA02C
 ZF.COLOUR       <- "grey"
 
-MUSCLE.PATH   <- ifelse(installr::is.windows(), "bin/muscle5.1.win64.exe", "bin/muscle5.1.linux_intel64")
-MACSE.PATH    <- "bin/macse_v2.07.jar"
-CLUSTALO.PATH <- ifelse(installr::is.windows(), "bin/clustal-omega-1.2.2-win64/clustalo.exe", "clustalo") 
+
+
+# CLUSTALO.PATH <- ifelse(installr::is.windows(), "bin/clustal-omega-1.2.2-win64/clustalo.exe", "clustalo") 
 
 # Common file paths
 FILES <- list(
@@ -97,6 +97,7 @@ FILES <- list(
 
 # Run muscle on the given input FASTA and output to the given alignment file base name
 run.macse <- function(fa.file, aln.file, ...){
+  MACSE.PATH    <- "macse"
   if(!file.exists(MACSE.PATH)) stop("MACSE not present in bin directory")
   
   aa.out <- paste0(aln.file, ".aa.aln")
@@ -127,7 +128,7 @@ run.clustalo.dual.profile <- function(aln.file.1, aln.file.2, out.file){
 
 # Run muscle on the given input FASTA and output to the given alignment file
 run.muscle <- function(fa.file, aln.file){
-  if(!file.exists(MUSCLE.PATH)) stop("Muscle not present in bin directory")
+  MUSCLE.PATH   <- ifelse(installr::is.windows(), "muscle5.1.win64.exe", "muscle5.1.linux_intel64")
   cat(aln.file, "\n")
   system2(MUSCLE.PATH, paste("-align",  fa.file,
                              "-output", aln.file))
@@ -188,10 +189,9 @@ run.divvier <- function(aln.file, ...){
 
 # Run pwm_predict on the combined aa fasta file
 run.pwm.predict <- function(){
-  old.wd <- getwd()
-  setwd("./bin/pwm_predict")
-  system2("./pwm_predict", "-l 20 ../../fasta/combined.aa.fas") # ensure all ZFs linked
-  setwd(old.wd)
+  # Path must be absolute for pwm_predict
+  system2("pwm_predict", "-l 20 '`realpath fasta/combined.aa.fas`' ")
+
   filesstrings::move_files(files = c("fasta/combined.aa.pwm"),
                            destinations = c("aln/pwm"),
                            overwrite = TRUE)
