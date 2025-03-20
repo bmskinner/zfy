@@ -189,7 +189,7 @@ run.divvier <- function(aln.file, ...){
 # Run pwm_predict on the combined aa fasta file
 run.pwm.predict <- function(){
   # Path must be absolute for pwm_predict
-  system2("pwm_predict", "-l 20 '`realpath fasta/combined.aa.fas`' ")
+  system2("pwm_predict", "-l 20 `realpath fasta/combined.aa.fas`")
 
   filesstrings::move_files(files = c("fasta/combined.aa.pwm"),
                            destinations = c("aln/pwm"),
