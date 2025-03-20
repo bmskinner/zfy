@@ -135,7 +135,7 @@ run.muscle <- function(fa.file, aln.file){
 
 # Run IQTREE on the given alignment file (should end .aln)
 run.iqtree <- function(aln.file, ...){
-  system2("iqtree", paste("-s ", aln.file, 
+  system2("iqtree2", paste("-s ", aln.file, 
                           "-nt 6",  # number of threads
                           ...), # any other arguments to iqtree
           stdout = gsub(".aln$", ".iqtree.log", aln.file), 

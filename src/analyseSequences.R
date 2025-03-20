@@ -144,7 +144,7 @@ FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln,
 FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln,
                                            "-bb 1000", # number of bootstrap replicates
                                            "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT)
-                                           "-st CODON",
+                                           "-st CODON", 
                                            "-asr" # Ancestral sequence resconstruction
 )
 
