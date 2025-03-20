@@ -95,16 +95,14 @@ FILES <- list(
 
 #### Invokations of external binaries #####
 
-# Run muscle on the given input FASTA and output to the given alignment file base name
+# Run MACSE on the given input FASTA and output to the given alignment file base name.
+# NT and AA alignments will be generated.
+# ... other arguments to macse
 run.macse <- function(fa.file, aln.file, ...){
-  MACSE.PATH    <- "macse"
-  if(!file.exists(MACSE.PATH)) stop("MACSE not present in bin directory")
-  
   aa.out <- paste0(aln.file, ".aa.aln")
   nt.out <- paste0(aln.file, ".nt.aln")
   # Run a codon aware alignment with MACSE
-  system2("java", paste("-jar ", MACSE.PATH, 
-                        " -prog alignSequences",
+  system2("macse", paste(" -prog alignSequences",
                         "-seq",    fa.file, # input
                         "-out_NT", nt.out,  # output nt alignment
                         "-out_AA", aa.out,  # output aa alignment

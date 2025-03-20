@@ -220,6 +220,56 @@ readr::write_tsv(locations.9aaTAD, "aln/locations.9aaTAD.mammal.tsv")
 locations.NLS <- locate.NLS.in.alignment(FILES$mammal.aa.aln, FILES$mammal.nt.aln, mammal.taxa.name.order)
 readr::write_tsv(locations.NLS, "aln/locations.NLS.mammal.tsv")
 
+#### Fetch TimeTree divergence times to highlight the rapid evolution in the rodents ####
+
+get.time.tree <- function(tax.a, tax.b){
+  tryCatch({
+    tt <- httr::GET(paste0("http://timetree.temple.edu/api/pairwise/",tax.a, "/", tax.b))
+    Sys.sleep(0.5) # rate limit
+    if(as.numeric(tt$headers$`content-length`)>1000){
+      message(paste("Cannot get data for taxa", tax.a, "and", tax.b))
+      return(data.frame("taxon_a_id" = tax.a,"taxon_b_id" = tax.b,"scientific_name_a" = NA,
+                        "scientific_name_b" = NA,"all_total" = NA,"precomputed_age" = NA,
+                        "precomputed_ci_low" = NA,"precomputed_ci_high" = NA,"adjusted_age" = NA))
+    }
+    
+    ct <- content(tt)
+    # Parse the response
+    data <- as.data.frame( str_split(ct, "\r\n"), col.names = c("V1")) %>% 
+      dplyr::slice_tail(n=1) %>%
+      tidyr::separate_wider_delim( cols = V1, delim = ",", 
+                                   names = c("taxon_a_id","taxon_b_id","scientific_name_a",
+                                             "scientific_name_b","all_total","precomputed_age",
+                                             "precomputed_ci_low","precomputed_ci_high","adjusted_age"))
+    return(data)
+  }, error = function(e) { 
+    message(paste("Cannot get data for taxa", tax.a, "and", tax.b))
+    message("Original error message:")
+    message(conditionMessage(e))
+    
+    return(data.frame("taxon_a_id" = tax.a,"taxon_b_id" = tax.b,"scientific_name_a" = NA,
+                      "scientific_name_b" = NA,"all_total" = NA,"precomputed_age" = NA,
+                      "precomputed_ci_low" = NA,"precomputed_ci_high" = NA,"adjusted_age" = NA))
+  }  ) 
+}
+
+# Save to avoid repeated API calls
+if(!file.exists( "time.tree.data.tsv")){
+  
+  # Get the NCBI taxon ids for each species and add to metadata
+  taxon.data <- lapply( METADATA$mammal$species, \(x) httr::GET( paste0("http://timetree.temple.edu/api/taxon/",curl::curl_escape(x)))  ) 
+  taxon.ids <- sapply(lapply(taxon.data, httr::content), \(x) x$taxon_id)
+  METADATA$mammal$taxon_id <- taxon.ids
+  
+  # Find the pairwise distances between each species
+  pairwise.species <- expand.grid(unique(METADATA$mammal$taxon_id), unique(METADATA$mammal$taxon_id)) %>%
+    dplyr::filter(Var1!=Var2, Var1<Var2) %>% # only call each pair once
+    dplyr::arrange(Var1, Var2)
+  
+  pairwise.times <- do.call(rbind, mapply(get.time.tree, pairwise.species$Var1, pairwise.species$Var2, SIMPLIFY = FALSE))
+  write_tsv(pairwise.times, file = "time.tree.data.tsv", col_names = T, quote = "none")
+}
+
 #### Create species trees for ZFX and ZFY using TimeTree Newick tree ####
 
 # Create a species list for use in bulk TimeTree website. Note that this may not 
@@ -320,57 +370,8 @@ zfy.phylogeny$tip.label <- unlist( lapply(unique(zfy.phylogeny$tip.label),
 zfy.phylogeny$tip.label <- gsub(" ", "_", zfy.phylogeny$tip.label)
 ape::write.tree(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
 
-#### Fetch TimeTree divergence times to highlight the rapid evolution in the rodents ####
 
-get.time.tree <- function(tax.a, tax.b){
-  tryCatch({
-    tt <- httr::GET(paste0("http://timetree.temple.edu/api/pairwise/",tax.a, "/", tax.b))
-    Sys.sleep(0.5) # rate limit
-    if(as.numeric(tt$headers$`content-length`)>1000){
-      message(paste("Cannot get data for taxa", tax.a, "and", tax.b))
-      return(data.frame("taxon_a_id" = tax.a,"taxon_b_id" = tax.b,"scientific_name_a" = NA,
-                        "scientific_name_b" = NA,"all_total" = NA,"precomputed_age" = NA,
-                        "precomputed_ci_low" = NA,"precomputed_ci_high" = NA,"adjusted_age" = NA))
-    }
-    
-    ct <- content(tt)
-    # Parse the response
-    data <- as.data.frame( str_split(ct, "\r\n"), col.names = c("V1")) %>% 
-      dplyr::slice_tail(n=1) %>%
-      tidyr::separate_wider_delim( cols = V1, delim = ",", 
-                                   names = c("taxon_a_id","taxon_b_id","scientific_name_a",
-                                             "scientific_name_b","all_total","precomputed_age",
-                                             "precomputed_ci_low","precomputed_ci_high","adjusted_age"))
-    return(data)
-  }, error = function(e) { 
-    message(paste("Cannot get data for taxa", tax.a, "and", tax.b))
-    message("Original error message:")
-    message(conditionMessage(e))
-    
-    return(data.frame("taxon_a_id" = tax.a,"taxon_b_id" = tax.b,"scientific_name_a" = NA,
-                      "scientific_name_b" = NA,"all_total" = NA,"precomputed_age" = NA,
-                      "precomputed_ci_low" = NA,"precomputed_ci_high" = NA,"adjusted_age" = NA))
-  }  ) 
-}
-
-# Save to avoid repeated API calls
-if(!file.exists( "time.tree.data.tsv")){
-  
-  # Get the NCBI taxon ids for each species and add to metadata
-  taxon.data <- lapply( METADATA$mammal$species, \(x) httr::GET( paste0("http://timetree.temple.edu/api/taxon/",curl::curl_escape(x)))  ) 
-  taxon.ids <- sapply(lapply(taxon.data, httr::content), \(x) x$taxon_id)
-  METADATA$mammal$taxon_id <- taxon.ids
-  
-  # Find the pairwise distances between each species
-  pairwise.species <- expand.grid(unique(METADATA$mammal$taxon_id), unique(METADATA$mammal$taxon_id)) %>%
-    dplyr::filter(Var1!=Var2, Var1<Var2) %>% # only call each pair once
-    dplyr::arrange(Var1, Var2)
-  
-  pairwise.times <- do.call(rbind, mapply(get.time.tree, pairwise.species$Var1, pairwise.species$Var2, SIMPLIFY = FALSE))
-  write_tsv(pairwise.times, file = "time.tree.data.tsv", col_names = T, quote = "none")
-}
-
-#### Export ZFX and ZFY separately ####
+#### Export ZFX and ZFY alignments separately ####
 
 # Write ZFX sequences to file
 zfx.nt.aln <- ALIGNMENTS$nt.mammal.biostrings@unmasked[names(ALIGNMENTS$nt.mammal.biostrings@unmasked) %in% c(METADATA$mammal$common.name[METADATA$mammal$group=="ZFX"], 
@@ -394,7 +395,7 @@ zfy.aa.aln <- ALIGNMENTS$aa.mammal.biostrings@unmasked[names(ALIGNMENTS$aa.mamma
 Biostrings::writeXStringSet(zfy.aa.aln,  file = "aln/zfy_only/zfy.aa.aln", format = "fasta")
 
 
-#### Create independent trees for ZFX and ZFY sequences with species trees ####
+#### Create separate trees for ZFX and ZFY sequences using species trees ####
 
 cat(timestamp(), "Running ancestral sequence reconstruction with species tree\n")
 
@@ -604,6 +605,54 @@ ape::write.FASTA(zfx.read, file = FILES$final.intron.zfx.nt.fas)
 zf.all <- c(zfx.read, zfy.read)
 ape::write.FASTA(zf.all, file = FILES$final.intron.nt.fas)
 
+#### Write final intron metadata to supplement ####
+
+list.files(path = c("fasta/final.intron.zfx","fasta/final.intron.zfy" ), 
+           pattern = "*.fa$", include.dirs = T, full.names = T) %>%
+  lapply(., read.fasta) %>%
+  read.metadata(.) %>%
+  dplyr::mutate(Species_common_name = str_replace(common.name, "_Z[F|f][X|x].*", ""),
+                Species_common_name = str_replace(Species_common_name, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", "")) %>%
+  dplyr::rename(Accession = accession, Species = species, Group = group,
+                Name_in_figures = common.name, Description = original.name  ) %>%
+  dplyr::distinct() %>%
+  dplyr::select(Accession, Species, Group, Name_in_figures, Description ) %>%
+  dplyr::arrange(Group, Species) %>%
+  create.xlsx(., "figure/accessions.final.intron.supplement.xlsx")
+
+#### Remove final intron repeats via RepeatMasker ####
+
+cat("Running RepeatMasker\n")
+# Repeats and low complexity regions make the alignments harder. Remove as much
+# as possible before we align
+system2("RepeatMasker", paste("-s -species mammals", 
+                              "-dir aln/final.intron.zfy/zfy.masked", 
+                              "-libdir /usr/local/RepeatMasker/Libraries/ ", 
+                              FILES$final.intron.zfy.nt.fas))
+# Remove masked repeats and blank lines
+system2("sed", paste("'s/NN\\+//g' aln/final.intron.zfy/zfy.masked/final.intron.zfy.nt.fas.masked | sed -e '/^$/d' > aln/final.intron.zfy/final.intron.zfy.nt.trim.fas"))
+
+system2("RepeatMasker", paste("-s -species mammals", 
+                              "-dir aln/final.intron.zfx/zfx.masked", 
+                              "-libdir /usr/local/RepeatMasker/Libraries/ ", 
+                              FILES$final.intron.zfx.nt.fas))
+system2("sed", paste("'s/NN\\+//g' aln/final.intron.zfx/zfx.masked/final.intron.zfx.nt.fas.masked | sed -e '/^$/d' > aln/final.intron.zfx/final.intron.zfx.nt.trim.fas"))
+
+
+# Create a single combined ZFX/Y file for overall alignment
+zf.all <- c(zfx.read, zfy.read)
+ape::write.FASTA(zf.all, file = FILES$final.intron.nt.fas)
+
+zfy.trim <- ape::read.FASTA("aln/final.intron.zfy/final.intron.zfy.nt.trim.fas")
+zfx.trim <- ape::read.FASTA("aln/final.intron.zfx/final.intron.zfx.nt.trim.fas")
+zfx.trim$Platypus_ZFX <- NULL # remove duplicate outgroups before combining
+zfx.trim$Koala_ZFX <- NULL
+zfx.trim$Opossum_ZFX <- NULL
+zfx.trim$Australian_echidna_ZFX <- NULL
+
+zf.trim  <- c(zfx.trim, zfy.trim)
+ape::write.FASTA(zf.trim, file = "aln/final.intron/final.intron.nt.trim.fas")
+
 #### Align final intron sequences #####
 
 # Use MUSCLE to align  - non coding
@@ -614,125 +663,66 @@ run.muscle(FILES$final.intron.nt.fas,     FILES$final.intron.nt.aln)
 
 #### Run divvier to improve high-confidence homologies in final intron alignments ####
 
-final.intron.zfy.nt.divvy.aln <- run.divvier(FILES$final.intron.zfy.nt.aln)
-final.intron.zfx.nt.divvy.aln <- run.divvier(FILES$final.intron.zfx.nt.aln)
-
-#### Make species phylogenies for Zfx and Zfy final intron  #####
-cat(timestamp(), "Creating final intron species trees\n")
-
-# We want to specify actual species tree for each of Zfx and Zfy
-# Note that not all species have intron info available - make a new species tree
-zfx.phylogeny <- paste0("", # Outgroups
-                        "(", # Eutheria
-                        "(Southern_two-toed_sloth_ZFX, African_bush_elephant_ZFX)Atlantogenata, ", # Atlantogenata  
-                        "(", # Boreoeutheria
-                        "(",  # Euarchonoglires
-                        "( ", # Simiiformes
-                        "Common_marmoset_ZFX,", # New world monkeys
-                        "(", # Catarrhini (Old world monkeys & apes)
-                        "(", #Cercopithecidae (Old world monkeys)
-                        "Golden_snub-nosed_monkey_ZFX,",   #Colobinae
-                        "(Olive_baboon_ZFX, Macaque_ZFX)Cercopithecinae", # Cercopithecinae
-                        ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
-                        "(", # Hominidae
-                        "Gorilla_ZFX, (Chimpanzee_ZFX, Human_ZFX)Hominini",
-                        ")Hominidae",  # /Hominidae
-                        ")Catarrhini", # /Catarrhini
-                        ")Simiiformes,",  # /Simiiformes
-                        "(", # Rodentia
-                        "(Gray_squirrel_Zfx,(Arctic_ground_squirrel_Zfx, Alpine_marmot_ZFX)Xerinae)Sciuridae,", # Sciuridae 
-                        "(Damara_mole-rat_Zfx,", # Muroidea-Fukomys
-                        "(Beaver_Zfx, (", # Muroidea
-                        "(North_American_deer_mouse_Zfx, Desert_hamster_Zfx)Cricetidae,", # Cricetidae 
-                        "(Mongolian_gerbil_Zfx, (Rat_Zfx, (Mouse_Zfx, African_Grass_Rat_Zfx)Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-                        ")Eumuroida)Muroidea",  # /Muroidea
-                        ")Muroidea-Fukomys", # /Muroidea-Fukomys
-                        ")Rodentia", # /Rodentia
-                        ")Euarchonoglires,", # /Euarchonoglires
-                        "(", # Laurasiatheria
-                        "(",  # Carnivora
-                        "Cat_ZFX, (Dog_ZFX, (Stoat_ZFX, Polar_bear_ZFX)Arctoidea)Caniformia",
-                        ")Carnivora,",  # /Carnivora
-                        "(",  # Euungulata 
-                        "Horse_ZFX, (Pig_ZFX, (White_tailed_deer_ZFX, (Cattle_ZFX, Goat_ZFX)Bovidae)Pecora)Artiodactyla",
-                        ")Euungulata", # /Euungulata 
-                        ")Laurasiatheria", # /Laurasiatheria
-                        ")Boreoeutheria", # /Boreoeutheria
-                        ")Eutheria;" # /Eutheria
-) # /Outgroups
-
-write_file(zfx.phylogeny, "aln/final.intron.zfx/zfx.nt.species.nwk")
-
-zfy.phylogeny <- paste0("", # Outgroups
-                        "(", # Eutheria
-                        "(Southern_two-toed_sloth_ZFY, African_bush_elephant_ZFY)Atlantogenata, ", # Afrotheria & Xenarthra
-                        "(", # Boreoeutheria
-                        "(",  # Euarchonoglires
-                        "( ", # Simiiformes
-                        "Common_marmoset_ZFY,", # New world monkeys
-                        "(", # Catarrhini (Old world monkeys & apes)
-                        "(", #Cercopithecidae (Old world monkeys)
-                        "Golden_snub-nosed_monkey_ZFY,",   #Colobinae
-                        "(Olive_baboon_ZFY, Macaque_ZFY)Cercopithecinae", # Cercopithecinae
-                        ")Cercopithecidae,", # /Cercopithecidae (Old world monkeys)
-                        "(", # Hominidae
-                        "Gorilla_ZFY, (Chimpanzee_ZFY, Human_ZFY)Hominini",
-                        ")Hominidae",  # /Hominidae
-                        ")Catarrhini", # /Catarrhini
-                        ")Simiiformes,",  # /Simiiformes
-                        "(", # Rodentia
-                        "(Gray_squirrel_Zfy,(Arctic_ground_squirrel_Zfx-like_putative-Zfy, Alpine_marmot_ZFY)Xerinae)Sciuridae,", # Sciuridae 
-                        "(Damara_mole-rat_Zfy,", 
-                        "(Beaver_Zfx-like_putative-Zfy, (", # Muroidea
-                        "(North_American_deer_mouse_Zfx-like_putative-Zfy, Desert_hamster_Zfx-like_putative-Zfy)Cricetidae,", # Cricetidae 
-                        "(Mongolian_gerbil_Zfx-like_putative-Zfy, (Rat_Zfy2, ((Mouse_Zfy1, Mouse_Zfy2), (African_Grass_Rat_ZFY2-like_1, African_Grass_Rat_ZFY2-like_2))Mus-Arvicanthis)Murinae)Muridae", # Muridae 
-                        ")Eumuroida)Muroidea)Muroidea-Fukomys", # /Muroidea
-                        ")Rodentia", # /Rodentia
-                        ")Euarchonoglires,", # /Euarchonoglires
-                        "(", # Laurasiatheria
-                        "(",  # Carnivora
-                        "Dog_ZFY, (Stoat_ZFY, Polar_bear_ZFY)Arctoidea",
-                        ")Carnivora,",  # /Carnivora
-                        "(",  # Euungulata 
-                        "Horse_ZFY, (Pig_ZFY, (White_tailed_deer_ZFY, (Cattle_ZFY, Goat_ZFY)Bovidae)Pecora)Artiodactyla",
-                        ")Euungulata", # /Euungulata 
-                        ")Laurasiatheria", # /Laurasiatheria
-                        ")Boreoeutheria", # /Boreoeutheria
-                        ")Eutheria;" # /Eutheria
-) # /Outgroups
-
-write_file(zfy.phylogeny, "aln/final.intron.zfy/zfy.nt.species.nwk")
+# Note that divvier is not run on the filtered sequences above - we want to
+# compare the two methods
+final.intron.zfy.nt.divvy.aln <- run.divvier(FILES$final.intron.zfy.nt.aln, "-mincol 2")
+final.intron.zfx.nt.divvy.aln <- run.divvier(FILES$final.intron.zfx.nt.aln, "-mincol 2")
+final.intron.nt.divvy.aln <- run.divvier(FILES$final.intron.nt.aln, "-mincol 2")
 
 #### Make ML tree based on final intron raw alignments #####
 
-cat(timestamp(), "Creating final intron ML trees using species phylogenies\n")
-# Make the tree using the species phylogeny
-final.intron.zfy.nt.aln.treefile <- run.iqtree(FILES$final.intron.zfy.nt.aln, 
+cat(timestamp(), "Creating final intron ML trees using raw alignments\n")
+
+# Make ZFY tree without species phylogeny
+final.intron.zfy.nt.aln.treefile <- run.iqtree("aln/final.intron.zfy/final.intron.zfy.nt.filt.aln", 
                                                "-nt AUTO", # number of threads
-                                               "-keep-ident",
-                                               "-te aln/final.intron.zfy/zfy.nt.species.nwk" # user tree guide
+                                               "-bb 1000",
+                                               "-alrt 1000",
+                                               "-keep-ident"
 ) 
 
-final.intron.zfx.nt.aln.treefile <- run.iqtree(FILES$final.intron.zfx.nt.aln, 
+# Make ZFX tree without species phylogeny
+final.intron.zfx.nt.aln.treefile <- run.iqtree("aln/final.intron.zfx/final.intron.zfx.nt.filt.aln", 
                                                "-nt AUTO", # number of threads
-                                               "-keep-ident",
-                                               "-te aln/final.intron.zfx/zfx.nt.species.nwk" # user tree guide
+                                               "-bb 1000",
+                                               "-alrt 1000",
+                                               "-keep-ident"
+)
+
+final.intron.nt.aln.treefile <- run.iqtree("aln/final.intron/final.intron.nt.filt.aln", 
+                                           "-nt AUTO",
+                                           "-bb 1000",
+                                           "-alrt 1000",
+                                           "-keep-ident"
 ) 
 
 #### Make ML tree based on final intron divvied alignments ####
-cat(timestamp(), "Creating divvied final intron ML trees using species phylogenies\n")
+cat(timestamp(), "Creating divvied alignment trees\n")
 
-final.intron.zfy.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfy.nt.divvy.aln, 
+# ZFY
+final.intron.zfy.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfy.nt.divvy.aln,
                                                      "-nt AUTO", # number of threads
-                                                     "-keep-ident",
-                                                     "-te aln/final.intron.zfy/zfy.nt.species.nwk" # user tree guide
+                                                     "-bb 1000",
+                                                     "-alrt 1000",
+                                                     "-keep-ident"
 )
 
-final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfx.nt.divvy.aln, 
+# ZFX
+final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfx.nt.divvy.aln,
                                                      "-nt AUTO", # number of threads
-                                                     "-keep-ident",
-                                                     "-te aln/final.intron.zfx/zfx.nt.species.nwk" # user tree guide
+                                                     "-bb 1000",
+                                                     "-alrt 1000",
+                                                     "-keep-ident"
 )
+
+# ZFX/Y
+final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.nt.divvy.aln,
+                                                     "-nt AUTO", # number of threads
+                                                     "-bb 1000",
+                                                     "-alrt 1000",
+                                                     "-keep-ident"
+)
+
 
 #### Prepare codeml site model to check for site-specific selection ####
 
