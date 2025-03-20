@@ -130,20 +130,21 @@ FILES$mammal.aa.aln.treefile <- run.iqtree(FILES$mammal.aa.aln,
 #### Create CDS NT trees #####
 
 # Make ML tree and reconstruct ancestral sequences
-# Expect iqtree on the PATH.
-# Note model testing is automatically performed in v1.5.4 onwards
+# Note model testing is automatically performed in IQTREE v1.5.4 onwards
 
 # All outgroups
 FILES$combined.nt.aln.treefile <- run.iqtree(FILES$combined.nt.aln, 
                                              "-bb 1000", # number of bootstrap replicates
                                              "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+                                             "-st CODON",
                                              "-asr" # Ancestral sequence resconstruction
                                              )
 
 # Mammal only
 FILES$mammal.nt.aln.treefile <- run.iqtree(FILES$mammal.nt.aln,
                                            "-bb 1000", # number of bootstrap replicates
-                                           "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT) 
+                                           "-alrt 1000", # number of replicates to perform SH-like approximate likelihood ratio test (SH-aLRT)
+                                           "-st CODON",
                                            "-asr" # Ancestral sequence resconstruction
 )
 

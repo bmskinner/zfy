@@ -8,12 +8,12 @@ The scripts expect the following scripts or binaries on the `PATH`:
 
 Program             | Source  | Reference  | Version used in this study
 --------------------|---------|------------|---------------------------
-`macse_v2.07.jar` | https://www.agap-ge2pop.org/macse/ | [doi:10.1371/journal.pone.0022594](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0022594) | 2.07
+`macse` | https://www.agap-ge2pop.org/macse/ | [doi:10.1371/journal.pone.0022594](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0022594) | 2.07
 `muscle5.1.win64.exe` or `muscle5.1.linux_intelx64` | https://drive5.com/muscle5/ | [doi:10.1038/s41467-022-34630-w](https://www.nature.com/articles/s41467-022-34630-w) | 5.1
 `nlstradamus.pl` | http://www.moseslab.csb.utoronto.ca/NLStradamus/ | [doi:10.1186/1471-2105-10-202](https://doi.org/10.1186/1471-2105-10-202) | -
 `pwm_predict` | https://zf.princeton.edu/ | [doi:10.1093/nar/gkt890](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3874201/) | -
 `geneconv.exe` | https://www.math.wustl.edu/~sawyer/geneconv/ | [10.1093/oxfordjournals.molbev.a040567](https://pubmed.ncbi.nlm.nih.gov/2677599/) | 1.81
-`PAML ` | http://abacus.gene.ucl.ac.uk/software/paml.html | [doi:10.1093/molbev/msm088](https://pubmed.ncbi.nlm.nih.gov/17483113/) | 4.9h
+`PAML` | http://abacus.gene.ucl.ac.uk/software/paml.html | [doi:10.1093/molbev/msm088](https://pubmed.ncbi.nlm.nih.gov/17483113/) | 4.9h
 `IQ-TREE` | www.iqtree.org/ | [doi:10.1093/molbev/msu300](https://doi.org/10.1093/molbev/msu300) | 1.6.12
 `hmmsearch` | http://hmmer.org/ | [doi:10.1371/journal.pcbi.1002195](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1002195) | HMMER v3.3
 `RepeatMasker` | https://www.repeatmasker.org/ | Smit, AFA, Hubley, R & Green, P. RepeatMasker Open-4.0. 2013-2015 <http://www.repeatmasker.org>. | 4.1.4

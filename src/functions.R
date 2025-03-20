@@ -102,6 +102,7 @@ run.macse <- function(fa.file, aln.file, ...){
   aa.out <- paste0(aln.file, ".aa.aln")
   nt.out <- paste0(aln.file, ".nt.aln")
   # Run a codon aware alignment with MACSE
+  # Here, macse is an alias on the PATH to java -jar /path/to/macse/jar
   system2("macse", paste(" -prog alignSequences",
                         "-seq",    fa.file, # input
                         "-out_NT", nt.out,  # output nt alignment
