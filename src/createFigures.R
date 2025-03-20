@@ -21,17 +21,19 @@ mouse.exons <- find.exons()
 #### Plot combined mammal/outgroup AA tree ####
 
 combined.outgroup.tree <- read.combined.outgroup.tree(FILES$combined.aa.aln.treefile)
+combined.outgroup.tree <-  reroot.tree(combined.outgroup.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"), position = 0.000000001)
 
 combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")+
-  coord_cartesian(clip="off", xlim = c(0, 0.85), ylim= c(-2, length(combined.outgroup.tree$tip.label)))
+  coord_cartesian(clip="off", xlim = c(0, 0.7), ylim= c(-0.05, length(combined.outgroup.tree$tip.label)))
   
 # Find the location of the Eumuroida clade in the plot
 eumuroida.node <- ape::getMRCA(combined.outgroup.tree, c("Mouse_Zfy1", "North_American_deer_mouse_Zfx-like_putative-Zfy"))
 eumuroida.node.position <- ggtree::get_clade_position(combined.aa.tree, eumuroida.node)
 
 # Add text annotation just below the y midpoint of the Eumuroida clade
-combined.aa.tree <- combined.aa.tree + annotate("text", x = 0.3, 
-                                                y = (eumuroida.node.position$ymax+eumuroida.node.position$ymin)/2-1, 
+combined.aa.tree <- combined.aa.tree + annotate("text", 
+                                                x = with(eumuroida.node.position, xmin), 
+                                                y = with(eumuroida.node.position, (ymax+ymin)/2-1), 
                                                 label = "Eumuroida", size=2)
 
 save.double.width("figure/Figure_1_aa_tree.png", combined.aa.tree)
@@ -46,23 +48,23 @@ nt.aln.tree <- ape::read.tree(FILES$combined.nt.aln.treefile)
 
 # Root the tree and resave
 # The root is arbitrarily placed to fit neatly
-xenopus.node <- ape::getMRCA(nt.aln.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"))
-nt.aln.tree <- phytools::reroot(nt.aln.tree, xenopus.node, position = 0.01)
+nt.aln.tree <-  reroot.tree(nt.aln.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"), position = 0.015)
 ape::write.tree(nt.aln.tree, file = paste0(FILES$combined.nt.aln, ".rooted.treefile"))
 
 # Find the nodes that are ZFY vs ZFX and add to tree
 mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
 nt.aln.tree <- tidytree::groupOTU(nt.aln.tree, mammal.gene.groups, group_name = "group")
 
-plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off", xlim = c(0, 0.65)) 
+plot.zfx.zfy <- plot.tree(nt.aln.tree, col= "group") + coord_cartesian(clip="off", xlim = c(0, 1.9)) 
 
 # Find the location of the Eumuroida clade in the plot
 eumuroida.node <- ape::getMRCA(nt.aln.tree, c("Mouse_Zfy1", "North_American_deer_mouse_Zfx-like_putative-Zfy"))
 eumuroida.node.position <- ggtree::get_clade_position(plot.zfx.zfy, eumuroida.node)
 
 
-plot.zfx.zfy <- plot.zfx.zfy + annotate("text", x = 0.3, 
-                                        y = (eumuroida.node.position$ymax+eumuroida.node.position$ymin)/2-1, 
+plot.zfx.zfy <- plot.zfx.zfy + annotate("text", 
+                                        x = with(eumuroida.node.position, xmin), 
+                                        y = with(eumuroida.node.position, (ymax+ymin)/2-1), 
                                         label = "Eumuroida", size=2)
 
 # Emphasise the ZFX / ZFY splits more by rotating the Laurasiatheria node
@@ -123,6 +125,36 @@ exon.joint.tree <- exon.plots[[4]] + exon.plots[[2]] + exon.plots[[3]] +
   theme(plot.tag = element_text(size = 6),
         plot.margin = margin(t=0, l=0, r=0, b=0))
 save.plot("figure/Figure_Sxxxx_exons_tree.png", exon.joint.tree, width=270, height=170)
+
+#### Compare ZFX and ZFY branch lengths in combined aa tree ####
+
+# For ZFY nodes and ZFX nodes, get the total branch length from root
+# Note node positions are reversed (0 is root). Convert to times.
+aa.tree.node.lengths <- node.depth.edgelength(combined.outgroup.tree) 
+aa.tree.node.lengths <- aa.tree.node.lengths[1:length(combined.outgroup.tree$tip.label)]
+
+data.frame(sequence = combined.outgroup.tree$tip.label,
+                                branch.length = aa.tree.node.lengths) %>%
+  merge(., METADATA$combined, by.x = "sequence", by.y = "common.name") %>%
+  dplyr::select(species, group, accession, Species_common_name, branch.length) %>%
+  dplyr::filter(group != "Outgroup") %>%
+  tidyr::pivot_wider(id_cols = c(species,Species_common_name), 
+                     names_from = group, 
+                     values_from = c(branch.length, accession)) %>%
+  # convert list columns (e.g mouse where there are 2 ZFYs) into extra rows
+  reframe(across(where(is.list), unlist),
+            .by = !where(is.list)) %>%
+  dplyr::mutate(ZFX_accession = accession_ZFX,
+                ZFY_accession = accession_ZFY,
+                Branch_length_ZFX = branch.length_ZFX,
+                Branch_length_ZFY = branch.length_ZFY,
+                Rate = Branch_length_ZFY/Branch_length_ZFX,
+                Species_common_name = str_replace(Species_common_name, "_", " ")) %>%
+  dplyr::select(Species = species, Common_name = Species_common_name, ZFX_accession, Branch_length_ZFX, ZFY_accession, Branch_length_ZFY, Rate) %>%
+  dplyr::arrange(desc(Rate)) %>%
+  as.data.frame %>%
+  create.xlsx(., "figure/rate.zfx.zfy.xlsx")
+
 
 #### Plot dN/dS globally in mammals ####
 
