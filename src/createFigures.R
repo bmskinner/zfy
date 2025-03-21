@@ -1592,8 +1592,8 @@ read.site.specific.codeml.output()
 cat("Comparing branch lengths with divergence times\n")
 
 # Read the ML ZFX and ZFY trees 
-zfx.nt.aln.tree <- ape::read.tree("aln/zfx_only/zfx.aln.treefile")
-zfy.nt.aln.tree <- ape::read.tree("aln/zfy_only/zfy.aln.treefile")
+zfx.nt.aln.tree <- ape::read.tree("aln/zfx_only/zfx.nt.aln.treefile")
+zfy.nt.aln.tree <- ape::read.tree("aln/zfy_only/zfy.nt.aln.treefile")
 
 # Drop the second ZFYs in mouse and rat
 zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2") 
