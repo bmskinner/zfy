@@ -135,6 +135,8 @@ run.muscle <- function(fa.file, aln.file){
 
 # Run IQTREE on the given alignment file (should end .aln)
 run.iqtree <- function(aln.file, ...){
+  # Note - cluster default versions IQTREE 1.6 and 2.0.6 reliably segfault using -st CODON 
+  # Manually added 2.4.0 to PATH, appears stable
   system2("iqtree2", paste("-s ", aln.file, 
                           "-nt 6",  # number of threads
                           ...), # any other arguments to iqtree
