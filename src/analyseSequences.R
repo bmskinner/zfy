@@ -68,7 +68,7 @@ writeLines(capture.output(sessionInfo()), "figure/session_info.txt")
 METADATA <- prepare.fas.files()
 
 
-#### Run combined mammal/outgroup AA alignment ####
+#### Run combined mammal/outgroup AA and DNA alignment ####
 cat(timestamp(), "Creating mammal plus outgroup alignments\n")
 # Expect java on the PATH. Macse download from https://www.agap-ge2pop.org/macsee-pipelines/
 # Direct download link:
@@ -76,7 +76,7 @@ cat(timestamp(), "Creating mammal plus outgroup alignments\n")
 # Use macse to align the nt files for combined species
 run.macse(FILES$combined.nt.fas, "aln/combined/combined")
 
-#### Run mammal NT alignment guided by AA #####
+#### Read alignments and create partition files #####
 cat(timestamp(), "Creating mammal alignments\n")
 # Run a codon aware alignment with MACSE
 run.macse(FILES$mammal.nt.fas, "aln/mammal/mammal")
@@ -374,23 +374,23 @@ ape::write.tree(zfy.phylogeny, "aln/zfy_only/zfy.nt.species.nwk")
 
 #### Export ZFX and ZFY alignments separately ####
 
-# Write ZFX sequences to file
+# Write ZFX nt sequences to file
 zfx.nt.aln <- ALIGNMENTS$nt.mammal.biostrings@unmasked[names(ALIGNMENTS$nt.mammal.biostrings@unmasked) %in% c(METADATA$mammal$common.name[METADATA$mammal$group=="ZFX"], 
                                                                                                               METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
-Biostrings::writeXStringSet(zfx.nt.aln,  file = "aln/zfx_only/zfx.aln", format = "fasta")
+Biostrings::writeXStringSet(zfx.nt.aln,  file = "aln/zfx_only/zfx.nt.aln", format = "fasta")
 
-# Write ZFY sequences to file
+# Write ZFY nt sequences to file
 zfy.nt.aln <- ALIGNMENTS$nt.mammal.biostrings@unmasked[names(ALIGNMENTS$nt.mammal.biostrings@unmasked) %in% c(METADATA$mammal$common.name[METADATA$mammal$group=="ZFY"], 
                                                                                                               METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
-Biostrings::writeXStringSet(zfy.nt.aln,  file = "aln/zfy_only/zfy.aln", format = "fasta")
+Biostrings::writeXStringSet(zfy.nt.aln,  file = "aln/zfy_only/zfy.nt.aln", format = "fasta")
 
 
-# Write ZFX sequences to file
+# Write ZFX aa sequences to file
 zfx.aa.aln <- ALIGNMENTS$aa.mammal.biostrings@unmasked[names(ALIGNMENTS$aa.mammal.biostrings@unmasked) %in% c(METADATA$mammal$common.name[METADATA$mammal$group=="ZFX"], 
                                                                                                               METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
 Biostrings::writeXStringSet(zfx.aa.aln,  file = "aln/zfx_only/zfx.aa.aln", format = "fasta")
 
-# Write ZFY sequences to file
+# Write ZFY aa sequences to file
 zfy.aa.aln <- ALIGNMENTS$aa.mammal.biostrings@unmasked[names(ALIGNMENTS$aa.mammal.biostrings@unmasked) %in% c(METADATA$mammal$common.name[METADATA$mammal$group=="ZFY"], 
                                                                                                               METADATA$mammal$common.name[METADATA$mammal$group=="Outgroup"])]
 Biostrings::writeXStringSet(zfy.aa.aln,  file = "aln/zfy_only/zfy.aa.aln", format = "fasta")
@@ -400,29 +400,61 @@ Biostrings::writeXStringSet(zfy.aa.aln,  file = "aln/zfy_only/zfy.aa.aln", forma
 
 cat(timestamp(), "Running ancestral sequence reconstruction with species tree\n")
 
-# Run the ancestral reconstructions
-run.iqtree("aln/zfx_only/zfx.aa.aln", 
+# Run the ancestral reconstructions for protein
+zfx.aa.aln.treefile <- run.iqtree("aln/zfx_only/zfx.aa.aln", 
            "-nt AUTO", # number of threads
            "-te aln/zfx_only/zfx.nt.species.nwk", # user tree guide
-           # "-st CODON",
            "-keep_empty_seq",
-           "-asr") # ancestral sequence reconstruction
+           "-asr")
 
-run.iqtree("aln/zfy_only/zfy.aa.aln", 
+zfy.aa.aln.treefile <- run.iqtree("aln/zfy_only/zfy.aa.aln", 
            "-nt AUTO", # number of threads
            "-te aln/zfy_only/zfy.nt.species.nwk", # user tree guide
-           # "-st CODON",
            "-keep_empty_seq",
-           "-asr") # ancestral sequence reconstruction
+           "-asr")
 
-#### Remove duplicate species nodes from the trees  ####
+# Run the ancestral reconstructions for nucleotides
+zfx.nt.aln.treefile <- run.iqtree("aln/zfx_only/zfx.nt.aln", 
+                                  "-nt AUTO", # number of threads
+                                  "-te aln/zfx_only/zfx.nt.species.nwk", # user tree guide
+                                  "-st CODON",
+                                  "-keep_empty_seq",
+                                  "-asr")
 
+zfy.nt.aln.treefile <- run.iqtree("aln/zfy_only/zfy.nt.aln", 
+                                  "-nt AUTO", # number of threads
+                                  "-te aln/zfy_only/zfy.nt.species.nwk", # user tree guide
+                                  "-st CODON",
+                                  "-keep_empty_seq",
+                                  "-asr")
+
+#### Remove duplicate species nodes from the protein trees  ####
 # For a ~species tree, we only need one sequence per species. Either can be dropped,
 # since they give the same branching order
 
 # Read the ML ZFX and ZFY trees 
-zfx.nt.aln.tree <- ape::read.tree("aln/zfx_only/zfx.aln.treefile")
-zfy.nt.aln.tree <- ape::read.tree("aln/zfy_only/zfy.aln.treefile")
+zfx.aa.aln.tree <- ape::read.tree(zfx.aa.aln.treefile)
+zfy.aa.aln.tree <- ape::read.tree(zfy.aa.aln.treefile)
+
+# Drop the second ZFYs in mouse and rat
+zfy.aa.aln.tree <- tidytree::drop.tip(zfy.aa.aln.tree, "Mouse_Zfy2") 
+zfy.aa.aln.tree <- tidytree::drop.tip(zfy.aa.aln.tree, "African_Grass_Rat_ZFY2-like_1") 
+
+# Root the trees on monotremes
+zfx.aa.aln.tree <- reroot.tree(zfx.aa.aln.tree, c("Platypus_ZFX", "Autralian_echidna_ZFX"), position = 0.015)
+zfy.aa.aln.tree <- reroot.tree(zfy.aa.aln.tree, c("Platypus_ZFX", "Autralian_echidna_ZFX"), position = 0.015)
+
+# Remove gene names so tip labels are comparable
+zfx.aa.aln.tree$tip.label <- str_replace(zfx.aa.aln.tree$tip.label, "_Z[F|f][X|x].*", "")
+zfy.aa.aln.tree$tip.label <- str_replace(zfy.aa.aln.tree$tip.label, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", "")
+
+#### Remove duplicate species nodes from the nucleotide trees  ####
+# For a ~species tree, we only need one sequence per species. Either can be dropped,
+# since they give the same branching order
+
+# Read the ML ZFX and ZFY trees 
+zfx.nt.aln.tree <- ape::read.tree(zfx.nt.aln.treefile)
+zfy.nt.aln.tree <- ape::read.tree(zfy.nt.aln.treefile)
 
 # Drop the second ZFYs in mouse and rat
 zfy.nt.aln.tree <- tidytree::drop.tip(zfy.nt.aln.tree, "Mouse_Zfy2") 
@@ -442,10 +474,16 @@ zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "(_putative)
 zfx.nt.aln.tree.plot <- plot.tree(zfx.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
 zfy.nt.aln.tree.plot <- plot.tree(zfy.nt.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
 
-save.double.width("figure/species.tree.zfx.png", zfx.nt.aln.tree.plot)
-save.double.width("figure/species.tree.zfy.png", zfy.nt.aln.tree.plot)
+save.double.width("figure/species.tree.nt.zfx.png", zfx.nt.aln.tree.plot)
+save.double.width("figure/species.tree.nt.zfy.png", zfy.nt.aln.tree.plot)
 
-#### Create ancestral sequence reconstructions including indels as per ancseq ####
+zfx.aa.aln.tree.plot <- plot.tree(zfx.aa.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
+zfy.aa.aln.tree.plot <- plot.tree(zfy.aa.aln.tree) + geom_nodelab(size=2, nudge_x = -0.003, nudge_y = 0.5, hjust=1,  node = "internal")
+
+save.double.width("figure/species.tree.aa.zfx.png", zfx.aa.aln.tree.plot)
+save.double.width("figure/species.tree.aa.zfy.png", zfy.aa.aln.tree.plot)
+
+#### Create ancestral protein sequence reconstructions including indels as per ancseq ####
 
 # Find indels from alignment
 convert.indels.to.binary <- function(aln.file){
@@ -504,7 +542,7 @@ ancestral.zfx.seqs <- merge(ancestral.zfx.seqs, ancestral.zfx.indels, by = c("No
 write.table(ancestral.zfy.seqs, "aln/zfy_only/zfy.indel.filtered.state")
 write.table(ancestral.zfx.seqs, "aln/zfx_only/zfx.indel.filtered.state")
 
-#### Export ancestral ZFX/Y reconstructions for each node in the species tree ####
+#### Export ancestral protein ZFX/Y reconstructions for each node in the species tree ####
 
 get.node.sequence <- function(node.name, ancestral.seq.table, type){
   ancestral.seq.table %>%
