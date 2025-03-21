@@ -146,15 +146,40 @@ data.frame(sequence = combined.outgroup.tree$tip.label,
             .by = !where(is.list)) %>%
   dplyr::mutate(ZFX_accession = accession_ZFX,
                 ZFY_accession = accession_ZFY,
-                Branch_length_ZFX = branch.length_ZFX,
-                Branch_length_ZFY = branch.length_ZFY,
-                Rate = Branch_length_ZFY/Branch_length_ZFX,
+                Branch_length_ZFX_AA = branch.length_ZFX,
+                Branch_length_ZFY_AA = branch.length_ZFY,
+                ZFY_vs_ZFX_AA = Branch_length_ZFY_AA/Branch_length_ZFX_AA,
                 Species_common_name = str_replace(Species_common_name, "_", " ")) %>%
-  dplyr::select(Species = species, Common_name = Species_common_name, ZFX_accession, Branch_length_ZFX, ZFY_accession, Branch_length_ZFY, Rate) %>%
-  dplyr::arrange(desc(Rate)) %>%
+  dplyr::select(Species = species, Common_name = Species_common_name, ZFX_accession, Branch_length_ZFX_AA, ZFY_accession, Branch_length_ZFY_AA, ZFY_vs_ZFX_AA) %>%
+  dplyr::arrange(desc(ZFY_vs_ZFX_AA)) %>%
   as.data.frame %>%
-  create.xlsx(., "figure/rate.zfx.zfy.xlsx")
+  create.xlsx(., "figure/rate.zfx.zfy.aa.xlsx")
 
+#### Compare ZFX and ZFY branch lengths in combined nt tree ####
+nt.tree.node.lengths <- node.depth.edgelength(nt.aln.tree) 
+nt.tree.node.lengths <- nt.tree.node.lengths[1:length(nt.aln.tree$tip.label)]
+
+data.frame(sequence = nt.aln.tree$tip.label,
+           branch.length = nt.tree.node.lengths) %>%
+  merge(., METADATA$combined, by.x = "sequence", by.y = "common.name") %>%
+  dplyr::select(species, group, accession, Species_common_name, branch.length) %>%
+  dplyr::filter(group != "Outgroup") %>%
+  tidyr::pivot_wider(id_cols = c(species,Species_common_name), 
+                     names_from = group, 
+                     values_from = c(branch.length, accession)) %>%
+  # convert list columns (e.g mouse where there are 2 ZFYs) into extra rows
+  reframe(across(where(is.list), unlist),
+          .by = !where(is.list)) %>%
+  dplyr::mutate(ZFX_accession = accession_ZFX,
+                ZFY_accession = accession_ZFY,
+                Branch_length_ZFX_NT = branch.length_ZFX,
+                Branch_length_ZFY_NT = branch.length_ZFY,
+                ZFY_vs_ZFX_NT = Branch_length_ZFY_NT/Branch_length_ZFX_NT,
+                Species_common_name = str_replace(Species_common_name, "_", " ")) %>%
+  dplyr::select(Species = species, Common_name = Species_common_name, ZFX_accession, Branch_length_ZFX_NT, ZFY_accession, Branch_length_ZFY_NT, ZFY_vs_ZFX_NT) %>%
+  dplyr::arrange(desc(ZFY_vs_ZFX_NT)) %>%
+  as.data.frame %>%
+  create.xlsx(., "figure/rate.zfx.zfy.nt.xlsx")
 
 #### Plot dN/dS globally in mammals ####
 
