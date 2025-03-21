@@ -918,6 +918,7 @@ paml.shell.script <- paste0("#!/bin/bash\n\n",
                             "# qsubme is an alias to submit the job to the cluster\n",
                             "shopt -s expand_aliases\n",
                             "source ~/.bashrc\n\n",
+                            
                             "cd paml/site-specific\n",
                             "# codeml zfy.site-specific.paml.ctl\n",
                             "qsubme codeml zfy.site-specific.paml.ctl\n\n",
@@ -925,8 +926,7 @@ paml.shell.script <- paste0("#!/bin/bash\n\n",
                             "cd ../branch-site-eumuroida\n",
                             "qsubme codeml paml.ctl\n",
                             "cd ../branch-site-eumuroida-null\n",
-                            "qsubme codeml paml.ctl\n\n",
-
+                            "qsubme codeml paml.ctl\n"
 )
 write_file(paml.shell.script, "run_paml.sh")
 
@@ -1033,52 +1033,57 @@ create.combined.hyphy.meme.tree.file <- function(fg.node, node.name){
   ape::write.tree(hyphy.tree, file = tree.file)
 }
 
-nodes <- c(rodentia.node, eumuroida.node, muridae.node, murinae.node)
-node.names <- c("eumuroida") #, "muridae", "murinae", "rodentia", 
+# nodes <- c(eumuroida.node)
+# node.names <- c("eumuroida") #, "muridae", "murinae", "rodentia",
 
-mapply(create.combined.hyphy.relax.tree.file, nodes, node.names)
-mapply(create.mammal.hyphy.relax.tree.file,   nodes, node.names)
-mapply(create.combined.hyphy.meme.tree.file,  nodes, node.names)
-mapply(create.mammal.hyphy.meme.tree.file,    nodes, node.names)
+# mapply(create.combined.hyphy.relax.tree.file, nodes, node.names)
+create.mammal.hyphy.relax.tree.file(eumuroida.node, "eumuroida")
+# mapply(create.combined.hyphy.meme.tree.file,  nodes, node.names)
+create.mammal.hyphy.meme.tree.file(eumuroida.node, "eumuroida")
 
 # Create Hyphy RELAX invokations for shell scripting for the given node names
-create.hyphy.relax.invokation <- function(node.name){
-  paste0(
-    "# Mammal alignment for ", node.name, "\n",
-    "hyphy relax --alignment  ", FILES$mammal.nt.aln, " --tree aln/hyphy/mammal.", node.name , ".hyphy.relax.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/mammal.", node.name, ".relax.json\n",
-    "# Combined alignment for ", node.name, "\n",
-    "hyphy relax --alignment  ", FILES$combined.nt.aln, " --tree aln/hyphy/combined.", node.name , ".hyphy.relax.treefile --reference 'Reference' --test 'Test' --output aln/hyphy/combined.", node.name, ".relax.json\n"
-  )
-}
-
-# Create Hyphy MEME invokations for shell scripting for the given node names
-# Use a partition model to allow three different classes of evolution:
-# Exons 1, 3-6, exon 2 and exon 7
-create.hyphy.meme.invokation <- function(node.name){
-  paste0(
-    "# Mammal partitioned alignment for ", node.name, "\n",
-    "hyphy meme --alignment  ", FILES$mammal.nt.nexus, " --tree aln/hyphy/mammal.", node.name , ".meme.hyphy.treefile --branches Test --output aln/hyphy/mammal.", node.name, ".meme.json\n",
-    "# Combined partitioned alignment for ", node.name, "\n",
-    "hyphy meme --alignment  ", FILES$combined.nt.nexus, " --tree aln/hyphy/combined.", node.name , ".meme.hyphy.treefile --branches Test --output aln/hyphy/combined.", node.name, ".meme.json\n")
-}
-
-
+# create.hyphy.relax.invokation <- function(node.name){
+#   paste0(
+#     "# Mammal alignment for ", node.name, "\n",
+#     "hyphy relax --alignment  ", FILES$mammal.nt.aln, 
+#     " --tree aln/hyphy/mammal.", node.name , ".hyphy.relax.treefile --reference 'Reference'", 
+#     " --test 'Test' --output aln/hyphy/mammal.", node.name, ".relax.json\n"
+#   )
+# }
+# 
+# # Create Hyphy MEME invokations for shell scripting for the given node names
+# # Use a partition model to allow three different classes of evolution:
+# # Exons 1, 3-6, exon 2 and exon 7
+# create.hyphy.meme.invokation <- function(node.name){
+#   paste0(
+#     "# Mammal partitioned alignment for ", node.name, "\n",
+#     "hyphy meme --alignment  ", FILES$mammal.nt.nexus, " --tree aln/hyphy/mammal.", node.name , ".meme.hyphy.treefile --branches Test --output aln/hyphy/mammal.", node.name, ".meme.json\n",
+#     "# Combined partitioned alignment for ", node.name, "\n",
+#     "hyphy meme --alignment  ", FILES$combined.nt.nexus, " --tree aln/hyphy/combined.", node.name , ".meme.hyphy.treefile --branches Test --output aln/hyphy/combined.", node.name, ".meme.json\n")
+# }
+# 
+# 
 
 # HyPhy is installed in a conda environment (hence we can't use 'system2' to
 # directly call 'hyphy'). This creates a script to activate the conda
 # environment and run RELAX.
 write_file(paste0("#!/bin/bash\n",
                   "source activate hyphy\n\n",
-                  "# RELAX test for realxed purifying selection in test branches\n",
-                  paste(sapply(node.names, create.hyphy.relax.invokation), 
-                        collapse = ""), "\n",
-                  "# MEME test for positive selection at individual sites in all branches\n",
-                  paste(sapply(node.names, create.hyphy.meme.invokation), 
-                        collapse = "")
+                  "# RELAX test for relaxed purifying selection in test branches\n",
+                    "# Mammal alignment for eumuroida\n",
+                    "hyphy relax --alignment  ", FILES$mammal.nt.aln, 
+                      " --tree aln/hyphy/mammal.eumuroida.hyphy.relax.treefile --reference 'Reference'", 
+                      " --test 'Test' --output aln/hyphy/mammal.eumuroida.relax.json\n\n",
+                  
+                  "# MEME test for positive selection at individual sites in test branches\n",
+                  "hyphy meme --alignment  ", FILES$mammal.nt.nexus, 
+                    " --tree aln/hyphy/mammal.eumuroida.meme.hyphy.treefile ",
+                    " --branches Test",
+                    " --output aln/hyphy/mammal.eumuroida.meme.json\n"
 ),
 "run_hyphy.sh")
 
-cat(timestamp(), "Running HyPhy RELAX and MEME across nodes", paste(node.names, collapse=";"), "\n")
+cat(timestamp(), "Running HyPhy RELAX and MEME\n")
 system2("bash", "run_hyphy.sh")
 
 #### Tar the outputs ####

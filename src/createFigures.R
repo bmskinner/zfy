@@ -1158,19 +1158,8 @@ create.relax.k.tree <- function(json.file){
 }
 
 if(file.exists("aln/hyphy/mammal.eumuroida.relax.json")){
-  
-  # node.names <- c("rodentia", "eumuroida", "muridae", "murinae")
-  
-  make.tree <- \(name){
-    relax.combined.tree <- create.relax.k.tree(paste0("aln/hyphy/combined.", name, ".relax.json"))
-    save.double.width(paste0("figure/RELAX.combined.", name, ".png"), relax.combined.tree)
-    
-    relax.mammal.tree <- create.relax.k.tree(paste0("aln/hyphy/mammal.", name, ".relax.json"))
-    save.double.width(paste0("figure/RELAX.mammal.", name, ".png"), relax.mammal.tree)
-  } 
-  
-  # sapply(node.names, make.tree)
-  make.tree("eumuroida")
+  relax.mammal.tree <- create.relax.k.tree("aln/hyphy/mammal.eumuroida.relax.json")
+  save.double.width("figure/RELAX.mammal.eumuroida.png", relax.mammal.tree)
 }
 
 #### Plot HyPhy MEME test for directional selection ####
@@ -1180,7 +1169,7 @@ cat("Plotting MEME result\n")
 # Read the json file of meme results for a given node
 # Filter to those of interest at p<0.05
 # outgroup.type: combined or mammal
-read.meme.results <- function(node.name="rodentia", outgroup.type="combined"){
+read.meme.results <- function(node.name="eumuroida", outgroup.type="combined"){
   
   json.file <- paste0("aln/hyphy/", outgroup.type, ".", node.name, ".meme.json")
   meme.data <- jsonlite::read_json(json.file)
