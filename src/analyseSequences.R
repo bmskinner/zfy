@@ -702,8 +702,6 @@ run.muscle(FILES$final.intron.nt.fas,     FILES$final.intron.nt.aln)
 
 #### Run divvier to improve high-confidence homologies in final intron alignments ####
 
-# Note that divvier is not run on the filtered sequences above - we want to
-# compare the two methods
 final.intron.zfy.nt.divvy.aln <- run.divvier(FILES$final.intron.zfy.nt.aln, "-mincol 2")
 final.intron.zfx.nt.divvy.aln <- run.divvier(FILES$final.intron.zfx.nt.aln, "-mincol 2")
 final.intron.nt.divvy.aln <- run.divvier(FILES$final.intron.nt.aln, "-mincol 2")
@@ -740,7 +738,7 @@ cat(timestamp(), "Creating divvied alignment trees\n")
 
 # ZFY
 final.intron.zfy.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfy.nt.divvy.aln,
-                                                     "-nt AUTO", # number of threads
+                                                     "-nt AUTO",
                                                      "-bb 1000",
                                                      "-alrt 1000",
                                                      "-keep-ident"
@@ -748,7 +746,7 @@ final.intron.zfy.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfy.nt.divvy.a
 
 # ZFX
 final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfx.nt.divvy.aln,
-                                                     "-nt AUTO", # number of threads
+                                                     "-nt AUTO",
                                                      "-bb 1000",
                                                      "-alrt 1000",
                                                      "-keep-ident"
@@ -756,7 +754,7 @@ final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.zfx.nt.divvy.a
 
 # ZFX/Y
 final.intron.zfx.nt.divvy.aln.treefile <- run.iqtree(final.intron.nt.divvy.aln,
-                                                     "-nt AUTO", # number of threads
+                                                     "-nt AUTO",
                                                      "-bb 1000",
                                                      "-alrt 1000",
                                                      "-keep-ident"

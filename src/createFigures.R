@@ -10,6 +10,10 @@ source("src/findZF.R")
 source("src/calcCharge.R")
 source("src/calcHydrophobicity.R")
 
+# Don't report unneeded info
+options(dplyr.summarise.inform = FALSE)
+
+
 cat("Packages loaded\n")
 METADATA <- prepare.fas.files() # load FASTA files and write metadata table
 ALIGNMENTS <- read.alignments()
@@ -916,7 +920,8 @@ gametologue.cumdiff.plot <- gametologue.cumdiff.plot+
   scale_x_continuous(breaks = seq(0, 900, 100))+
   scale_y_continuous(breaks = seq(0, 300, 50))+
   theme_bw()+
-  theme(legend.position = c(0.2, 0.7),
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.2, 0.7),
         legend.title = element_blank())
 
 gametologue.cumdiff.plot <- gametologue.cumdiff.plot +
@@ -978,7 +983,8 @@ ancestral.cumdiff.plot <-  ancestral.cumdiff.plot+
   scale_x_continuous(breaks = seq(0, 900, 100))+
   scale_y_continuous(breaks = seq(0, 900, 50))+
   theme_bw()+
-  theme(legend.position = c(0.15, 0.68),
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.15, 0.68),
         legend.title = element_blank())
 
 ancestral.cumdiff.plot <- ancestral.cumdiff.plot +
@@ -1824,8 +1830,8 @@ final.intron.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.nt.aln.divvy
   reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015) %>%
   tidytree::groupOTU(., mammal.gene.groups, group_name = "group")
 
-#### Plot the final intron MSAs ####
-cat("Plotting final intron trees\n")
+#### Plot the final intron trees ####
+cat("Plotting final intron ZFX or ZFY trees\n")
 
 # Divvied
 final.intron.zfy.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfy.nt.divvy.aln.tree)  + xlim(0, 2) + labs(title = "ZFY (divvied)")
@@ -1833,6 +1839,7 @@ final.intron.zfx.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfx.nt.divvy.a
 save.double.width("figure/final.intron.divvy.tree.png", final.intron.zfy.nt.divvy.aln.tree.plot/final.intron.zfx.nt.divvy.aln.tree.plot)
 
 # Divvied ZFX/Y
+cat("Plotting final intron ZFX+ZFY tree\n")
 final.intron.nt.divvy.aln.tree.plot <- plot.tree(final.intron.nt.divvy.aln.tree, col= "group")  + xlim(0, 2) + labs(title = "ZFX/Y (divvied)")
 save.double.width("figure/final.intron.zfx.zfy.divvy.tree.png", final.intron.nt.divvy.aln.tree.plot)
 
