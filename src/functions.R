@@ -544,7 +544,7 @@ add.structures <- function(plot, y.start, y.end, alpha = 1, ...){
 # n.taxa - the number of rows within data; annotation tracks are above this
 annotate.structure.plot <- function(plot, n.taxa){
   
-  plot <- plot+
+  plot <- suppressMessages(plot+
     # Draw the structures
     add.track(RANGES$combined.nls,    n.taxa+8.5, n.taxa+11.5, fill=NLS.COLOUR, alpha = 1)+ # +8.5
     add.track(RANGES$combined.zf,     n.taxa+9, n.taxa+11, fill=ZF.COLOUR)+ # 9 - 11
@@ -585,7 +585,7 @@ annotate.structure.plot <- function(plot, n.taxa){
           panel.border = element_blank(),
           axis.line.x.bottom = element_line(),
           panel.grid = element_blank(),
-          plot.margin = margin(l=0))
+          plot.margin = margin(l=0)))
   
   # Add the tree with the outgroups
   make.outgroup.mini.tree(combined.outgroup.tree,
@@ -640,7 +640,8 @@ plot.kaks <- function(nt.aln.file, species.order, kaks.limits=c(0, 1)){
     theme(axis.text.x = element_text(size = 5, angle = 45, hjust = 1),
           axis.text.y = element_text(size = 5),
           axis.title = element_blank(),
-          legend.position = c(0.9, 0.8),
+          legend.position = "inside",
+          legend.position.inside = c(0.9, 0.8),
           legend.background = element_blank(),
           legend.title = element_text(size = 8),
           legend.text = element_text(size = 8))

@@ -255,7 +255,8 @@ plot.pairwise.kaks <- function(kaks.pairwise){
     theme(axis.text.x = element_text(size = 3, angle = 90, vjust = 0.5, hjust=1),
           axis.text.y = element_text(size = 3.5),
           axis.title = element_blank(),
-          legend.position = c(0.8, 0.7),
+          legend.position = "inside",
+          legend.position.inside = c(0.8, 0.7),
           legend.background = element_blank(),
           legend.title = element_text(size = 5),
           legend.text = element_text(size = 5))
@@ -276,12 +277,12 @@ create.xlsx(kaks.exon.2, "figure/kaks.exon.2.xlsx")
 create.xlsx(kaks.exon.7, "figure/kaks.exon.7.xlsx")
 
 #### Identify the locations of the ZFs in the AA & NT MSAs ####
-
+cat("Identifying and plotting structural features\n")
 LOCATIONS <- list()
 RANGES <- list()
 
-LOCATIONS$combined.zf <- readr::read_tsv("aln/locations.zf.combined.tsv")
-LOCATIONS$mammal.zf <- readr::read_tsv("aln/locations.zf.mammal.tsv")
+LOCATIONS$combined.zf <- readr::read_tsv("aln/locations.zf.combined.tsv", show_col_types = FALSE)
+LOCATIONS$mammal.zf <- readr::read_tsv("aln/locations.zf.mammal.tsv", show_col_types = FALSE)
 
 write_tsv(LOCATIONS$combined.zf %>% 
             dplyr::select(sequence, aa_motif, start_ungapped, end_ungapped, 
@@ -306,8 +307,8 @@ LOCATIONS$mammal.zf %<>%
 
 #### Identify the locations of the 9aaTADs in the AA & NT MSAs ####
 
-LOCATIONS$combined.9aaTAD <- readr::read_tsv("aln/locations.9aaTAD.combined.tsv")
-LOCATIONS$mammal.9aaTAD <- readr::read_tsv("aln/locations.9aaTAD.mammal.tsv")
+LOCATIONS$combined.9aaTAD <- readr::read_tsv("aln/locations.9aaTAD.combined.tsv", show_col_types = FALSE)
+LOCATIONS$mammal.9aaTAD <- readr::read_tsv("aln/locations.9aaTAD.mammal.tsv", show_col_types = FALSE)
 
 write_tsv(LOCATIONS$combined.9aaTAD %>% 
             dplyr::select(sequence, aa_motif, rc_score, start_ungapped, end_ungapped, 
@@ -348,8 +349,8 @@ LOCATIONS$mammal.9aaTAD %<>%
 
 #### Identify the locations of the NLS in the AA & NT MSAs ####
 
-LOCATIONS$combined.NLS <- readr::read_tsv("aln/locations.NLS.combined.tsv")
-LOCATIONS$mammal.NLS <- readr::read_tsv("aln/locations.NLS.mammal.tsv")
+LOCATIONS$combined.NLS <- readr::read_tsv("aln/locations.NLS.combined.tsv", show_col_types = FALSE)
+LOCATIONS$mammal.NLS <- readr::read_tsv("aln/locations.NLS.mammal.tsv", show_col_types = FALSE)
 
 # Export the locations of the NLS
 write_tsv(LOCATIONS$combined.NLS %>% 
@@ -506,7 +507,7 @@ extract.superTAD.motifs <- function(locations.9aaTAD, ranges.9aaTAD){
                   all.x = TRUE)
   
   # Combine the superTAD locations for each row
-  locations.superTAD <- merge(combos, locations.9aaTAD, 
+  locations.superTAD <-   suppressWarnings(merge(combos, locations.9aaTAD, 
                               by.x = c("sequence", "tad.label", "start",
                                        "end","width", "motif_number"),
                               by.y = c("sequence", "label", "start",
@@ -541,7 +542,7 @@ extract.superTAD.motifs <- function(locations.9aaTAD, ranges.9aaTAD){
     as.data.frame %>%
     dplyr::mutate(across(`9aaTAD_A_rc_score`:`9aaTAD_G_rc_score`, as.numeric)) %>%
     dplyr::rename_with(.fn = function(x) gsub("_tad.sequence", "", x)) %>%
-    dplyr::arrange(Group, Sequence)
+    dplyr::arrange(Group, Sequence))
   
   # Create a custom xlsx colouring background of cells by rc score
   # Set rich text formatting and highlight VV motifs in the given column index
@@ -1169,7 +1170,7 @@ cat("Plotting MEME result\n")
 # Read the json file of meme results for a given node
 # Filter to those of interest at p<0.05
 # outgroup.type: combined or mammal
-read.meme.results <- function(node.name="eumuroida", outgroup.type="combined"){
+read.meme.results <- function(node.name="eumuroida", outgroup.type="mammal"){
   
   json.file <- paste0("aln/hyphy/", outgroup.type, ".", node.name, ".meme.json")
   meme.data <- jsonlite::read_json(json.file)
@@ -1205,8 +1206,6 @@ read.meme.results <- function(node.name="eumuroida", outgroup.type="combined"){
   list(meme.data = meme.data,
        meme.sites = meme.sites)
 }
-
-combined.meme.results <- lapply( c("eumuroida") , read.meme.results, outgroup.type="combined") # node.names
 
 mammal.meme.results <- lapply(c("eumuroida") , read.meme.results, outgroup.type="mammal") #node.names
 
@@ -1303,12 +1302,6 @@ create.meme.overview.plot <- function(meme.overview, outgroup.type){
 mammal.meme.overview <- calculate.meme.overview.data(mammal.meme.results)
 mammal.meme.overview.plot <- create.meme.overview.plot(mammal.meme.overview, outgroup.type="mammal")
 
-# combined.meme.overview <- calculate.meme.overview.data(combined.meme.results)
-# combined.meme.overview.plot <-create.meme.overview.plot(combined.meme.overview,"combined")
-
-# both.meme.overview.plot <- combined.meme.overview.plot / mammal.meme.overview.plot
-# save.double.width(filename = paste0("figure/meme.all.site.locations.png"), both.meme.overview.plot, height = 90)
-
 # Given an alignment region produced by `extract.alignment.region`, plot it
 plot.alignment.region <- function(region.data, meme.overview){
   
@@ -1403,7 +1396,6 @@ plot.alignment.region <- function(region.data, meme.overview){
        region = region.data)
 }
 
-
 # Create plots of the MSA around the sites of interest
 plot.individual.meme.sites <- function(meme.overview, outgroup.type){
   
@@ -1428,7 +1420,6 @@ plot.individual.meme.sites <- function(meme.overview, outgroup.type){
 }
 
 plot.individual.meme.sites(mammal.meme.overview, "mammal")
-# plot.individual.meme.sites(combined.meme.overview, "combined")
 
 #### codeml site models to check for site-specific and branch-site selection ####
 cat("Reading codeml results\n")
@@ -1484,14 +1475,13 @@ read.branch.site.codeml.output <- function(fg.node.name){
 
 # read.branch.site.codeml.output("rodentia")
 read.branch.site.codeml.output("eumuroida")
-# read.branch.site.codeml.output("muridae")
-# read.branch.site.codeml.output("murinae")
 
 # Test if any sites are evolving in a non-neutral manner
 read.site.specific.codeml.output <- function(){
   
   # Only run this section if the codeml analysis has completed
   if(!file.exists("paml/site-specific/site.specific.paml.out.txt")){
+    cat("No codeml site-specific output file to process\n")
     return()
   }
   
@@ -1822,12 +1812,6 @@ save.double.width("figure/subs.per.site.time.annotated.png", time.plot.annotated
 #### Read final intron ML trees ####
 cat("Reading final intron trees\n")
 
-final.intron.zfy.nt.aln.tree <- ape::read.tree(FILES$final.intron.zfy.nt.filt.aln.treefile) %>%
-  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
-
-final.intron.zfx.nt.aln.tree <- ape::read.tree(FILES$final.intron.zfx.nt.filt.aln.treefile) %>%
-  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
-
 final.intron.zfy.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.zfy.nt.aln.divvy.aln.treefile) %>%
   reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015)
 
@@ -1836,39 +1820,24 @@ final.intron.zfx.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.zfx.nt.a
 
 mammal.gene.groups <- split(METADATA$combined$common.name, METADATA$combined$group)
 
-final.intron.nt.aln.tree <- ape::read.tree(FILES$final.intron.nt.filt.aln.treefile) %>%
-  reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015) %>%
-  tidytree::groupOTU(., mammal.gene.groups, group_name = "group")
-
 final.intron.nt.divvy.aln.tree <- ape::read.tree(FILES$final.intron.nt.aln.divvy.aln.treefile) %>%
   reroot.tree(., c("Opossum_ZFX", "Koala_ZFX"), position = 0.015) %>%
   tidytree::groupOTU(., mammal.gene.groups, group_name = "group")
 
-#### Plot the final intron trees ####
-
-# Raw
-final.intron.zfy.nt.aln.tree.plot <- plot.tree(final.intron.zfy.nt.aln.tree)  + xlim(-0.1, 2) + labs(title = "ZFY")
-final.intron.zfx.nt.aln.tree.plot <- plot.tree(final.intron.zfx.nt.aln.tree) + xlim(0, 2)+ labs(title = "ZFX")
-save.double.width("figure/final.intron.tree.png", final.intron.zfx.nt.aln.tree.plot/final.intron.zfy.nt.aln.tree.plot)
+#### Plot the final intron MSAs ####
+cat("Plotting final intron trees\n")
 
 # Divvied
 final.intron.zfy.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfy.nt.divvy.aln.tree)  + xlim(0, 2) + labs(title = "ZFY (divvied)")
 final.intron.zfx.nt.divvy.aln.tree.plot <- plot.tree(final.intron.zfx.nt.divvy.aln.tree) + xlim(0, 2)+ labs(title = "ZFX (divvied)")
 save.double.width("figure/final.intron.divvy.tree.png", final.intron.zfy.nt.divvy.aln.tree.plot/final.intron.zfx.nt.divvy.aln.tree.plot)
 
-# Raw ZFX/Y
-final.intron.nt.aln.tree.plot <- plot.tree(final.intron.nt.aln.tree, col= "group")  + xlim(-0.1, 1.5) + labs(title = "ZFX/Y final intron")
-save.double.width("figure/final.intron.zfx.zfy.tree.png", final.intron.nt.aln.tree.plot)
-
 # Divvied ZFX/Y
 final.intron.nt.divvy.aln.tree.plot <- plot.tree(final.intron.nt.divvy.aln.tree, col= "group")  + xlim(0, 2) + labs(title = "ZFX/Y (divvied)")
 save.double.width("figure/final.intron.zfx.zfy.divvy.tree.png", final.intron.nt.divvy.aln.tree.plot)
 
-# Panel figure
-# combined.plot <- (final.intron.zfy.nt.aln.tree.plot + final.intron.zfy.nt.divvy.aln.tree.plot) / (final.intron.zfx.nt.aln.tree.plot + final.intron.zfx.nt.divvy.aln.tree.plot)
-# save.double.width("figure/final.intron.combined.tree.png", combined.plot)
-
 #### Plot the final intron MSAs ####
+cat("Plotting final intron MSAs\n")
 
 plot.msa <- function(tidy.aln){
   ggplot()+
