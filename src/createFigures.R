@@ -1658,9 +1658,10 @@ subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
 
   geom_tiplab(size=2, color = "black")+
   geom_treescale(fontsize =2, y = -1) +
-  coord_cartesian(xlim = c(-0.05, 0.4))+
+  coord_cartesian(xlim = c(-0.05, 1))+
   theme_tree() +
-  theme(legend.position = c(0.2, 0.8),
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.2, 0.8),
         legend.background = element_blank(),
         legend.text = element_text(size=6),
         legend.title = element_text(size=6))
@@ -1727,7 +1728,8 @@ time.plot <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
   # geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
   geom_tiplab(size=2, color = "black")+
   theme_tree2() +
-  theme(legend.position = c(0.2, 0.8),
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.2, 0.8),
         legend.background = element_blank(),
         legend.text = element_text(size=6),
         legend.title = element_text(size=6))
@@ -1916,12 +1918,17 @@ save.plot("figure/full.msa.png", full.aa.msa.plot, width=270, height = 170)
 ancestral.msa <- ancestral.seqs %>% 
   dplyr::filter(Node %in% c("Theria", "Eutheria")) %>%
   dplyr::mutate(name = paste0(Node,"_", Type),
-                name = factor(name, levels = c("Theria_ZFY", "Eutheria_ZFY", "Theria_ZFX", "Eutheria_ZFX"))) %>%
-  dplyr::select(name, position = Site, character = State)
+                name = factor(name, levels = c("Theria_ZFY", "Theria_ZFX", "Eutheria_ZFY", "Eutheria_ZFX"))) %>%
+  dplyr::select(name, position = Site, character = State) %>%
+  dplyr::filter(character!="-") %>%
+  dplyr::arrange(name, position)
 
 ancestral.msa.plot <- ggplot()+
-  geom_msa(data = ancestral.msa, seq_name = T, font=NULL, 
-           border=NA, color="Chemistry_AA", consensus_views = T )+
+  geom_tile(data = ancestral.msa, aes(x=position, y=name, fill = character))+
+  scale_alpha_manual(values = c(`TRUE`=0, `FALSE`=1))+ # hide gaps
+  guides(alpha = "none")+
+  # geom_msa(data = ancestral.msa, seq_name = T, font=NULL, 
+  #          border=NA, color="Chemistry_AA", consensus_views = T )+
   coord_cartesian(expand = FALSE)+
   scale_x_continuous(breaks = seq(0, max(ancestral.msa$position), 100))+
   scale_y_discrete( labels = \(x) str_replace_all(x, "_", " ") )+
