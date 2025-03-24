@@ -206,7 +206,7 @@ kaks.pairwise.plot <- plot.kaks(FILES$mammal.nt.aln,
 #   annotate(geom = "segment", x = eumuroida.zfx.xmin, xend = eumuroida.zfx.xmin, y = 0, yend =  eumuroida.zfx.ymax)+
 #   annotate(geom = "segment", x = eumuroida.zfx.xmax, xend = eumuroida.zfx.xmax, y = 0, yend =  eumuroida.zfx.ymin)
 
-save.plot("figure/dnds.png", kaks.pairwise.plot, width = 270, height = 170)
+save.plot("figure/Figure_Sxxxx_dnds.png", kaks.pairwise.plot, width = 270, height = 170)
 
 # Strong purifying selection in all pairs, but weaker in rodents
 #### Plot dN/dS globally partition by partition in mammals ####
@@ -273,7 +273,7 @@ exon.7.kaks.pairwise.plot <- plot.pairwise.kaks(kaks.exon.7)
 exon.kaks.plot <- exon.1.3_6.kaks.pairwise.plot + exon.2.kaks.pairwise.plot + exon.7.kaks.pairwise.plot +
   patchwork::plot_annotation(tag_levels = c("A")) + plot_layout(axes="collect")
 
-save.plot("figure/exon.1_3-6.2.7.dnds.png", exon.kaks.plot,  width = 270, height = 170)
+save.plot("figure/Figure_Sxxxx_exon.1_3-6.2.7.dnds.png", exon.kaks.plot,  width = 270, height = 170)
 
 # Create supplementary data tables with the pairwise values
 create.xlsx(kaks.exon.1.3_6, "figure/kaks.exon.1.3-6.xlsx")
@@ -935,7 +935,7 @@ new_scale_fill()+
 
 
   
-save.double.width(filename = "figure/gametologue.cumdiff.png", gametologue.cumdiff.plot, height = 100)
+save.double.width(filename = "figure/Figure_Sxxxx_gametologue.cumdiff.png", gametologue.cumdiff.plot, height = 100)
 
 #### Calculate conservation between X and Y gametologues for ancestral nodes species ####
 # # Read the ancestral states for the nodes
@@ -996,7 +996,7 @@ ancestral.cumdiff.plot <- ancestral.cumdiff.plot +
   add.exon.track(250, 270, col = "black", start_col = "start_aa_mammal", end_col = "end_aa_mammal")+ # color of border
   add.exon.labels(250, 270, start_col = "start_aa_mammal", end_col = "end_aa_mammal")
 
-save.double.width(filename = "figure/ancestral.cumdiff.png", ancestral.cumdiff.plot, height = 100)
+save.double.width(filename = "figure/Figure_Sxxxx_ancestral.cumdiff.png", ancestral.cumdiff.plot, height = 100)
 
 #### Plot the conservation of hydrophobicity across mammal/outgroup AA MSA ####
 cat("Plotting conservation of hydrophobicity\n")
@@ -1109,7 +1109,7 @@ patch.plot.complete <- exon2.hydro.plot + exon3.hydro.plot + exon5.hydro.plot +
         axis.title = element_blank(),
         legend.text = element_text(size=6),
         legend.title = element_text(size=8))
-save.double.width(filename = "figure/hydrophobic.patch.all.png", patch.plot.complete)
+save.double.width(filename = "figure/Figure_Sxxxx_hydrophobic.patch.all.png", patch.plot.complete)
 
 #### Plot HyPhy RELAX test for relaxed selection ####
 cat("Plotting RELAX result\n")
@@ -1166,7 +1166,7 @@ create.relax.k.tree <- function(json.file){
 
 if(file.exists("aln/hyphy/mammal.eumuroida.relax.json")){
   relax.mammal.tree <- create.relax.k.tree("aln/hyphy/mammal.eumuroida.relax.json")
-  save.double.width("figure/RELAX.mammal.eumuroida.png", relax.mammal.tree)
+  save.double.width("figure/Figure_Sxxxx_RELAX.mammal.eumuroida.png", relax.mammal.tree)
 }
 
 #### Plot HyPhy MEME test for directional selection ####
@@ -1301,7 +1301,7 @@ create.meme.overview.plot <- function(meme.overview, outgroup.type){
           axis.line.x.bottom = element_line(),
           panel.grid = element_blank())
   
-  save.double.width(filename = paste0("figure/meme.",outgroup.type,".site.locations.png"), meme.location.plot, height = 35)
+  save.double.width(filename = paste0("figure/Figure_Sxxxx_meme.",outgroup.type,".site.locations.png"), meme.location.plot, height = 35)
   meme.location.plot
 }
 
@@ -1658,7 +1658,7 @@ subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
 
   geom_tiplab(size=2, color = "black")+
   geom_treescale(fontsize =2, y = -1) +
-  coord_cartesian(xlim = c(-0.05, 1))+
+  coord_cartesian(xlim = c(-0.05, 1.2))+
   theme_tree() +
   theme(legend.position = "inside",
         legend.position.inside = c(0.2, 0.8),
@@ -1681,23 +1681,23 @@ sly.amplifies.x <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Mouse
 subs.site.mya.plot <- subs.site.mya.plot +
 
   # ZF* moves to sex chromosomes
-  annotate("text", x=zf.to.xy.x-0.04, y=zf.to.xy.y, label="ZF* to\nX/Y", size=2, hjust=0)+
-  annotate("rect", xmin=zf.to.xy.x-0.05, xmax=zf.to.xy.x-0.01, 
+  annotate("text", x=zf.to.xy.x-0.09, y=zf.to.xy.y, label="ZF* to\nX/Y", size=2, hjust=0)+
+  annotate("rect", xmin=zf.to.xy.x-0.10, xmax=zf.to.xy.x-0.01, 
            ymin=zf.to.xy.y - 1, ymax=zf.to.xy.y+1, fill="darkgreen", alpha=0.4)+
   
   # Ssty box
-  annotate("text", x=eumuroida.x-0.08, y=eumuroida.y, label="Ssty appears\nZfy testis specific", size=2, hjust=0)+
-  annotate("rect", xmin=eumuroida.x-0.09,  xmax=eumuroida.x-0.01,
+  annotate("text", x=eumuroida.x-0.18, y=eumuroida.y, label="Ssty appears\nZfy testis specific", size=2, hjust=0)+
+  annotate("rect", xmin=eumuroida.x-0.20,  xmax=eumuroida.x-0.01,
            ymin=eumuroida.y - 1, ymax=eumuroida.y + 1, fill="darkgreen", alpha=0.4)+
 
   # Slxl1 acquired box
-  annotate("text", x=slxl1.x-0.0325, y=slxl1.y, label="Slxl1\nacquired? ", size=2, hjust=0)+
-  annotate("rect", xmin=slxl1.x-0.035,  xmax=slxl1.x-0.005, 
+  annotate("text", x=slxl1.x-0.0825, y=slxl1.y, label="Slxl1\nacquired? ", size=2, hjust=0)+
+  annotate("rect", xmin=slxl1.x-0.095,  xmax=slxl1.x-0.005, 
            ymin=slxl1.y - 1,ymax=slxl1.y + 1, fill="darkgreen", alpha=0.4)+
 
   # Sly amplifies box
-  annotate("text", x=sly.amplifies.x-0.05, y=sly.amplifies.y, label="Sly amplifies\n ", size=2, hjust=0)+
-  annotate("rect", xmin=sly.amplifies.x-0.06, xmax=sly.amplifies.x-0.005, 
+  annotate("text", x=sly.amplifies.x-0.15, y=sly.amplifies.y, label="Sly amplifies\n ", size=2, hjust=0)+
+  annotate("rect", xmin=sly.amplifies.x-0.16, xmax=sly.amplifies.x-0.005, 
            ymin=sly.amplifies.y-0.75, ymax=sly.amplifies.y+0.75, fill="darkgreen", alpha=0.4)
 
 
@@ -1799,7 +1799,7 @@ time.plot.annotated <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
   # Sly amplifies box
   annotate("rect", 
            xmin=sly.amplifies.x-10, xmax=sly.amplifies.x, 
-           ymin=sly.amplifies.y-0.75, ymax=sly.amplifies.y+0.75, fill="darkgreen", alpha=0.4)+
+           ymin=sly.amplifies.y-1.75, ymax=sly.amplifies.y+0.75, fill="darkgreen", alpha=0.4)+
   annotate("text", x=sly.amplifies.x-10, y=sly.amplifies.y-0.5, label="Sly\namplifies\n ", size=2, hjust=0)+
 
   aes(colour = log(subsPerMyr)) +
@@ -1893,7 +1893,7 @@ save.plot("figure/final.intron.msa.zfy.divvy.png", zfy.msa.plot, width=270, heig
 save.plot("figure/final.intron.msa.zfx.raw.png", zfx.msa.raw.plot, width=270, height = 170)
 save.plot("figure/final.intron.msa.zfx.divvy.png", zfx.msa.plot, width=270, height = 170)
 save.plot("figure/final.intron.msa.zf.raw.png", zf.msa.raw.plot, width=270, height = 170)
-save.plot("figure/final.intron.msa.zf.divvy.png", zf.msa.plot, width=270, height = 170)
+save.plot("figure/Figure_Sxxxx_final.intron.msa.zf.divvy.png", zf.msa.plot, width=270, height = 170)
 
 
 #### Plot full protein MSA ####
@@ -1919,23 +1919,29 @@ ancestral.msa <- ancestral.seqs %>%
   dplyr::filter(Node %in% c("Theria", "Eutheria")) %>%
   dplyr::mutate(name = paste0(Node,"_", Type),
                 name = factor(name, levels = c("Theria_ZFY", "Theria_ZFX", "Eutheria_ZFY", "Eutheria_ZFX"))) %>%
-  dplyr::select(name, position = Site, character = State) %>%
+  dplyr::select(Node, name, Site, character = State) %>%
   dplyr::filter(character!="-") %>%
-  dplyr::arrange(name, position)
+  dplyr::arrange(name, Site) %>%
+  merge(., ancestral.conservation, by = c("Node", "Site"))
+
+ancestral.conservation
 
 ancestral.msa.plot <- ggplot()+
-  geom_tile(data = ancestral.msa, aes(x=position, y=name, fill = character))+
+  geom_tile(data = ancestral.msa, aes(x=Site, y=name), fill="lightgrey")+
+  geom_tile(data = ancestral.msa, aes(x=Site, y=name, fill = as.factor(Conservation), alpha = Conservation==1))+
   scale_alpha_manual(values = c(`TRUE`=0, `FALSE`=1))+ # hide gaps
-  guides(alpha = "none")+
+  scale_fill_manual(values = c("red", "blue"))+
+  guides(alpha = "none", fill="none")+
+  # labs(fill = "X/Y difference")+
   # geom_msa(data = ancestral.msa, seq_name = T, font=NULL, 
   #          border=NA, color="Chemistry_AA", consensus_views = T )+
   coord_cartesian(expand = FALSE)+
-  scale_x_continuous(breaks = seq(0, max(ancestral.msa$position), 100))+
+  scale_x_continuous(breaks = seq(0, max(ancestral.msa$Site), 100))+
   scale_y_discrete( labels = \(x) str_replace_all(x, "_", " ") )+
   theme_bw()+
   theme(axis.title = element_blank())
 
-save.plot("figure/ancestral.msa.png", ancestral.msa.plot, width=270, height = 50)
+save.plot("figure/Figure_Sxxxx_ancestral.msa.png", ancestral.msa.plot, width=270, height = 50)
 
 
 #### Tar the figure outputs ####
