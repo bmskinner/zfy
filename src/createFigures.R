@@ -28,7 +28,7 @@ combined.outgroup.tree <- read.combined.outgroup.tree(FILES$combined.aa.aln.tree
 combined.outgroup.tree <-  reroot.tree(combined.outgroup.tree, c("Xenopus_ZFX.S","Xenopus_ZFX.L"), position = 0.000000001)
 
 combined.aa.tree <- plot.tree(combined.outgroup.tree, col = "group")+
-  coord_cartesian(clip="off", xlim = c(0, 0.7), ylim= c(-0.05, length(combined.outgroup.tree$tip.label)))
+  coord_cartesian(clip="off", xlim = c(0, 0.8), ylim= c(-0.05, length(combined.outgroup.tree$tip.label)))
   
 # Find the location of the Eumuroida clade in the plot
 eumuroida.node <- ape::getMRCA(combined.outgroup.tree, c("Mouse_Zfy1", "North_American_deer_mouse_Zfx-like_putative-Zfy"))
@@ -1571,10 +1571,13 @@ read.site.specific.codeml.output()
 
 
 
-#### How do substitution rates compare to the divergence times? ####
-# We want to calculate the number of substitutions per million years
+#### Calculate substitution rates in ZFX and ZFY compared to species divergence times ####
+
+# We want to calculate the number of substitutions per million years for ZFX and ZFY
+# These should be separate plots and a combined plot with both genes for eutheria only.
+
 # Combine the branch lengths with the TimeTree dates
-cat("Comparing branch lengths with divergence times\n")
+cat("Comparing ZFY branch lengths with divergence times\n")
 
 # Read the ML ZFX and ZFY trees 
 zfx.nt.aln.tree <- ape::read.tree("aln/zfx_only/zfx.nt.aln.treefile")
@@ -1593,26 +1596,32 @@ zfx.nt.aln.tree$tip.label <- str_replace(zfx.nt.aln.tree$tip.label, "_Z[F|f][X|x
 zfy.nt.aln.tree$tip.label <- str_replace(zfy.nt.aln.tree$tip.label, "(_putative)?(_|-)Z[F|f][X|x|Y|y].*", "")
 
 # Replace underscores for tidy names
+zfx.nt.aln.tree$tip.label <- str_replace_all(zfx.nt.aln.tree$tip.label, "_", " ")
 zfy.nt.aln.tree$tip.label <- str_replace_all(zfy.nt.aln.tree$tip.label, "_", " ")
 
-mammal.nt.tree.data <- tidytree::as_tibble(zfy.nt.aln.tree)
+zfx.mammal.nt.tree.data <- tidytree::as_tibble(zfx.nt.aln.tree)
+zfy.mammal.nt.tree.data <- tidytree::as_tibble(zfy.nt.aln.tree)
 
 # Read the species tree with divergence times to get the node divergences
 species.tree <- ape::read.tree("aln/node.labeled.species.tree.nwk")
-# Note node positions are reversed (0 is root). Convert to times.
+
+# Note node positions are reversed (0 is root). Convert to times using edge length.
 node.times <- max(node.depth.edgelength(species.tree)) - node.depth.edgelength(species.tree)
-# Get only the node times, ignore tips
+
+# Get only the node times, by ignoring the tips and name nodes by species
 divergence.point.data <- node.times[(length(species.tree$tip.label)+1):(length(species.tree$edge.length)+1)]
 names(divergence.point.data) <- species.tree$node.label
 
-# Create an zero vector for each tip (time for extant species is 0Mya)
+# Create an zero vector for each tip (since time for extant species is 0Mya)
 divergence.point.species <- rep(0, length(zfy.nt.aln.tree$tip.label))
 names(divergence.point.species) <- zfy.nt.aln.tree$tip.label
-# Combine edge lengths with tips for complete weighted edges
+# Combine edge lengths with tips for complete set of divergence times for nodes and tips
 divergence.point.data <- c(divergence.point.data, divergence.point.species)
 
 # Use these times to create weights for each edge
+zfx.nt.aln.tree$node.label[1] <- "Mammalia" # replace default 'Root' label
 zfy.nt.aln.tree$node.label[1] <- "Mammalia" # replace default 'Root' label
+
 
 # Find the length of the edge from a node to its parent in Mya
 get.edge.time <- function(node, tree){
@@ -1641,21 +1650,51 @@ get.edge.time <- function(node, tree){
                     time = time,
                     edge.row,
                     subsPerSite = edgelength,
-                    subsPerMyr = subsPerMyr))
+                    subsPerMyr = subsPerMyr,
+                    logSubsPerMyr = log(subsPerMyr)))
 }
 
 # Calculate the length of each branch in Myr
-time.vals <- do.call(rbind, lapply(zfy.nt.aln.tree$edge[,2], get.edge.time, tree=zfy.nt.aln.tree))
+zfx.time.vals <- do.call(rbind, lapply(zfx.nt.aln.tree$edge[,2], get.edge.time, tree=zfx.nt.aln.tree))
+zfy.time.vals <- do.call(rbind, lapply(zfy.nt.aln.tree$edge[,2], get.edge.time, tree=zfy.nt.aln.tree))
 
+# Calculate just for the Euarchonglires
+# We only need primates and rodents for the ZFY specific figure
+zfy.nt.aln.tree.euarchonglires <- ape::extract.clade(zfy.nt.aln.tree, length(zfy.nt.aln.tree$tip.label)+6)
+zfy.time.vals.euarchonglires <- do.call(rbind, lapply(zfy.nt.aln.tree.euarchonglires$edge[,2], get.edge.time, tree=zfy.nt.aln.tree.euarchonglires))
 
-# Plot the Zfy tree, with edge lengths replaced by Myr
-subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
-  time.vals +
-  aes(colour = log(subsPerMyr)) +
+# What is the common max and min log scale for the colour bar?
+log.subs.per.site.min = -10
+log.subs.per.site.max = -1
+
+#### Plot substitution rates in ZFY compared to species divergence times ####
+
+# Plot the Zfy tree. Edge lengths are still substitutions per site. Colour scale
+# is also substitutions per site.
+subs.site.mya.plot.euarchonglires <- ggtree(zfy.nt.aln.tree.euarchonglires, size = 1) %<+%
+  zfy.time.vals.euarchonglires +
+  aes(colour = logSubsPerMyr) +
   scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
-                          direction = -1, limits =c(-9, -3))+
+                          direction = -1, limits = c(log.subs.per.site.min, log.subs.per.site.max))+
   labs(color = "Log substitutions per site\nper million years")+
 
+  geom_tiplab(size=2, color = "black")+
+  geom_treescale(fontsize =2, y = -1) +
+  coord_cartesian(xlim = c(-0.05, 1.2))+
+  theme_tree() +
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.8, 0.4),
+        legend.background = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))
+
+subs.site.mya.plot <- ggtree(zfy.nt.aln.tree, size = 1) %<+%
+  zfy.time.vals +
+  aes(colour = logSubsPerMyr) +
+  scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                          direction = -1, limits = c(log.subs.per.site.min, log.subs.per.site.max))+
+  labs(color = "Log substitutions per site\nper million years")+
+  
   geom_tiplab(size=2, color = "black")+
   geom_treescale(fontsize =2, y = -1) +
   coord_cartesian(xlim = c(-0.05, 1.2))+
@@ -1677,11 +1716,24 @@ eumuroida.x <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Eumuroida
 slxl1.x <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Murinae","x"]$x
 sly.amplifies.x <- subs.site.mya.plot$data[subs.site.mya.plot$data$label=="Mouse","x"]$x
 
-# Annotate plot with labels
+# Coordinates for euarchonglires
+eumuroida.y.eu <- subs.site.mya.plot.euarchonglires$data[subs.site.mya.plot.euarchonglires$data$label=="Eumuroida","y"]$y
+slxl1.y.eu <- subs.site.mya.plot.euarchonglires$data[subs.site.mya.plot.euarchonglires$data$label=="Murinae","y"]$y
+sly.amplifies.y.eu <- subs.site.mya.plot.euarchonglires$data[subs.site.mya.plot.euarchonglires$data$label=="Mouse","y"]$y
+
+eumuroida.x.eu <- subs.site.mya.plot.euarchonglires$data[subs.site.mya.plot.euarchonglires$data$label=="Eumuroida","x"]$x
+slxl1.x.eu <- subs.site.mya.plot.euarchonglires$data[subs.site.mya.plot.euarchonglires$data$label=="Murinae","x"]$x
+sly.amplifies.x.eu <- subs.site.mya.plot.euarchonglires$data[subs.site.mya.plot.euarchonglires$data$label=="Mouse","x"]$x
+
+# Annotate plots with labels
 subs.site.mya.plot <- subs.site.mya.plot +
 
   # ZF* moves to sex chromosomes
-  annotate("text", x=zf.to.xy.x-0.09, y=zf.to.xy.y, label="ZF* to\nX/Y", size=2, hjust=0)+
+  annotate("text", 
+           x=zf.to.xy.x-0.09, 
+           y=zf.to.xy.y, 
+           label="ZF* to\nX/Y", 
+           size=2, hjust=0)+
   annotate("rect", xmin=zf.to.xy.x-0.10, xmax=zf.to.xy.x-0.01, 
            ymin=zf.to.xy.y - 1, ymax=zf.to.xy.y+1, fill="darkgreen", alpha=0.4)+
   
@@ -1703,6 +1755,27 @@ subs.site.mya.plot <- subs.site.mya.plot +
 
 save.double.width("figure/subs.per.site.per.Myr.png", subs.site.mya.plot)
 
+# Annotate plot with only the euarchonglires
+subs.site.mya.plot.euarchonglires <- subs.site.mya.plot.euarchonglires +
+
+  # Ssty box
+  annotate("text", x=eumuroida.x.eu-0.18, y=eumuroida.y.eu, label="Ssty appears\nZfy testis specific", size=2, hjust=0)+
+  annotate("rect", xmin=eumuroida.x.eu-0.20,  xmax=eumuroida.x.eu-0.01,
+           ymin=eumuroida.y.eu - 1, ymax=eumuroida.y.eu + 1, fill="darkgreen", alpha=0.4)+
+  
+  # Slxl1 acquired box
+  annotate("text", x=slxl1.x.eu-0.0825, y=slxl1.y.eu, label="Slxl1\nacquired? ", size=2, hjust=0)+
+  annotate("rect", xmin=slxl1.x.eu-0.095,  xmax=slxl1.x.eu-0.005, 
+           ymin=slxl1.y.eu - 1,ymax=slxl1.y.eu + 1, fill="darkgreen", alpha=0.4)+
+  
+  # Sly amplifies box
+  annotate("text", x=sly.amplifies.x.eu-0.15, y=sly.amplifies.y.eu, label="Sly amplifies\n ", size=2, hjust=0)+
+  annotate("rect", xmin=sly.amplifies.x.eu-0.16, xmax=sly.amplifies.x.eu-0.005, 
+           ymin=sly.amplifies.y.eu-0.75, ymax=sly.amplifies.y.eu+0.75, fill="darkgreen", alpha=0.4)
+
+
+save.plot("figure/subs.per.site.per.Myr.euarchonglires.png", subs.site.mya.plot.euarchonglires, height = 85, width = 85)
+
 # Also create a copy with node labels for reference
 subs.site.mya.plot <- subs.site.mya.plot+ geom_nodelab(size=2, nudge_x = -0.005, nudge_y = 0.5, hjust = 1, color = "black")
 save.double.width("figure/subs.per.site.per.Myr.node.labels.png", subs.site.mya.plot)
@@ -1713,14 +1786,16 @@ save.double.width("figure/subs.per.site.per.Myr.node.labels.png", subs.site.mya.
 
 zfy.nt.aln.tree.time <- zfy.nt.aln.tree # copy the original tree
 
+
 # For a given child node, find the branch time to its parent
-get.time.for.node <- function(node) time.vals[time.vals$node==node,"time"]
+get.time.for.zfy.node <- function(node) zfy.time.vals[zfy.time.vals$node==node,"time"]
 # Get the branch times from every child node in the tree to replace edge lengths
-zfy.nt.aln.tree.time$edge.length <- sapply(zfy.nt.aln.tree.time$edge[,2], get.time.for.node)
+zfy.nt.aln.tree.time$edge.length <- sapply(zfy.nt.aln.tree.time$edge[,2], get.time.for.zfy.node)
+
 
 # Make fully annotated time tree
-time.plot <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
-  time.vals +
+zfy.time.plot <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
+  zfy.time.vals +
   aes(colour = log(subsPerMyr)) +
   scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
                           direction = -1, limits =c(-9, -3))+
@@ -1733,8 +1808,8 @@ time.plot <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
         legend.background = element_blank(),
         legend.text = element_text(size=6),
         legend.title = element_text(size=6))
-time.plot <- revts(time.plot)+scale_x_continuous(breaks=seq(0, -180, -20), labels=abs, limits = c(-185, 30))
-save.double.width("figure/subs.per.site.time.png", time.plot)
+zfy.time.plot <- revts(zfy.time.plot)+scale_x_continuous(breaks=seq(0, -180, -20), labels=abs, limits = c(-185, 30))
+save.double.width("figure/subs.per.site.time.png", zfy.time.plot)
 
 # Make figures for presentations. These build up the tree and colors
 
@@ -1745,7 +1820,7 @@ sly.amplifies.x <- time.plot$data[time.plot$data$label=="Mouse","x"]$x
 
 # Scaled timetree view, no colours
 time.plot.base <- ggtree(zfy.nt.aln.tree.time, size = 1, color="black") %<+%
-  time.vals +
+  zfy.time.vals +
   # geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
   geom_tiplab(size=2, color = "black")+
   theme_tree2() +
@@ -1758,7 +1833,7 @@ save.double.width("figure/subs.per.site.time.base.png", time.plot.base)
 
 # Scaled timetree view, with colours
 time.plot.colours <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
-  time.vals +
+  zfy.time.vals +
   aes(colour = log(subsPerMyr)) +
   scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
                           direction = -1, limits =c(-9, -3))+
@@ -1776,7 +1851,7 @@ save.double.width("figure/subs.per.site.time.colours.png", time.plot.colours)
 
 # Annotate with labels
 time.plot.annotated <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
-  time.vals +
+  zfy.time.vals +
   # ZF* moves to sex chromosomes
   annotate("rect", xmin=zf.to.xy.x-50, xmax=zf.to.xy.x-20,
            ymin=zf.to.xy.y - 0.75 , ymax=zf.to.xy.y+0.75, fill="darkgreen", alpha=0.4)+
@@ -1815,7 +1890,140 @@ time.plot.annotated <- ggtree(zfy.nt.aln.tree.time, size = 1) %<+%
         legend.title = element_text(size=6))
 
 time.plot.annotated <- revts(time.plot.annotated)+scale_x_continuous(breaks=seq(0, -180, -20), labels=abs, limits = c(-185, 30))
-save.double.width("figure/subs.per.site.time.annotated.png", time.plot.annotated)
+save.double.width("figure/Figure_xxxx_subs.per.site.time.annotated.png", time.plot.annotated)
+
+#### Plot substitution rates in ZFX compared to species divergence times ####
+
+zfx.nt.aln.tree.time <- zfx.nt.aln.tree # copy the original tree
+
+# For a given child node, find the branch time to its parent
+get.time.for.zfx.node <- function(node) zfx.time.vals[zfx.time.vals$node==node,"time"]
+# Get the branch times from every child node in the tree to replace edge lengths
+zfx.nt.aln.tree.time$edge.length <- sapply(zfx.nt.aln.tree.time$edge[,2], get.time.for.zfx.node)
+
+# Make fully annotated time tree
+zfx.time.plot <- ggtree(zfx.nt.aln.tree.time, size = 1) %<+%
+  zfx.time.vals +
+  aes(colour = log(subsPerMyr)) +
+  scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                          direction = -1, limits =c(-9, -3))+
+  labs(color = "Log substitutions per site\nper million years")+
+  # geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
+  geom_tiplab(size=2, color = "black")+
+  theme_tree2() +
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.2, 0.8),
+        legend.background = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))
+zfx.time.plot <- revts(zfx.time.plot)+scale_x_continuous(breaks=seq(0, -180, -20), labels=abs, limits = c(-185, 30))
+save.double.width("figure/subs.per.site.time.zfx.png", zfx.time.plot)
+
+#### Plot ZFX and ZFY substitution rates vs species divergence times combined plot ####
+
+# We need to combine the ZFX and ZFY trees, then replace the node labels We only
+# need Eutheria for this. Note that we can't use the combined nucleotide ML tree
+# calculated earlier because the branch order does not match the species
+# phylogeny. Instead, we will set the divergence of ZFX and ZFY at the Eutheria branch
+
+# Drop the monotremes. We keep the marsupials so the new root branch is preserved.
+zfx.nt.aln.eutheria.tree <- ape::drop.tip(zfx.nt.aln.tree, c("Australian echidna", "Platypus"))
+zfy.nt.aln.eutheria.tree <- ape::drop.tip(zfy.nt.aln.tree, c("Australian echidna", "Platypus"))     
+# Merge the trees.
+zf.combined.nt.aln.eutheria.tree <- ape::bind.tree(zfx.nt.aln.eutheria.tree, 
+                                                   zfy.nt.aln.eutheria.tree, 
+                                                   where = "root")
+# Now remove the marsupials. The initial branch lengths are the
+# marsupial/eutheria divergence now reflecting the initial ZFX/ZFY divergence.
+# Make sure to note that this is the maximum divergence age they could have, and
+# substitution rates/Myr on these two branches are not robust
+zfy.nt.aln.eutheria.tree <- ape::drop.tip(zf.combined.nt.aln.eutheria.tree, c("Koala", "Opossum"))  
+
+# Calculate the ages of the nodes to set new time-based edge lengths
+zfxy.time.vals <- do.call(rbind, lapply(zfy.nt.aln.eutheria.tree$edge[,2], get.edge.time, tree=zfy.nt.aln.eutheria.tree))
+# Change the Theria/Eutheria branch lengths - theria diverge at 160Mya, but the
+# branch length can be made shorter since the ZFX/Y divergence is within this window.
+# This saves space in the figure. Set to 150Mya instead of 160
+zfxy.time.vals %<>% dplyr::mutate( parent.time = ifelse(parentlabel=="Theria", 150,parent.time),
+                                  time = ifelse(parentlabel=="Theria", 150-node.time,time),
+                                  time = ifelse(parentlabel=="Theria", 150-node.time,time),
+                                  subsPerSite = ifelse(parentlabel=="Theria", 0.05,subsPerSite),
+                                  subsPerMyr = ifelse(parentlabel=="Theria", NA,subsPerMyr)
+                                  ) # change the three time columns for the Theria/Eutheria branches only
+
+
+zfyx.nt.aln.tree.time <- zfy.nt.aln.eutheria.tree # copy the original tree
+
+# For a given child node, find the branch time to its parent
+get.time.for.zfxy.node <- function(node) zfxy.time.vals[zfxy.time.vals$node==node,"time"]
+# Get the branch times from every child node in the tree to replace edge lengths
+zfyx.nt.aln.tree.time$edge.length <- sapply(zfyx.nt.aln.tree.time$edge[,2], get.time.for.zfxy.node)
+
+# Make time tree
+zfxy.time.plot <- ggtree(zfyx.nt.aln.tree.time, size = 1) %<+%
+  zfxy.time.vals +
+  aes(colour = log(subsPerMyr)) +
+  
+  annotate("text", x=20, y=-2, label="Mya", size=3, hjust=0)+
+
+  annotate("text", x=-140, y=50, label="ZFY", size=3, hjust=0)+
+  annotate("text", x=-140, y=10, label="ZFX", size=3, hjust=0)+
+  
+  scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                          direction = -1, limits =c(-9, -3))+
+  labs(color = "Log substitutions per site\nper million years")+
+  # geom_nodelab(size=2, nudge_x = -3, nudge_y = 0.5, hjust = 1, color = "black")+
+  geom_tiplab(size=2, color = "black")+
+  theme_tree2() +
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.30, 0.86),
+        legend.background = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))
+
+zfxy.time.plot <- revts(zfxy.time.plot) + scale_x_continuous(breaks=seq(0, -155, -20), 
+                                                           labels=abs, limits = c(-155, 55))+
+  coord_cartesian(clip = "off", ylim = c(0, 79))
+save.double.width("figure/subs.per.site.time.zfxy.png", zfxy.time.plot)
+
+
+# Create a combined figure 1 - part A is the aa combined tree, part B is the eutherian time tree
+figure.1 <- combined.aa.tree + zfxy.time.plot + patchwork::plot_annotation(tag_levels = c("A")) & 
+  theme(plot.tag.position = c(0.1, 1))
+save.double.width("figure/Figure_1_AB.png", figure.1)
+
+# Alternative form of figure 1, with the standard nucleotide tree, but coloured
+# according to timetree
+# Change the initial branch lengths to be equal - ZFX and ZFY diverge from teh same point
+# and we only care about branch lengths post-Eutherian node
+zfy.nt.aln.eutheria.tree$edge.length[zfy.nt.aln.eutheria.tree$node.label=="Theria"] <- 0.10
+
+
+zfxy.subs.site.mya.plot <- ggtree(zfy.nt.aln.eutheria.tree, size = 1) %<+%
+  zfxy.time.vals +
+  
+  annotate("text", x=-0.01, y=50, label="ZFY", size=3, hjust=0)+
+  annotate("text", x=-0.01, y=8, label="ZFX", size=3, hjust=0)+
+  
+  aes(colour = log(subsPerMyr)) +
+  scale_color_paletteer_c("ggthemes::Classic Red-Blue", 
+                          direction = -1, limits =c(-9, -3))+
+  labs(color = "Log substitutions per site\nper million years")+
+  
+  geom_tiplab(size=2, color = "black")+
+  geom_treescale(fontsize =2, y = -1) +
+  coord_cartesian(xlim = c(-0.05, 1.1), clip = "off")+
+  theme_tree() +
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.85, 0.7),
+        legend.background = element_blank(),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))
+
+# Create a combined figure 1 - part A is the aa combined tree, part B is the eutherian time tree
+figure.1.alt <- combined.aa.tree + zfxy.subs.site.mya.plot + patchwork::plot_annotation(tag_levels = c("A")) & 
+  theme(plot.tag.position = c(0.1, 1))
+save.double.width("figure/Figure_1_AB_alternative.png", figure.1.alt)
 
 #### Read final intron ML trees ####
 cat("Reading final intron trees\n")
