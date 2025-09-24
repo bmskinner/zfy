@@ -26,7 +26,7 @@ load.packages <- function(){
     }
   }
   
-  cran.packages <- c("tidyverse", "ape", "filesstrings", "seqinr", "phangorn",
+  cran.packages <- c("tidyverse", "ape", "adephylo",  "filesstrings", "seqinr", "phangorn",
                      "installr","treespace", "httr", "assertthat", "aplot",
                      "paletteer", "ggnewscale", "slider", "BiocManager",
                      "remotes", "patchwork", "ggpattern", "xlsx", "svglite")

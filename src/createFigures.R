@@ -2025,6 +2025,41 @@ figure.1.alt <- combined.aa.tree + zfxy.subs.site.mya.plot + patchwork::plot_ann
   theme(plot.tag.position = c(0.1, 1))
 save.double.width("figure/Figure_1_AB_alternative.png", figure.1.alt)
 
+#### Calculate and plot the ZFX/ZFY branch length ratio for each branch of the species tree
+zfx.y.species.tree.merge <- merge(zfx.mammal.nt.tree.data, zfy.mammal.nt.tree.data, by = c("label")) %>%
+  dplyr::mutate(ratio = branch.length.y/branch.length.x,
+                log2ratio =log2(ratio) ) %>%
+  dplyr::filter(branch.length.y > 0.001, branch.length.x > 0.001)
+
+# The branch-by-branch ratios vary considerably - not a robust signal.
+ggplot(zfx.y.species.tree.merge, aes(y = node.y, x = log2ratio))+
+  geom_vline(xintercept = 0)+
+  geom_point()+
+  theme_bw()
+
+# Instead, look at tips only. Take total branch length from root
+# This should be the signature of the genomic conflict
+y.dists <- data.frame(y = adephylo::distRoot(zfy.nt.aln.tree)) %>%
+  tibble::rownames_to_column()
+x.dists <- data.frame(x = adephylo::distRoot(zfx.nt.aln.tree)) %>%
+                        tibble::rownames_to_column()
+
+zfx.y.species.tree.merge.tips <- merge(x.dists, y.dists, by = c("rowname")) %>%
+  dplyr::mutate(ratio = y/x,
+                log2ratio =log2(ratio) )
+
+ggplot(zfx.y.species.tree.merge.tips, aes(y = rowname, x = log2ratio,
+                                          col = log2ratio > 0.5))+
+  geom_vline(xintercept = 0)+
+  geom_point()+
+  coord_cartesian(xlim = c(-1, 1))+
+  scale_color_manual(values = c(`TRUE`="black", `FALSE`="grey"))+
+  labs(x = "Log2 (ZFY/ZFX branch lengths)")+
+  guides(col= "none")+
+  theme_bw()+
+  theme(axis.title.y = element_blank())
+
+
 #### Read final intron ML trees ####
 cat("Reading final intron trees\n")
 
